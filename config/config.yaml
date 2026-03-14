@@ -68,7 +68,8 @@ alerts:
 
 market_filter:
   benchmark_ema_period: 21
-  require_breadth_pct: 0.50
+  breadth_strong_pct: 0.60
+  breadth_weak_pct: 0.40
 
 watchlist:
   max_candidates: 300

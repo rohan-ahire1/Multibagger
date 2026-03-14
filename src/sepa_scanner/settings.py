@@ -108,7 +108,8 @@ class WatchlistSettings(BaseModel):
 
 class MarketFilterSettings(BaseModel):
     benchmark_ema_period: int = 21
-    require_breadth_pct: float = 0.50
+    breadth_strong_pct: float = 0.60
+    breadth_weak_pct: float = 0.40
 
 
 class TelegramSettings(BaseModel):

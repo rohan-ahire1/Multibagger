@@ -18,7 +18,8 @@ from sepa_scanner.indicators.sma import sma_expr
 from sepa_scanner.indicators.tightness import add_tightness_columns
 from sepa_scanner.indicators.volume import add_volume_columns
 from sepa_scanner.settings import AppSettings
-from sepa_scanner.strategy.market_filter import market_filter_on
+from sepa_scanner.strategy.market_filter import classify_market_regime
+from sepa_scanner.strategy.market_regime import MarketRegime
 from sepa_scanner.strategy.ranking import rank_signals
 from sepa_scanner.strategy.trend_template import add_trend_template_columns
 from sepa_scanner.strategy.vcp_setup import add_setup_columns
@@ -53,6 +54,7 @@ class ScanResult:
     num_rs_pass: int = 0
     num_setup_pass: int = 0
     num_near_pivot: int = 0
+    market_regime: str = "strong"
 
 
 def compute_symbol_diagnostics(
@@ -336,14 +338,16 @@ def scan_for_date(
     else:
         breadth = 0.0
 
-    market_on = market_filter_on(
+    regime = classify_market_regime(
         prepared,
         settings.market.benchmark_symbol,
         scan_date,
         benchmark_ema=bench_ema_val,
         breadth_pct=breadth,
-        require_breadth_pct=settings.market_filter.require_breadth_pct,
+        breadth_strong_pct=settings.market_filter.breadth_strong_pct,
+        breadth_weak_pct=settings.market_filter.breadth_weak_pct,
     )
+    market_on = regime != MarketRegime.WEAK
     candidate_symbols = universe_rows["symbol"].to_list()
 
     if _rs_scores is not None:
@@ -533,6 +537,7 @@ def scan_for_date(
     return ScanResult(
         scan_date=scan_date,
         market_filter_on=market_on,
+        market_regime=regime.value,
         num_symbols=prepared["symbol"].n_unique(),
         num_eligible=len(candidate_symbols),
         num_trend_pass=num_trend_pass,
