@@ -70,6 +70,7 @@ class SetupVcpSettings(BaseModel):
     contraction_smooth_window: int = 5
     contraction_min_peak_pct: float = 0.02
     contraction_min_count: int = 2
+    contraction_standard_count: int = 3  # for high-conviction signals
 
 
 class BreakoutSettings(BaseModel):

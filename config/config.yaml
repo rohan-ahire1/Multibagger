@@ -45,6 +45,7 @@ setup_vcp:
   contraction_smooth_window: 5
   contraction_min_peak_pct: 0.02
   contraction_min_count: 2
+  contraction_standard_count: 3
 
 breakout:
   require_market_filter: true
