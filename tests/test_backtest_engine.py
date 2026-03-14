@@ -641,3 +641,104 @@ def test_backtest_v3_trail_pct_uses_highest_close_for_trail() -> None:
     # Trail = 150 * 0.80 = 120.0; on day 4, close=120.0 <= trail after ratchet
     # Actually: day 3 close=150, trail ratchets to 120.0. Day 4 low=119 <= 120 → stopped
     assert trade.exit_price == 120.0
+
+
+def test_backtest_breakeven_at_1r_without_trail_activation() -> None:
+    """At +1R, stop moves to breakeven but trail does NOT activate."""
+    signals = _signal(entry_ref=101.0, stop=95.0)  # risk = 6.0
+    prices = _ohlcv(
+        [
+            {"date": date(2026, 3, 3), "symbol": "ABC",
+             "open": 100.0, "high": 101.5, "low": 99.8, "close": 101.0},
+            # Day 2: reaches +1R (107.0) but not +2R (113.0)
+            {"date": date(2026, 3, 4), "symbol": "ABC",
+             "open": 101.0, "high": 108.0, "low": 100.5, "close": 107.5},
+            # Day 3: drops back — stop should be at breakeven (101.0), not original (95.0)
+            {"date": date(2026, 3, 5), "symbol": "ABC",
+             "open": 106.0, "high": 106.5, "low": 100.5, "close": 101.0},
+        ]
+    )
+
+    result = simulate_breakout_backtest(
+        signals, prices,
+        BacktestParams(
+            max_hold_days=3,
+            exit_mode=ExitMode.V3_TRAIL_PCT,
+            trail_activation_r=2.0,
+            trail_pct=0.20,
+            dead_money_days=None,
+        ),
+    )
+
+    trade = result.trades[0]
+    # Should be time_stop at day 3 close of 101.0
+    # Key: stop is at breakeven (101.0), not original (95.0)
+    # Day 3: low=100.5 > 95.0 (would survive original stop) but close=101.0 >= 101.0 (breakeven)
+    # The stop is at 101.0 (breakeven), low=100.5 < 101.0, so it DOES hit the stop
+    assert trade.status == "stopped"
+    assert trade.exit_price == 101.0
+
+
+def test_backtest_breakeven_not_triggered_below_1r() -> None:
+    """If price never reaches +1R, stop stays at original level."""
+    signals = _signal(entry_ref=101.0, stop=95.0)  # risk = 6.0, +1R = 107.0
+    prices = _ohlcv(
+        [
+            {"date": date(2026, 3, 3), "symbol": "ABC",
+             "open": 100.0, "high": 101.5, "low": 99.8, "close": 101.0},
+            # Day 2: high = 106.5, just below +1R (107.0)
+            {"date": date(2026, 3, 4), "symbol": "ABC",
+             "open": 101.0, "high": 106.5, "low": 100.5, "close": 105.0},
+            # Day 3: price drops to 96.0 — above original stop (95.0), so NOT stopped
+            {"date": date(2026, 3, 5), "symbol": "ABC",
+             "open": 104.0, "high": 104.5, "low": 96.0, "close": 97.0},
+        ]
+    )
+
+    result = simulate_breakout_backtest(
+        signals, prices,
+        BacktestParams(
+            max_hold_days=3,
+            exit_mode=ExitMode.V3_TRAIL_PCT,
+            trail_activation_r=2.0,
+            trail_pct=0.20,
+            dead_money_days=None,
+        ),
+    )
+
+    trade = result.trades[0]
+    # Low = 96 > 95 (original stop), so not stopped. Time stop at day 3.
+    assert trade.status == "time_stop"
+    assert trade.exit_price == 97.0
+
+
+def test_backtest_breakeven_applies_to_v2_trail_modes() -> None:
+    """Breakeven at +1R also applies to V2 trail modes, not just V3."""
+    signals = _signal(entry_ref=101.0, stop=95.0)  # risk = 6.0
+    prices = _ohlcv(
+        [
+            {"date": date(2026, 3, 3), "symbol": "ABC",
+             "open": 100.0, "high": 101.5, "low": 99.8, "close": 101.0},
+            # Day 2: reaches +1R (107.0) but not +2R (113.0)
+            {"date": date(2026, 3, 4), "symbol": "ABC",
+             "open": 101.0, "high": 108.0, "low": 100.5, "close": 107.5},
+            # Day 3: drops — stop at breakeven (101.0)
+            {"date": date(2026, 3, 5), "symbol": "ABC",
+             "open": 106.0, "high": 106.5, "low": 100.5, "close": 101.0},
+        ]
+    )
+
+    result = simulate_breakout_backtest(
+        signals, prices,
+        BacktestParams(
+            max_hold_days=3,
+            exit_mode=ExitMode.V2_TRAIL_21EMA,
+            trail_activation_r=2.0,
+            dead_money_days=None,
+        ),
+    )
+
+    trade = result.trades[0]
+    # Breakeven at 101.0 should trigger since low=100.5 < 101.0
+    assert trade.status == "stopped"
+    assert trade.exit_price == 101.0
