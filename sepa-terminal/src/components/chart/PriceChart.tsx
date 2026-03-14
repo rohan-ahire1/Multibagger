@@ -6,6 +6,8 @@ import {
   LineSeries,
   LineStyle,
   type IChartApi,
+  type SeriesMarker,
+  type Time,
 } from 'lightweight-charts'
 import type { OHLCVBar, ChartOverlays, ChartTimeframe } from '@/lib/types'
 
@@ -17,6 +19,7 @@ interface PriceChartProps {
   overlays: ChartOverlays
   timeframe: ChartTimeframe
   height?: number
+  markers?: SeriesMarker<Time>[]
 }
 
 function computeSMA(data: OHLCVBar[], period: number) {
@@ -90,6 +93,7 @@ export function PriceChart({
   overlays,
   timeframe,
   height = 260,
+  markers,
 }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -143,6 +147,10 @@ export function PriceChart({
         close: bar.close,
       }))
     )
+
+    if (markers && markers.length > 0) {
+      candleSeries.setMarkers(markers)
+    }
 
     // Volume histogram
     const volumeSeries = chart.addSeries(HistogramSeries, {
@@ -246,7 +254,7 @@ export function PriceChart({
       chart.remove()
       chartRef.current = null
     }
-  }, [data, overlays, timeframe, height, entryRef, stop, pivot])
+  }, [data, overlays, timeframe, height, entryRef, stop, pivot, markers])
 
   return (
     <div
