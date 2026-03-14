@@ -7,6 +7,7 @@ from datetime import date, timedelta
 import polars as pl
 
 from sepa_scanner.backtest.models import BacktestParams, BacktestResult, BacktestTrade, ExitMode
+from sepa_scanner.backtest.portfolio import PortfolioManager
 from sepa_scanner.data_sources.corporate_actions import has_split_in_window
 
 _MIN_SYMBOLS_FOR_PARALLEL = 8
@@ -324,6 +325,7 @@ def simulate_breakout_backtest(
     ohlcv_df: pl.DataFrame,
     params: BacktestParams,
     corp_actions: pl.DataFrame | None = None,
+    portfolio_manager: PortfolioManager | None = None,
 ) -> BacktestResult:
     signals = (
         signals_df.filter(pl.col("signal_type") == "BREAKOUT")
@@ -346,6 +348,13 @@ def simulate_breakout_backtest(
     for signal in signals:
         signals_by_symbol.setdefault(str(signal["symbol"]), []).append(signal)
 
+    # --- Portfolio-constrained mode: sequential execution ---
+    if portfolio_manager is not None:
+        return _simulate_with_portfolio(
+            signals, prices_by_symbol, signals_by_symbol, params, corp_actions, portfolio_manager,
+        )
+
+    # --- Standard mode: per-symbol parallelism ---
     all_trades: list[BacktestTrade] = []
     if len(signals_by_symbol) >= _MIN_SYMBOLS_FOR_PARALLEL:
         with ProcessPoolExecutor(max_workers=os.cpu_count() or 4) as pool:
@@ -366,6 +375,83 @@ def simulate_breakout_backtest(
             all_trades.extend(
                 _simulate_symbol_group(sym_signals, prices_by_symbol.get(sym, []), params, corp_actions)
             )
+
+    all_trades.sort(key=lambda t: (t.signal_date, t.symbol))
+    return BacktestResult(trades=all_trades)
+
+
+def _simulate_with_portfolio(
+    signals: list[dict[str, object]],
+    prices_by_symbol: dict[str, list[dict[str, object]]],
+    signals_by_symbol: dict[str, list[dict[str, object]]],
+    params: BacktestParams,
+    corp_actions: pl.DataFrame | None,
+    pm: PortfolioManager,
+) -> BacktestResult:
+    """Run backtest sequentially with portfolio-level risk controls.
+
+    Signals are processed in chronological order. Before each fill, the
+    portfolio manager checks position limits, heat, sector caps, and
+    drawdown state. Rejected signals are marked ``skipped_portfolio``.
+
+    Positions are opened when trades fill and closed only when a later
+    signal date reaches or exceeds the trade's exit date (not immediately
+    after simulation), so that same-date signals correctly see open
+    positions from earlier fills.
+    """
+    # Track per-symbol overlap to preserve the existing overlap-skip logic
+    active_until: dict[str, date] = {}
+    all_trades: list[BacktestTrade] = []
+
+    # Deferred closes: (exit_date, symbol) pairs to close when signal_date >= exit_date
+    pending_closes: list[tuple[date, str]] = []
+
+    for signal in signals:
+        sig_date = signal["signal_date"]
+        sym = str(signal["symbol"])
+        symbol_prices = prices_by_symbol.get(sym, [])
+
+        # Release positions whose exit_date <= current signal date
+        still_pending: list[tuple[date, str]] = []
+        for exit_dt, close_sym in pending_closes:
+            if exit_dt <= sig_date:
+                pm.close_trade(close_sym)
+            else:
+                still_pending.append((exit_dt, close_sym))
+        pending_closes = still_pending
+
+        # Per-symbol overlap check (same as _simulate_symbol_group)
+        if sym in active_until and signal["signal_date"] < active_until[sym]:
+            all_trades.append(_empty_trade(signal, "skipped_overlap"))
+            continue
+
+        # Sector defaults to "UNKNOWN" when not provided on the signal
+        sector = str(signal.get("sector", "UNKNOWN"))
+
+        # Portfolio capacity check
+        if not pm.can_open_trade(sector=sector):
+            all_trades.append(_empty_trade(signal, "skipped_portfolio"))
+            continue
+
+        trade = _simulate_signal(signal, symbol_prices, params, corp_actions=corp_actions)
+        all_trades.append(trade)
+
+        if trade.entry_date is not None:
+            # Register the position with the portfolio manager
+            risk_per_share = _risk_per_share(trade.entry_price, trade.stop) if trade.entry_price else None
+            if risk_per_share and risk_per_share > 0:
+                pm.open_trade(
+                    symbol=sym, sector=sector,
+                    risk_per_share=risk_per_share, entry_price=trade.entry_price,
+                )
+
+            # Track overlap
+            if trade.exit_date is not None:
+                active_until[sym] = trade.exit_date
+                # Defer position close until we reach a signal on or after the exit date
+                pending_closes.append((trade.exit_date, sym))
+            elif symbol_prices:
+                active_until[sym] = symbol_prices[-1]["date"]
 
     all_trades.sort(key=lambda t: (t.signal_date, t.symbol))
     return BacktestResult(trades=all_trades)

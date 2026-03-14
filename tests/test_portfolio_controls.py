@@ -5,6 +5,8 @@ from datetime import date
 import polars as pl
 import pytest
 
+from sepa_scanner.backtest.engine import simulate_breakout_backtest
+from sepa_scanner.backtest.models import BacktestParams
 from sepa_scanner.backtest.portfolio import PortfolioManager
 
 
@@ -52,3 +54,51 @@ def test_drawdown_stops_new_entries() -> None:
     )
     pm.update_equity(85_000.0)  # -15% drawdown
     assert pm.can_open_trade(sector="IT") is False
+
+
+# --- Helpers for backtest integration test ---
+
+def _signal(
+    *,
+    symbol: str = "ABC",
+    signal_date: date = date(2026, 3, 2),
+    entry_ref: float = 101.0,
+    stop: float = 95.0,
+    pivot: float = 100.0,
+) -> pl.DataFrame:
+    return pl.DataFrame(
+        {
+            "signal_date": [signal_date],
+            "symbol": [symbol],
+            "signal_type": ["BREAKOUT"],
+            "pivot": [pivot],
+            "entry_ref": [entry_ref],
+            "stop": [stop],
+        }
+    )
+
+
+def _ohlcv(rows: list[dict[str, object]]) -> pl.DataFrame:
+    return pl.DataFrame(rows).sort(["symbol", "date"])
+
+
+def test_backtest_skips_signal_when_portfolio_full() -> None:
+    signals = pl.concat([
+        _signal(symbol="A", signal_date=date(2026, 3, 2)),
+        _signal(symbol="B", signal_date=date(2026, 3, 2)),
+        _signal(symbol="C", signal_date=date(2026, 3, 2)),
+    ], how="vertical")
+
+    prices = _ohlcv([
+        {"date": date(2026, 3, 3), "symbol": s, "open": 101.5, "high": 102.0, "low": 100.0, "close": 101.0}
+        for s in ["A", "B", "C"]
+    ] + [
+        {"date": date(2026, 3, 4), "symbol": s, "open": 101.0, "high": 102.0, "low": 100.0, "close": 101.5}
+        for s in ["A", "B", "C"]
+    ])
+
+    pm = PortfolioManager(max_positions=2, initial_capital=1_000_000.0, risk_per_trade_pct=0.01)
+    result = simulate_breakout_backtest(signals, prices, BacktestParams(max_hold_days=2), portfolio_manager=pm)
+
+    statuses = [t.status for t in result.trades]
+    assert statuses.count("skipped_portfolio") >= 1
