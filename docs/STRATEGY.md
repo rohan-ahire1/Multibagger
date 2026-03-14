@@ -35,6 +35,8 @@
 19. [Invariants — Things That Must Never Change Without Updating This Document](#19-invariants--things-that-must-never-change-without-updating-this-document)
 20. [Change Log](#20-change-log)
 21. [Research Basis — Parameter Validation Guide](#21-research-basis--parameter-validation-guide)
+22. [Portfolio Risk Management](#22-portfolio-risk-management)
+23. [India-Specific Adaptations](#23-india-specific-adaptations)
 
 ---
 
@@ -242,22 +244,41 @@ Daily signals exported to `data/signals/YYYY-MM-DD_signals.parquet` (and optiona
 
 ## 4. Market Filter
 
-The market filter determines whether the overall market environment is favorable for BREAKOUT signals. It uses the benchmark symbol (NIFTYBEES).
+The market filter classifies the overall market environment into a graduated 3-state regime that controls position sizing and entry eligibility. It uses the benchmark symbol (NIFTYBEES).
 
-### Conditions — 3 Layers (ALL must be true on day `D`)
+### Market Regime States
+
+| Regime | Breadth Threshold | Behavior |
+|---|---|---|
+| **STRONG** | `breadth_pct >= 60%` AND EMA21 OK | Full position sizes, all setups eligible |
+| **NEUTRAL** | `breadth_pct` between 40% and 60%, or EMA21 failing | Half position sizes, A+ setups only |
+| **WEAK** | `breadth_pct < 40%` OR secular trend failing | No new entries |
+
+### Conditions — 3 Layers (evaluated on day `D`)
 
 | Layer | # | Condition | Meaning |
 |---|---|---|---|
 | 1 — Trend | 1 | `close(D) > sma200(D)` | Benchmark price above its 200-day SMA |
 | 1 — Trend | 2 | `sma50(D) > sma200(D)` | Benchmark 50-day SMA above 200-day SMA |
-| 1 — Trend | 3 | `sma200(D) > sma200(D-22)` | Benchmark 200-day SMA is rising (slope positive over 22 days) |
+| 1 — Trend | 3 | `sma200(D) > sma200(D-66)` | Benchmark 200-day SMA is rising (slope positive over 66 days) |
 | 2 — Cycle | 4 | `close(D) > ema21(D)` | Benchmark close above its 21-day EMA (cycle confirmation) |
-| 3 — Breadth | 5 | `breadth_pct(D) >= require_breadth_pct` | % of eligible universe with close > SMA50 >= 50% |
+| 3 — Breadth | 5 | `breadth_pct(D)` classified against thresholds | % of eligible universe with close > SMA50 |
+
+### Classification Logic
+
+1. **Layer 1 fails** (any of the 3 secular conditions) → **WEAK** immediately
+2. **Layer 2 fails** (EMA21) → caps regime at **NEUTRAL** (cannot be STRONG)
+3. **Layer 3** (breadth):
+   - `breadth_pct >= breadth_strong_pct (0.60)` AND EMA21 OK → **STRONG**
+   - `breadth_pct < breadth_weak_pct (0.40)` → **WEAK**
+   - Otherwise → **NEUTRAL**
 
 ### Behavior
 
-- When `require_market_filter` is `true` (default): BREAKOUT signals are **suppressed** when the filter is OFF
-- WATCH signals are **always allowed** regardless of market filter state
+- When `require_market_filter` is `true` (default): BREAKOUT signals are **suppressed** when regime is WEAK
+- In NEUTRAL regime: breakouts are allowed but position sizes are halved
+- In STRONG regime: full position sizes
+- WATCH signals are **always allowed** regardless of market regime
 - Missing benchmark data on the scan date is a **fatal error** — the scan cannot proceed
 
 ### Config Keys
@@ -265,39 +286,55 @@ The market filter determines whether the overall market environment is favorable
 | Parameter | Config Key | Default |
 |---|---|---|
 | Benchmark EMA period | `market_filter.benchmark_ema_period` | 21 |
-| Require breadth % | `market_filter.require_breadth_pct` | 0.50 |
+| Breadth strong threshold | `market_filter.breadth_strong_pct` | 0.60 (60%) |
+| Breadth weak threshold | `market_filter.breadth_weak_pct` | 0.40 (40%) |
 
 ### Implementation (exact code)
 
 ```python
-def market_filter_on(frame, benchmark_symbol, scan_date, eligible_symbols) -> bool:
+def classify_market_regime(
+    frame: pl.DataFrame,
+    benchmark_symbol: str,
+    scan_date: date,
+    *,
+    benchmark_ema: float | None = None,
+    breadth_pct: float | None = None,
+    breadth_strong_pct: float = 0.60,
+    breadth_weak_pct: float = 0.40,
+) -> MarketRegime:
     row = frame.filter(
         (col("symbol") == benchmark_symbol) & (col("date") == scan_date)
-    ).select("close", "sma50", "sma200", "sma200_lag20", "ema21").to_dicts()
+    ).select("close", "sma50", "sma200", "sma200_lag20").to_dicts()
 
     if not row:
         raise ValueError(f"Missing benchmark data for {benchmark_symbol} on {scan_date}")
 
     bm = row[0]
 
-    # Layer 1 — Trend (3 conditions)
-    layer1 = (
+    # Layer 1 — Secular trend (all 3 must pass, else WEAK)
+    secular_ok = (
         bm["close"] > bm["sma200"]
         and bm["sma50"] > bm["sma200"]
         and bm["sma200"] > bm["sma200_lag20"]
     )
+    if not secular_ok:
+        return MarketRegime.WEAK
 
-    # Layer 2 — Cycle confirmation
-    layer2 = bm["close"] > bm["ema21"]
+    # Layer 2 — Cycle confirmation (caps at NEUTRAL if failing)
+    ema_ok = True
+    if benchmark_ema is not None and bm["close"] <= benchmark_ema:
+        ema_ok = False
 
-    # Layer 3 — Breadth
-    eligible = frame.filter(
-        (col("date") == scan_date) & col("symbol").is_in(eligible_symbols)
-    )
-    breadth_pct = eligible.filter(col("close") > col("sma50")).height / max(eligible.height, 1)
-    layer3 = breadth_pct >= require_breadth_pct
+    # Layer 3 — Breadth classification
+    if breadth_pct is not None:
+        if breadth_pct >= breadth_strong_pct and ema_ok:
+            return MarketRegime.STRONG
+        elif breadth_pct < breadth_weak_pct:
+            return MarketRegime.WEAK
+        else:
+            return MarketRegime.NEUTRAL
 
-    return layer1 and layer2 and layer3
+    return MarketRegime.STRONG if ema_ok else MarketRegime.NEUTRAL
 ```
 
 ---
@@ -340,7 +377,7 @@ The trend template confirms a stock is in a Stage 2 uptrend. ALL 9 conditions mu
 | 1 | Close above 150-SMA | `close > sma150` | Price above intermediate MA |
 | 2 | Close above 200-SMA | `close > sma200` | Price above long-term MA |
 | 3 | 150-SMA above 200-SMA | `sma150 > sma200` | MAs properly stacked |
-| 4 | 200-SMA rising | `sma200 > sma200.shift(22)` | Long-term trend rising (22-day slope) |
+| 4 | 200-SMA rising | `sma200 > sma200.shift(66)` | Long-term trend rising (66-day slope, ~3 months) |
 | 5 | 50-SMA above 150-SMA | `sma50 > sma150` | Short MA above intermediate |
 | 6 | 50-SMA above 200-SMA | `sma50 > sma200` | Short MA above long-term |
 | 7 | Close above 50-SMA | `close > sma50` | Price above short-term MA |
@@ -355,7 +392,7 @@ The trend template confirms a stock is in a Stage 2 uptrend. ALL 9 conditions mu
 | Mid SMA | `trend_template.sma_mid` | 150 |
 | Slow SMA | `trend_template.sma_slow` | 200 |
 | 52-week lookback | `trend_template.lookback_52w` | 252 trading days |
-| 200-SMA slope lookback | `trend_template.sma200_slope_lookback` | 22 trading days |
+| 200-SMA slope lookback | `trend_template.sma200_slope_lookback` | 66 trading days (~3 months) |
 | Min above 52w low | `trend_template.min_above_52w_low_pct` | 0.30 (30%) |
 | Max below 52w high | `trend_template.max_below_52w_high_pct` | 0.25 (25%) |
 
@@ -392,14 +429,20 @@ The trend template is computed as individual boolean columns (`tt_close_above_sm
 
 RS measures how a stock performs relative to the benchmark over multiple timeframes, then ranks all eligible symbols cross-sectionally.
 
+### Skip-Month Offset
+
+To avoid short-term reversal contamination (Jegadeesh & Titman 1993), the RS calculation skips the most recent `skip_recent_days` (default 21) trading days. Instead of using the current close, returns are computed from `close[t - skip]` back to `close[t - skip - L]`. This prevents last-month noise from distorting momentum rankings.
+
 ### Step 1: Compute Returns
 
-For each lookback period `L` in `[63, 126, 189, 252]`:
+For each lookback period `L` in `[63, 126, 189, 252]`, with skip offset `S` (default 21):
 
 ```
-Ret_sym_L  = (close_today / close_L_days_ago) - 1
-Ret_bm_L   = (benchmark_close_today / benchmark_close_L_days_ago) - 1
+Ret_sym_L  = (close[t-S] / close[t-S-L]) - 1
+Ret_bm_L   = (benchmark_close[t-S] / benchmark_close[t-S-L]) - 1
 ```
+
+When `skip_recent_days = 0` (disabled), the formula reduces to the standard version using `close_today`.
 
 ### Step 2: Compute Relative Performance
 
@@ -437,7 +480,7 @@ Where:
 rs_pass = (rs_rank >= rs_rank_min)
 ```
 
-Default `rs_rank_min = 70` — only the top 30th percentile passes.
+Default `rs_rank_min = 80` — only the top 20th percentile passes.
 
 ### Default Parameters
 
@@ -445,7 +488,8 @@ Default `rs_rank_min = 70` — only the top 30th percentile passes.
 |---|---|---|
 | Lookback periods | `relative_strength.lookbacks` | [63, 126, 189, 252] |
 | Weights | `relative_strength.weights` | [0.4, 0.2, 0.2, 0.2] |
-| Minimum RS rank | `relative_strength.rs_rank_min` | 70 |
+| Minimum RS rank | `relative_strength.rs_rank_min` | 80 |
+| Skip recent days | `relative_strength.skip_recent_days` | 21 (skip most recent month) |
 
 ### Important Details
 
@@ -553,6 +597,19 @@ Operates on the `range10` time series within the `base_lookback` window (default
 | Smooth window | `setup_vcp.contraction_smooth_window` | 5 |
 | Min peak height | `setup_vcp.contraction_min_peak_pct` | 0.02 (2%) |
 | Min contraction count | `setup_vcp.contraction_min_count` | 2 (hard gate) |
+| Standard contraction count | `setup_vcp.contraction_standard_count` | 3 (for high-conviction signals) |
+
+#### Contraction Tiers
+
+Signals are classified into quality tiers based on contraction count:
+
+| Tier | Contraction Count | Meaning |
+|------|------------------|---------|
+| **Premium** | `>= contraction_standard_count` (3) | High-conviction VCP with 3+ successive contractions |
+| **Standard** | `>= contraction_min_count` (2) | Meets minimum threshold |
+| **Low** | `< contraction_min_count` | Below minimum — filtered out by hard gate |
+
+The `contraction_standard_count` parameter (default 3) identifies premium setups. In NEUTRAL market regimes, only premium setups (tier = premium) are eligible for entry.
 
 #### Implementation
 
@@ -636,17 +693,33 @@ A BREAKOUT signal indicates a stock has cleared its pivot on volume — the actu
 | 2 | RS pass | `rs_rank(D) >= rs_rank_min` | Top RS percentile |
 | 3 | Setup pass **previous day** | `setup_pass(D-1)` | VCP conditions met **yesterday** |
 | 4 | Market filter | `market_on` or `not require_market_filter` | Market environment favorable |
-| 5 | Price above pivot | `close(D) >= pivot(D) * (1 + breakout_buffer_pct)` | Close cleared the pivot |
+| 5 | Price above pivot | `close(D) >= pivot(D) + breakout_buffer` | Close cleared the pivot (ATR-based or fixed buffer) |
 | 6 | Volume surge | `volume(D) >= vol50(D) * breakout_vol_mult` | Volume at least 1.5x average |
-| 7 | First-day breakout | `close(D-1) < pivot(D) * (1 + breakout_buffer_pct)` | Yesterday's close was below pivot |
+| 7 | First-day breakout | `close(D-1) < pivot(D) + breakout_buffer` | Yesterday's close was below pivot |
 | 8 | Not over-extended | `close(D) <= sma50(D) * (1 + max_extension_breakout_pct)` | Price not too far above 50-SMA on breakout day |
+
+### Breakout Buffer (ATR-Based)
+
+The breakout buffer is the minimum distance above the pivot that price must clear to confirm a breakout. When `breakout_buffer_atr_mult` is set (default 0.5), the buffer adapts to each stock's volatility:
+
+```
+breakout_buffer = atr(14) * breakout_buffer_atr_mult    # 0.5 x ATR(14)
+breakout_level  = pivot + breakout_buffer
+```
+
+If `breakout_buffer_atr_mult` is null or ATR is unavailable, the fixed `breakout_buffer_pct` (0.3%) is used as a fallback:
+
+```
+breakout_level = pivot * (1 + breakout_buffer_pct)       # fallback
+```
 
 ### Default Parameters
 
 | Parameter | Config Key | Default |
 |---|---|---|
 | Require market filter | `breakout.require_market_filter` | true |
-| Breakout buffer | `breakout.breakout_buffer_pct` | 0.003 (0.3%) |
+| Breakout buffer (fixed, fallback) | `breakout.breakout_buffer_pct` | 0.003 (0.3%) |
+| Breakout buffer (ATR-based) | `breakout.breakout_buffer_atr_mult` | 0.5 (0.5 x ATR) |
 | Volume multiple | `breakout.breakout_vol_mult` | 1.5 |
 | Max breakout extension | `breakout.max_extension_breakout_pct` | 0.15 (15%) |
 
@@ -654,9 +727,9 @@ A BREAKOUT signal indicates a stock has cleared its pivot on volume — the actu
 
 1. **Setup uses D-1:** The setup gate intentionally checks the *previous day's* setup state. This is because on the breakout day itself, the range expansion and volume surge would likely invalidate the VCP tightening conditions. We want to confirm the stock *was* in a tight pattern before the breakout.
 
-2. **First-day only:** Condition 7 ensures the signal fires only on the initial breakout day. If the stock continues above the pivot the next day, it does NOT generate a second BREAKOUT signal. This is implemented by checking `prev_close < pivot * breakout_buffer`.
+2. **First-day only:** Condition 7 ensures the signal fires only on the initial breakout day. If the stock continues above the pivot the next day, it does NOT generate a second BREAKOUT signal. This is implemented by checking `prev_close < pivot + breakout_buffer`.
 
-3. **Market filter gating:** When `require_market_filter = true` (default), breakout signals are suppressed in unfavorable market environments. This prevents entries during adverse conditions.
+3. **Market filter gating:** When `require_market_filter = true` (default), breakout signals are suppressed when the market regime is WEAK. In NEUTRAL regime, breakouts are allowed but with reduced position sizes.
 
 ### BREAKOUT Signal Metadata
 
@@ -679,25 +752,34 @@ Every signal (WATCH and BREAKOUT) includes risk framing for position sizing refe
 ### Formulas
 
 ```
-entry_ref      = pivot * (1 + entry_buffer_pct)
+entry_ref      = pivot + entry_buffer          # ATR-based or fixed buffer
 struct_stop    = rolling_min(low, 10)          # 10-day lowest low
 max_loss_stop  = entry_ref * (1 - max_stop_pct)
 stop           = max(struct_stop, max_loss_stop)
 r_per_share    = entry_ref - stop
 ```
 
+**Entry buffer** uses the same ATR-based logic as the breakout buffer:
+```
+entry_buffer = atr(14) * entry_buffer_atr_mult    # 0.5 x ATR(14), default
+entry_ref    = pivot + entry_buffer
+```
+
+If `entry_buffer_atr_mult` is null or ATR is unavailable, the fixed `entry_buffer_pct` (0.3%) is used as a fallback.
+
 ### Default Parameters
 
 | Parameter | Config Key | Default |
 |---|---|---|
-| Entry buffer | `risk.entry_buffer_pct` | 0.003 (0.3%) |
-| Max stop loss | `risk.max_stop_pct` | 0.08 (8%) |
+| Entry buffer (fixed, fallback) | `risk.entry_buffer_pct` | 0.003 (0.3%) |
+| Entry buffer (ATR-based) | `risk.entry_buffer_atr_mult` | 0.5 (0.5 x ATR) |
+| Max stop loss | `risk.max_stop_pct` | 0.10 (10%) |
 | Profit target | `risk.target_r` | null (no fixed target) |
 
 ### Stop Logic
 
 - `struct_stop` is the structural/technical stop based on the 10-day low
-- `max_loss_stop` is the maximum acceptable loss stop (8% below entry)
+- `max_loss_stop` is the maximum acceptable loss stop (10% below entry)
 - The actual stop is the **higher** of the two — this ensures the stop is never looser than the max allowed loss, but uses a tighter structural level when available
 - If `struct_stop` is null (insufficient data), `max_loss_stop` is used alone via `pl.coalesce`
 
@@ -843,7 +925,10 @@ If a later BREAKOUT signal appears for a symbol while a prior trade in the same 
 | Pending entry window | 5 trading days |
 | Max holding period | 90 trading days |
 | Profit target | None (no fixed target; from `risk.target_r` in config) |
-| Exit mode | V2_TRAIL_21EMA (trailing 21-EMA stop after +1R) |
+| Exit mode | V3_TRAIL_PCT (percentage trailing stop) |
+| Trail activation | +2R profit (two-stage: breakeven at +1R, trail at +2R) |
+| Trail percentage | 0.20 (20% from highest close) |
+| Dead money time stop | 15 trading days (exit if not at +1R within 15 days) |
 | Optional target R-multiple | CLI `--target-r` overrides config default |
 
 ### 15.7 Summary Metrics
@@ -856,6 +941,7 @@ If a later BREAKOUT signal appears for a symbol while a prior trade in the same 
 | stopped_trades | Count with status `stopped` |
 | target_exits | Count with status `target` |
 | time_stop_exits | Count with status `time_stop` |
+| dead_money_exits | Count with status `dead_money` |
 | win_rate | winners / closed_trades |
 | average_return_pct | mean(return_pct) of closed trades |
 | average_r | mean(r_multiple) of closed trades |
@@ -886,31 +972,46 @@ Trades are sorted by `(exit_date, symbol, signal_date)` before computing the cur
 | `stopped` | Hard stop hit |
 | `target` | Profit target hit |
 | `time_stop` | Max holding period reached |
+| `dead_money` | Trade not at +1R within dead_money_days (15); closed at current close |
 | `skipped_overlap` | Same-symbol trade already open |
 | `incomplete_data` | Insufficient OHLCV data after signal; if entry already occurred, the trade is force-closed at the last available close |
 
-### 15.10 Backtest V2 Exit Models (Optional)
+### 15.10 Exit Models
 
-V2 exit models add trailing stop discipline to the backtest without changing signal generation. The entry logic, overlap rule, and signal selection remain identical to V1 — only the exit path differs.
+Exit models add trailing stop discipline to the backtest without changing signal generation. The entry logic, overlap rule, and signal selection remain identical across all modes — only the exit path differs.
 
 **Exit modes:**
 
 | Mode | Key | Description |
 |---|---|---|
 | V1 Fixed | `v1_fixed` | Original V1 behavior: fixed initial stop, time stop, optional target |
-| V2 Trail 10D Low | `v2_trail_10d` | After +1R profit, trail stop to 10-day rolling low |
-| V2 Trail 21-EMA | `v2_trail_21ema` | After +1R profit, trail stop to 21-day EMA of close |
+| V2 Trail 10D Low | `v2_trail_10d` | After activation, trail stop to 10-day rolling low |
+| V2 Trail 21-EMA | `v2_trail_21ema` | After activation, trail stop to 21-day EMA of close |
+| **V3 Trail Percentage** | **`v3_trail_pct`** | **After activation, trail stop at 20% below highest close (default)** |
 
-**Trail activation:**
-- The trailing stop activates when `high >= entry_price + trail_activation_r * initial_risk` (default `trail_activation_r = 1.0`)
-- Once activated, the stop immediately moves to at least break-even (`stop = max(stop, entry_price)`)
-- Activation is permanent for the duration of the trade
+**Two-stage trail activation (default `trail_activation_r = 2.0`):**
+1. **Stage 1 — Breakeven:** When `high >= entry_price + 1R`, stop moves to entry price (breakeven)
+2. **Stage 2 — Trail active:** When `high >= entry_price + trail_activation_r * initial_risk` (default +2R), the trailing stop engages
+- Once activated, activation is permanent for the duration of the trade
+
+**Dead money time stop (default `dead_money_days = 15`):**
+- If a trade has not reached +1R profit within `dead_money_days` trading days, it is closed at the current close price with status `dead_money`
+- This prevents capital being tied up in non-performing positions
+- Set to `null` to disable
 
 **Trailing stop update rules (critical for avoiding lookahead bias):**
 - The stop used for day `t` exit checks was computed from data through day `t-1`
 - After processing day `t`'s bar (checking exits, tracking MAE/MFE), the trailing stop is updated using day `t`'s data
 - This updated stop becomes active on day `t+1`
 - The stop never decreases — `active_stop = max(active_stop, trail_value)`
+
+**V3_TRAIL_PCT specifics (default, recommended):**
+```
+highest_close = max(close[entry..t])                     # track highest close since entry
+trail_value   = highest_close * (1.0 - trail_pct)       # 20% below peak close
+active_stop   = max(active_stop, trail_value)            # ratchet up only
+```
+The percentage trail is simple, robust, and empirically superior to indicator-based trails for trend-following on Indian equities. Default `trail_pct = 0.20` (20%).
 
 **V2_TRAIL_10D specifics:**
 ```
@@ -928,7 +1029,7 @@ active_stop = max(active_stop, ema21(t))                        # ratchet up onl
 The EMA is seeded from entry-day close and warms up over the holding period.
 
 **Pre-activation indicator tracking:**
-- Both V2 modes maintain their indicator state (low buffer / EMA) from entry day onward, even before trail activation
+- All trailing modes maintain their indicator state (low buffer / EMA / highest close) from entry day onward, even before trail activation
 - This ensures the indicator has warm-up data when activation occurs
 
 ### 15.11 MAE/MFE Metrics
@@ -1041,23 +1142,20 @@ universe:
   min_avg_volume_shares: 200000
   max_symbols: 1500
 
-market_filter:
-  benchmark_ema_period: 21
-  require_breadth_pct: 0.50
-
 trend_template:
   sma_fast: 50
   sma_mid: 150
   sma_slow: 200
   lookback_52w: 252
-  sma200_slope_lookback: 22
+  sma200_slope_lookback: 66
   min_above_52w_low_pct: 0.30
   max_below_52w_high_pct: 0.25
 
 relative_strength:
   lookbacks: [63, 126, 189, 252]
   weights: [0.4, 0.2, 0.2, 0.2]
-  rs_rank_min: 70
+  rs_rank_min: 80
+  skip_recent_days: 21
 
 setup_vcp:
   base_lookback: 65
@@ -1071,16 +1169,19 @@ setup_vcp:
   contraction_smooth_window: 5
   contraction_min_peak_pct: 0.02
   contraction_min_count: 2
+  contraction_standard_count: 3
 
 breakout:
   require_market_filter: true
   breakout_buffer_pct: 0.003
+  breakout_buffer_atr_mult: 0.5
   breakout_vol_mult: 1.5
   max_extension_breakout_pct: 0.15
 
 risk:
   entry_buffer_pct: 0.003
-  max_stop_pct: 0.08
+  entry_buffer_atr_mult: 0.5
+  max_stop_pct: 0.10
   target_r: null
 
 alerts:
@@ -1088,6 +1189,22 @@ alerts:
   send_watch_alerts: true
   send_breakout_alerts: true
   channels: ["telegram", "console"]
+
+market_filter:
+  benchmark_ema_period: 21
+  breadth_strong_pct: 0.60
+  breadth_weak_pct: 0.40
+
+portfolio:
+  max_heat_pct: 0.10
+  max_positions: 10
+  max_sector_positions: 3
+  max_sector_pct: 0.40
+  drawdown_half_pct: 0.10
+  drawdown_stop_pct: 0.15
+  drawdown_close_pct: 0.20
+  initial_capital: 1000000
+  risk_per_trade_pct: 0.01
 
 watchlist:
   max_candidates: 300
@@ -1112,17 +1229,19 @@ watchlist:
 | | min_avg_volume_shares | int | 200,000 | Min 50-day avg volume |
 | | max_symbols | int | 1500 | Max universe size |
 | **market_filter** | benchmark_ema_period | int | 21 | EMA period for benchmark cycle confirmation |
-| | require_breadth_pct | float | 0.50 | Min % of universe with close > SMA50 |
+| | breadth_strong_pct | float | 0.60 | Breadth threshold for STRONG regime |
+| | breadth_weak_pct | float | 0.40 | Breadth threshold below which regime is WEAK |
 | **trend_template** | sma_fast | int | 50 | Fast SMA period |
 | | sma_mid | int | 150 | Mid SMA period |
 | | sma_slow | int | 200 | Slow SMA period |
 | | lookback_52w | int | 252 | 52-week lookback in trading days |
-| | sma200_slope_lookback | int | 22 | 200-SMA slope lookback |
+| | sma200_slope_lookback | int | 66 | 200-SMA slope lookback (~3 months) |
 | | min_above_52w_low_pct | float | 0.30 | Min % above 52-week low |
 | | max_below_52w_high_pct | float | 0.25 | Max % below 52-week high |
 | **relative_strength** | lookbacks | list[int] | [63, 126, 189, 252] | RS return periods |
 | | weights | list[float] | [0.4, 0.2, 0.2, 0.2] | RS period weights (must sum to 1.0) |
-| | rs_rank_min | float | 70 | Min RS rank percentile |
+| | rs_rank_min | float | 80 | Min RS rank percentile |
+| | skip_recent_days | int | 21 | Skip most recent month to avoid reversal effect |
 | **setup_vcp** | base_lookback | int | 65 | Pivot and base lookback window |
 | | max_range10_pct | float | 0.10 | Max 10-day range (10%) |
 | | max_vol_dryup_ratio | float | 0.60 | Max vol dry-up ratio |
@@ -1131,18 +1250,35 @@ watchlist:
 | | max_extension_from_50sma_pct | float | 0.10 | Max extension above 50-SMA (10%) |
 | | base_max_depth_pct | float | 0.35 | Max base depth (35%) |
 | | pre_alert_proximity_pct | float | 0.03 | Max near_pivot for WATCH (3%) |
+| | contraction_smooth_window | int | 5 | Contraction detection smoothing window |
+| | contraction_min_peak_pct | float | 0.02 | Min peak height for contraction detection |
 | | contraction_min_count | int | 2 | Min successive contractions required |
+| | contraction_standard_count | int | 3 | Contraction count for high-conviction (premium tier) |
 | **breakout** | require_market_filter | bool | true | Gate BREAKOUTs on market filter |
-| | breakout_buffer_pct | float | 0.003 | Breakout buffer above pivot (0.3%) |
+| | breakout_buffer_pct | float | 0.003 | Breakout buffer above pivot, fixed fallback (0.3%) |
+| | breakout_buffer_atr_mult | float | 0.5 | ATR-based breakout buffer (0.5 x ATR); overrides breakout_buffer_pct |
 | | breakout_vol_mult | float | 1.5 | Min volume multiple for breakout |
 | | max_extension_breakout_pct | float | 0.15 | Max extension above 50-SMA on breakout day (15%) |
-| **risk** | entry_buffer_pct | float | 0.003 | Entry buffer above pivot (0.3%) |
-| | max_stop_pct | float | 0.08 | Max stop loss (8%) |
+| **risk** | entry_buffer_pct | float | 0.003 | Entry buffer above pivot, fixed fallback (0.3%) |
+| | entry_buffer_atr_mult | float | 0.5 | ATR-based entry buffer (0.5 x ATR); overrides entry_buffer_pct |
+| | max_stop_pct | float | 0.10 | Max stop loss (10%) |
 | | target_r | float \| None | null | Default profit target in R-multiples; CLI `--target-r` overrides; null = no fixed target |
 | **alerts** | max_alerts_per_day | int | 10 | Max alerts per signal type |
 | | send_watch_alerts | bool | true | Enable WATCH alerts |
 | | send_breakout_alerts | bool | true | Enable BREAKOUT alerts |
 | | channels | list[str] | ["telegram", "console"] | Alert channels |
+| **market_filter** | benchmark_ema_period | int | 21 | EMA period for benchmark cycle confirmation |
+| | breadth_strong_pct | float | 0.60 | Breadth % for STRONG regime |
+| | breadth_weak_pct | float | 0.40 | Breadth % below which regime is WEAK |
+| **portfolio** | max_heat_pct | float | 0.10 | Max total open risk as % of equity |
+| | max_positions | int | 10 | Max concurrent positions |
+| | max_sector_positions | int | 3 | Max positions per sector |
+| | max_sector_pct | float | 0.40 | Max equity in any one sector |
+| | drawdown_half_pct | float | 0.10 | Halve position sizes at this drawdown |
+| | drawdown_stop_pct | float | 0.15 | Stop new entries at this drawdown |
+| | drawdown_close_pct | float | 0.20 | Close all positions at this drawdown |
+| | initial_capital | float | 1,000,000 | Starting equity for portfolio simulation |
+| | risk_per_trade_pct | float | 0.01 | Risk per trade as % of equity |
 | **watchlist** | max_candidates | int | 300 | Max watchlist candidates |
 
 ### 17.3 Environment Variables
@@ -1284,7 +1420,7 @@ These are hard constraints. Any AI session or contributor that changes these MUS
 
 1. **Trend template is exactly 9 conditions** — no more, no less
 2. **VCP setup is exactly 6 conditions** (plus contraction gate when `contraction_min_count > 0`, default 2). ATR contraction uses 10d/30d ATR ratio: `atr_pct_sma10 / atr_pct_sma30 <= factor`
-3. **Market filter is exactly 3 layers (5 conditions)** on the benchmark: Layer 1 (trend: close>SMA200, SMA50>SMA200, SMA200 rising), Layer 2 (cycle: close>EMA21), Layer 3 (breadth: % close>SMA50 >= 50%)
+3. **Market filter is exactly 3 layers (5 conditions)** on the benchmark: Layer 1 (trend: close>SMA200, SMA50>SMA200, SMA200 rising over 66 days), Layer 2 (cycle: close>EMA21), Layer 3 (breadth: graduated 3-state with thresholds at 60%/40%)
 4. **RS weights must sum to exactly 1.0**
 5. **RS rank uses `average` method ranking with the formula `100 * (rank - 1) / (N - 1)`**
 6. **Pivot excludes the current day** via `.shift(1)`
@@ -1297,8 +1433,8 @@ These are hard constraints. Any AI session or contributor that changes these MUS
 13. **Wilder ATR uses the specific recurrence** `((prev * (period-1)) + TR) / period`
 14. **Backtest assumes worse outcome** when both stop and target are hit on the same candle
 15. **Backtest overlap rule**: later same-symbol signals are skipped while a prior trade is open
-16. **V2 trailing stops use D-1 data for initial check** — stop used for day t open/low checks was computed from data ≤ day t-1
-17. **V2 trailing stops only ratchet up** — `active_stop = max(active_stop, trail_value)`
+16. **Trailing stops use D-1 data for initial check** — stop used for day t open/low checks was computed from data ≤ day t-1
+17. **Trailing stops only ratchet up** — `active_stop = max(active_stop, trail_value)` (applies to V2 and V3 modes)
 18a. **Same-bar trigger**: after the trail ratchets up on bar t (using bar t data), if close ≤ new stop, exit immediately at the stop price on bar t — do not wait for bar t+1
 18. **MAE/MFE use initial risk denominator** — R-unit excursion metrics always reference the original entry-to-stop risk
 
@@ -1353,6 +1489,27 @@ Track every strategy change here. Include date, what changed, why, and who/what 
 | 2026-03-14 | Updated Section 16 (UI Behavior) to reflect new terminal | Strategy doc was still describing old Streamlit UI | AI-assisted |
 | 2026-03-14 | Trailing stop same-bar trigger exit | If trail ratchets up and close is already below it, exit immediately instead of waiting for next bar | AI-assisted |
 
+### 2026-03-15 — V2 Critical Evaluation Implementation
+
+**Scanner core:** RS cutoff raised to 80th percentile with 21-day skip-month; SMA200
+slope lookback increased to 66 days; breakout buffer changed from fixed 0.3% to
+0.5x ATR(14); progressive contraction verification added with quality tiers.
+
+**Exit strategy:** New V3 percentage trailing stop (20%, empirically superior);
+two-stage activation (breakeven at +1R, trail at +2R); dead money time stop at 15 days.
+
+**Market filter:** Graduated 3-state system (STRONG/NEUTRAL/WEAK) replacing binary
+on/off; asymmetric breadth thresholds (60% bull, 40% bear).
+
+**Portfolio controls:** Max 10% portfolio heat, 10 concurrent positions, 3 per sector;
+drawdown circuit breakers at -10%/-15%/-20%.
+
+**India-specific:** F&O preference, ASM/GSM exclusion, 500Cr market cap floor,
+5Cr ADTV floor; India VIX position sizing.
+
+**New modules:** Sector RS ranking, earnings acceleration filter, multi-pattern detection
+(HTF, flat base), India VIX adapter.
+
 ### 2026-03-14 Parameter Correction Summary
 
 | Parameter | Old Value | New Value | Reason |
@@ -1396,8 +1553,153 @@ Track every strategy change here. Include date, what changed, why, and who/what 
 - **VCP contraction (min count 2):** Minervini specifically describes the hallmark VCP as having "at least two to three contractions" with successively lower volatility. Setting `contraction_min_count = 2` enforces this minimum.
 - **ATR ratio (10d/30d):** Using a ratio of smoothed ATR windows is more robust than comparing a point value to a lagged point value, reducing sensitivity to single-day spikes.
 - **Base lookback (65 days):** Approximately 3 calendar months, accommodating the typical 5-to-15 week base formation described in Minervini's works.
-- **Trailing 21-EMA exit:** Aligns with the institutional practice of using the 21-day EMA as a cycle reference for trend-following exits, allowing winners to run while protecting gains.
+- **Trailing 21-EMA exit (V2):** Aligns with the institutional practice of using the 21-day EMA as a cycle reference for trend-following exits.
+- **V3 percentage trail (20%, default):** Empirically superior for Indian equities where gaps and overnight volatility make indicator-based trails less reliable. The 20% trail allows sufficient room for trend continuation while protecting the bulk of gains.
+- **RS skip-month (21 days):** Jegadeesh & Titman (1993) documented that skipping the most recent month improves momentum strategy returns by avoiding short-term reversal effects.
+- **Dead money stop (15 days):** Minervini advocates cutting positions that fail to perform within 2-3 weeks. 15 trading days (~3 calendar weeks) balances patience with capital efficiency.
+- **SMA200 slope (66 days):** Requiring 3 months of rising SMA200 avoids false signals from brief slope reversals in choppy markets.
 
 ### Validation Note
 
 These parameters represent the best-effort alignment with published methodology. They are not curve-fitted to historical NSE data. Practitioners should treat them as a starting point and monitor signal quality through the backtest framework before adjusting.
+
+---
+
+## 22. Portfolio Risk Management
+
+Portfolio-level risk controls sit above individual trade risk framing (Section 12) and govern how many positions can be open, how much total risk is acceptable, and how drawdowns affect behavior.
+
+### 22.1 Position Limits
+
+| Parameter | Config Key | Default | Description |
+|---|---|---|---|
+| Max positions | `portfolio.max_positions` | 10 | Maximum concurrent open positions |
+| Max per sector | `portfolio.max_sector_positions` | 3 | Maximum positions in any single sector |
+| Max sector % | `portfolio.max_sector_pct` | 0.40 | Maximum equity allocated to one sector |
+
+### 22.2 Heat (Total Open Risk)
+
+```
+total_heat = sum(risk_amount for each open position)
+```
+
+**Invariant:** `total_heat / equity <= max_heat_pct` (default 0.10 = 10%)
+
+No new trades are opened if doing so would exceed the heat limit. Each trade's risk amount is:
+```
+risk_amount = equity * risk_per_trade_pct * drawdown_multiplier
+```
+
+### 22.3 Drawdown Circuit Breakers
+
+The portfolio manager monitors equity drawdown from peak and progressively reduces exposure:
+
+| Drawdown Level | Config Key | Default | Action |
+|---|---|---|---|
+| Tier 1 — Half size | `portfolio.drawdown_half_pct` | 0.10 (-10%) | Position sizes halved (`multiplier = 0.5`) |
+| Tier 2 — Stop entries | `portfolio.drawdown_stop_pct` | 0.15 (-15%) | No new entries allowed (`multiplier = 0.0`) |
+| Tier 3 — Close all | `portfolio.drawdown_close_pct` | 0.20 (-20%) | All positions closed (`multiplier = 0.0`) |
+
+```
+drawdown_pct = (equity_peak - current_equity) / equity_peak
+```
+
+The `position_size_multiplier` is applied to the risk budget for all new trades. Existing positions are not retroactively adjusted (except at Tier 3 close-all).
+
+### 22.4 Position Sizing Formula
+
+```
+risk_budget   = equity * risk_per_trade_pct * drawdown_mult
+shares        = risk_budget / risk_per_share
+position_value = shares * entry_price
+```
+
+Where:
+- `equity` = current portfolio equity
+- `risk_per_trade_pct` = 0.01 (1% risk per trade)
+- `drawdown_mult` = position_size_multiplier from circuit breaker (1.0, 0.5, or 0.0)
+- `risk_per_share` = entry_price - stop
+
+### 22.5 Default Parameters
+
+| Parameter | Config Key | Default |
+|---|---|---|
+| Max heat | `portfolio.max_heat_pct` | 0.10 (10%) |
+| Max positions | `portfolio.max_positions` | 10 |
+| Max sector positions | `portfolio.max_sector_positions` | 3 |
+| Max sector % | `portfolio.max_sector_pct` | 0.40 (40%) |
+| Drawdown half | `portfolio.drawdown_half_pct` | 0.10 (-10%) |
+| Drawdown stop | `portfolio.drawdown_stop_pct` | 0.15 (-15%) |
+| Drawdown close | `portfolio.drawdown_close_pct` | 0.20 (-20%) |
+| Initial capital | `portfolio.initial_capital` | 1,000,000 |
+| Risk per trade | `portfolio.risk_per_trade_pct` | 0.01 (1%) |
+
+---
+
+## 23. India-Specific Adaptations
+
+The SEPA methodology was designed for US equities. This section documents adaptations for the Indian (NSE) market context.
+
+### 23.1 F&O Preference
+
+Stocks in the NSE Futures & Options segment are preferred because:
+- F&O stocks have no daily circuit limit (upper/lower price bands), so breakout trades are not at risk of being locked limit-up/down without ability to exit
+- F&O stocks generally have higher institutional participation and better liquidity
+- The F&O list is updated monthly by NSE
+
+When `india_filter.prefer_fno = true` (default), F&O stocks receive priority in signal ranking. Non-F&O stocks are not excluded but are ranked lower.
+
+### 23.2 ASM/GSM Exclusion
+
+Stocks under NSE's Additional Surveillance Measure (ASM) or Graded Surveillance Measure (GSM) are excluded from the scanner universe:
+- ASM/GSM stocks have trade-to-trade (T2T) settlement restrictions
+- They face price band restrictions (5%, 2%, or no trade) that make normal position management impossible
+- ESM (Enhanced Surveillance Measure) stocks are also excluded
+
+When `india_filter.exclude_asm_gsm = true` (default), these stocks are filtered out during universe selection.
+
+### 23.3 Minimum Thresholds
+
+| Parameter | Config Key | Default | Rationale |
+|---|---|---|---|
+| Min market cap | `india_filter.min_market_cap_cr` | 500 Cr | Exclude micro/nano caps with poor governance |
+| Min ADTV | `india_filter.min_adtv_cr` | 5 Cr | Ensure sufficient liquidity for position sizing |
+
+These thresholds complement the universe-level `min_adv50_inr` and `min_avg_volume_shares` filters with India-specific market cap and turnover floors.
+
+### 23.4 India VIX Position Sizing
+
+India VIX (NSE's implied volatility index) is integrated as a position sizing overlay:
+
+| VIX Range | Sizing | Rationale |
+|---|---|---|
+| < 15 | Full size | Low volatility, favorable environment |
+| 15-20 | Normal size | Normal conditions |
+| 20-25 | Half size | Elevated fear, reduce exposure |
+| > 25 | No new entries | Extreme fear, protect capital |
+
+VIX bands are applied as a multiplier to the base position size formula. When VIX data is unavailable, the system defaults to normal (1.0x) sizing.
+
+### 23.5 Survivorship Bias
+
+The scanner uses NSE Bhavcopy as its data source, which includes all stocks that traded on a given day. This naturally avoids survivorship bias because:
+- Delisted stocks appear in historical bhavcopies up to their last trading day
+- No external "current constituent" list is applied retroactively
+- Backtest results reflect the actual investable universe at each point in time
+
+### 23.6 Settings Model
+
+India-specific filters are optional and configured via the `india_filter` section in settings:
+
+```python
+class IndiaFilterSettings(BaseModel):
+    prefer_fno: bool = True                    # prefer F&O stocks
+    exclude_asm_gsm: bool = True               # exclude ASM/GSM stocks
+    min_market_cap_cr: float = 500.0           # min market cap in crores
+    min_adtv_cr: float = 5.0                   # min ADTV in crores
+    fno_list_path: str | None = None           # path to local F&O list CSV
+    asm_gsm_list_path: str | None = None       # path to local ASM/GSM list CSV
+    sector_map_path: str | None = None         # path to sector classification CSV
+```
+
+The `india_filter` section is `None` by default in `AppSettings` — these filters only activate when explicitly configured.
