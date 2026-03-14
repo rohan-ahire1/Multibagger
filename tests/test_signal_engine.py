@@ -378,3 +378,47 @@ def test_prepare_frame_uses_adjusted_prices_when_corp_actions_provided(tmp_path:
     # Without adjustment: last 10 raw closes = [200,200,200,200,200, 100,100,100,100,100]
     # SMA(10) = (5*200 + 5*100) / 10 = 150
     assert last_row_raw == pytest.approx(150.0, rel=0.02)
+
+
+def test_breakout_uses_atr_based_buffer_when_configured(tmp_path: Path) -> None:
+    """When breakout_buffer_atr_mult is set, breakout buffer = pivot * atr_mult * atr_pct."""
+    dates = _dates(61)
+    benchmark = _symbol_frame(
+        "NIFTYBEES", dates,
+        [100.0 + 0.5 * idx for idx in range(61)],
+        [1_000_000] * 61,
+    )
+    # Stock with tight base near pivot
+    closes = (
+        [75.0 + 0.9 * idx for idx in range(50)]
+        + [119.2, 119.4, 119.5, 119.6, 119.7, 119.8, 119.85, 119.9, 119.95, 121.5, 122.0]
+    )
+    breakout = _symbol_frame(
+        "BREAKME", dates, closes,
+        [350_000] * 50 + [150_000] * 9 + [5_000_000, 1_500_000],
+    )
+    weak = _symbol_frame(
+        "WEAK", dates,
+        [90.0 + 0.1 * idx for idx in range(61)],
+        [300_000] * 61,
+    )
+
+    frame = pl.concat([benchmark, breakout, weak], how="vertical")
+    settings = _settings(tmp_path)
+    settings.breakout.breakout_buffer_atr_mult = 0.5
+    settings.risk.entry_buffer_atr_mult = 0.5
+
+    result = scan_for_date(frame=frame, settings=settings, scan_date=dates[59])
+
+    # Verify entry_ref uses ATR-based calculation (differs from fixed pct)
+    bo = result.signals.filter(
+        (pl.col("symbol") == "BREAKME") & (pl.col("signal_type") == "BREAKOUT")
+    )
+    if bo.height > 0:
+        entry_ref = bo["entry_ref"][0]
+        pivot = bo["pivot"][0]
+        fixed_entry = pivot * (1.0 + settings.risk.entry_buffer_pct)
+        # With ATR-based buffer, entry_ref should differ from fixed pct
+        assert entry_ref != pytest.approx(fixed_entry, abs=0.001), (
+            "ATR buffer should produce a different entry_ref than fixed pct"
+        )

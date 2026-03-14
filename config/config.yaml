@@ -49,12 +49,14 @@ setup_vcp:
 breakout:
   require_market_filter: true
   breakout_buffer_pct: 0.003
+  breakout_buffer_atr_mult: 0.5
   breakout_vol_mult: 1.5
   max_extension_breakout_pct: 0.15
 
 risk:
   entry_buffer_pct: 0.003
-  max_stop_pct: 0.08
+  entry_buffer_atr_mult: 0.5
+  max_stop_pct: 0.10
   target_r: null
 
 alerts:

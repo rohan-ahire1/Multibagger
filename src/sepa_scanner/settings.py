@@ -74,13 +74,15 @@ class SetupVcpSettings(BaseModel):
 
 class BreakoutSettings(BaseModel):
     require_market_filter: bool
-    breakout_buffer_pct: float
+    breakout_buffer_pct: float  # kept as fallback
+    breakout_buffer_atr_mult: float | None = None  # when set, overrides breakout_buffer_pct
     breakout_vol_mult: float
     max_extension_breakout_pct: float = 0.15
 
 
 class RiskSettings(BaseModel):
     entry_buffer_pct: float
+    entry_buffer_atr_mult: float | None = None
     max_stop_pct: float
     target_r: float | None = None
 

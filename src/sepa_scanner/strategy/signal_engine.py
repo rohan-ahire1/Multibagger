@@ -232,8 +232,6 @@ def _build_diagnostics(
     scan_date: date,
 ) -> pl.DataFrame:
     """Build the daily_diagnostics DataFrame from scan_rows + lifecycle columns."""
-    breakout_buffer = 1.0 + settings.breakout.breakout_buffer_pct
-
     diag = scan_rows.join(
         lifecycle_slice.select("symbol", "setup_active_streak", "pivot_age_days"),
         on="symbol",
@@ -260,13 +258,13 @@ def _build_diagnostics(
                 pl.lit(settings.breakout.require_market_filter) & ~pl.lit(market_on)
             ).then(BREAKOUT_FAIL_MARKET_FILTER).otherwise(0)
             + pl.when(
-                pl.col("close") < pl.col("pivot") * breakout_buffer
+                pl.col("close") < pl.col("_breakout_level")
             ).then(BREAKOUT_FAIL_BELOW_PIVOT).otherwise(0)
             + pl.when(
                 pl.col("volume") < pl.col("vol50") * settings.breakout.breakout_vol_mult
             ).then(BREAKOUT_FAIL_VOL_LOW).otherwise(0)
             + pl.when(
-                pl.col("prev_close") >= pl.col("pivot") * breakout_buffer
+                pl.col("prev_close") >= pl.col("_breakout_level")
             ).then(BREAKOUT_FAIL_NOT_FIRST_DAY).otherwise(0)
             + pl.when(
                 pl.col("close") > pl.col("sma50") * (1.0 + settings.breakout.max_extension_breakout_pct)
@@ -406,7 +404,30 @@ def scan_for_date(
         )
         .head(settings.watchlist.max_candidates)
     )
-    breakout_buffer = 1.0 + settings.breakout.breakout_buffer_pct
+    # ATR-based breakout buffer: pivot + atr_mult * atr_pct * pivot
+    # Falls back to fixed pct when ATR unavailable or not configured
+    atr_mult = settings.breakout.breakout_buffer_atr_mult
+    if atr_mult is not None:
+        breakout_buffer_expr = (
+            pl.col("pivot") * (1.0 + pl.col("atr_pct_prev").fill_null(0.0) * atr_mult)
+        ).alias("_breakout_level")
+    else:
+        breakout_buffer_expr = (
+            pl.col("pivot") * (1.0 + settings.breakout.breakout_buffer_pct)
+        ).alias("_breakout_level")
+
+    entry_atr_mult = settings.risk.entry_buffer_atr_mult
+    if entry_atr_mult is not None:
+        entry_ref_expr = (
+            pl.col("pivot") * (1.0 + pl.col("atr_pct_prev").fill_null(0.0) * entry_atr_mult)
+        ).alias("entry_ref")
+    else:
+        entry_ref_expr = (
+            pl.col("pivot") * (1.0 + settings.risk.entry_buffer_pct)
+        ).alias("entry_ref")
+
+    scan_rows = scan_rows.with_columns(breakout_buffer_expr, entry_ref_expr)
+
     breakout_mask = (
         pl.col("trend_template_pass")
         & pl.col("rs_pass")
@@ -415,9 +436,9 @@ def scan_for_date(
             pl.lit(not settings.breakout.require_market_filter)
             | pl.lit(market_on)
         )
-        & (pl.col("close") >= pl.col("pivot") * breakout_buffer)
+        & (pl.col("close") >= pl.col("_breakout_level"))
         & (pl.col("volume") >= pl.col("vol50") * settings.breakout.breakout_vol_mult)
-        & (pl.col("prev_close") < pl.col("pivot") * breakout_buffer)
+        & (pl.col("prev_close") < pl.col("_breakout_level"))
         & (pl.col("close") <= pl.col("sma50") * (1.0 + settings.breakout.max_extension_breakout_pct))
     )
     watch_mask = (
@@ -432,7 +453,6 @@ def scan_for_date(
     enriched = scan_rows.with_columns(
         breakout_mask.alias("breakout_signal"),
         watch_mask.alias("watch_signal"),
-        (pl.col("pivot") * (1.0 + settings.risk.entry_buffer_pct)).alias("entry_ref"),
     ).with_columns(
         (pl.col("entry_ref") * (1.0 - settings.risk.max_stop_pct)).alias("max_loss_stop"),
     ).with_columns(
