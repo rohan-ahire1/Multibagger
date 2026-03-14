@@ -1,0 +1,7 @@
+symbol,isin,action_type,ex_date,ratio_num,ratio_den,old_face_value,new_face_value,adjustment_factor,description,source
+IRCTC,,split,2022-10-28,,,10,2,0.2,5:1 split FV 10->2,seed
+BAJFINANCE,,split,2022-09-15,,,2,1,0.5,2:1 split FV 2->1,seed
+DMART,,split,2023-08-04,,,10,1,0.1,10:1 split FV 10->1,seed
+RELIANCE,,bonus,2017-09-07,1,1,,,0.5,1:1 bonus,seed
+TCS,,bonus,2018-07-18,1,1,,,0.5,1:1 bonus,seed
+HDFCBANK,,split,2019-09-19,,,2,1,0.5,2:1 split FV 2->1,seed
