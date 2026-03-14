@@ -85,6 +85,47 @@ function resample(data: OHLCVBar[], timeframe: ChartTimeframe): OHLCVBar[] {
   }
 }
 
+/** Map a daily date string to its weekly/monthly bucket key */
+function toBucketKey(dateStr: string, timeframe: ChartTimeframe): string {
+  if (timeframe === 'W') {
+    const d = new Date(dateStr)
+    const day = d.getDay()
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+    const monday = new Date(d)
+    monday.setDate(diff)
+    return monday.toISOString().slice(0, 10)
+  }
+  if (timeframe === 'M') {
+    return dateStr.slice(0, 7) + '-01'
+  }
+  return dateStr
+}
+
+/**
+ * When chart is resampled (W/M), remap marker dates to bucket dates
+ * and deduplicate so only one marker per type per candle is shown.
+ */
+function deduplicateMarkers(
+  markers: SeriesMarker<Time>[],
+  timeframe: ChartTimeframe,
+): SeriesMarker<Time>[] {
+  if (timeframe === 'D') return markers
+
+  const seen = new Set<string>()
+  const result: SeriesMarker<Time>[] = []
+
+  for (const m of markers) {
+    const bucket = toBucketKey(m.time as string, timeframe)
+    const key = `${bucket}:${m.text ?? ''}:${m.color}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push({ ...m, time: bucket as unknown as Time })
+  }
+
+  result.sort((a, b) => (a.time as string).localeCompare(b.time as string))
+  return result
+}
+
 export function PriceChart({
   data,
   entryRef,
@@ -150,7 +191,8 @@ export function PriceChart({
     )
 
     if (markers && markers.length > 0) {
-      createSeriesMarkers(candleSeries, markers)
+      const dedupedMarkers = deduplicateMarkers(markers, timeframe)
+      createSeriesMarkers(candleSeries, dedupedMarkers)
     }
 
     // Volume histogram
