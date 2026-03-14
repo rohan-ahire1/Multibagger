@@ -12,7 +12,7 @@ from sepa_scanner.api.deps import get_duckdb_store, get_parquet_store, get_setti
 from sepa_scanner.backtest.engine import simulate_breakout_backtest
 from sepa_scanner.backtest.metrics import build_equity_curve, summarize_backtest
 from sepa_scanner.backtest.models import BacktestParams, ExitMode
-from sepa_scanner.backtest.queries import get_backtest_ohlcv, get_backtest_signals
+from sepa_scanner.backtest.queries import get_backtest_ohlcv, get_backtest_signals, get_corporate_actions
 from sepa_scanner.settings import AppSettings
 from sepa_scanner.storage.duckdb_store import DuckDbStore
 from sepa_scanner.storage.parquet_store import ParquetOhlcvStore
@@ -69,7 +69,8 @@ def run_backtest(
     extended_end = req.end_date + timedelta(days=int(req.max_hold_days * 1.5))
     ohlcv_df = get_backtest_ohlcv(parquet, symbols, req.start_date, extended_end)
 
-    result = simulate_breakout_backtest(signals_df, ohlcv_df, params)
+    corp_actions = get_corporate_actions(conn, symbols)
+    result = simulate_breakout_backtest(signals_df, ohlcv_df, params, corp_actions=corp_actions)
     summary = summarize_backtest(result.trades, exit_mode=params.exit_mode)
     equity_curve = build_equity_curve(result.trades)
 
