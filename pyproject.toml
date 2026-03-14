@@ -14,6 +14,7 @@ authors = [
 ]
 dependencies = [
   "duckdb>=1.1.3",
+  "numpy>=1.26",
   "polars>=1.18.0",
   "pydantic>=2.10.0",
   "pyyaml>=6.0.2",
