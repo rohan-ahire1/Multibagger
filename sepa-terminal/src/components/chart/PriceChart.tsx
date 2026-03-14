@@ -1,6 +1,7 @@
 import { useRef, useEffect } from 'react'
 import {
   createChart,
+  createSeriesMarkers,
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
@@ -149,7 +150,7 @@ export function PriceChart({
     )
 
     if (markers && markers.length > 0) {
-      candleSeries.setMarkers(markers)
+      createSeriesMarkers(candleSeries, markers)
     }
 
     // Volume histogram
