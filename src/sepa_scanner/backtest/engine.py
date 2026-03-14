@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import os
 from concurrent.futures import ProcessPoolExecutor
-from datetime import date
+from datetime import date, timedelta
 
 import polars as pl
 
 from sepa_scanner.backtest.models import BacktestParams, BacktestResult, BacktestTrade, ExitMode
+from sepa_scanner.data_sources.corporate_actions import has_split_in_window
 
 _MIN_SYMBOLS_FOR_PARALLEL = 8
 _EMA21_ALPHA = 2.0 / (21 + 1)
@@ -94,6 +95,7 @@ def _simulate_signal(
     signal: dict[str, object],
     symbol_prices: list[dict[str, object]],
     params: BacktestParams,
+    corp_actions: pl.DataFrame | None = None,
 ) -> BacktestTrade:
     future_bars = [row for row in symbol_prices if row["date"] > signal["signal_date"]]
     if not future_bars:
@@ -101,6 +103,13 @@ def _simulate_signal(
 
     entry_ref = float(signal["entry_ref"])
     initial_stop = float(signal["stop"])
+
+    # Check: skip if split during pending window
+    if corp_actions is not None and not corp_actions.is_empty():
+        pending_end = signal["signal_date"] + timedelta(days=int(params.pending_days * 1.5) + 5)
+        if has_split_in_window(str(signal["symbol"]), signal["signal_date"], pending_end, corp_actions):
+            return _empty_trade(signal, "skipped_split")
+
     pending_bars = future_bars[: params.pending_days]
     if len(pending_bars) < params.pending_days:
         pending_status = "incomplete_data"
@@ -135,6 +144,12 @@ def _simulate_signal(
         entry_date=entry_date,
         entry_price=entry_price,
     )
+
+    # Check: skip if split during holding period
+    if corp_actions is not None and not corp_actions.is_empty():
+        max_exit = entry_date + timedelta(days=int(params.max_hold_days * 1.5) + 5)
+        if has_split_in_window(str(signal["symbol"]), entry_date, max_exit, corp_actions):
+            return _empty_trade(signal, "skipped_split")
 
     risk = _risk_per_share(entry_price, initial_stop)
     target_price = entry_price + (risk * params.target_r) if (risk and params.target_r is not None) else None
@@ -260,6 +275,7 @@ def _simulate_symbol_group(
     symbol_signals: list[dict[str, object]],
     symbol_prices: list[dict[str, object]],
     params: BacktestParams,
+    corp_actions: pl.DataFrame | None = None,
 ) -> list[BacktestTrade]:
     trades: list[BacktestTrade] = []
     active_until_date: date | None = None
@@ -267,7 +283,7 @@ def _simulate_symbol_group(
         if active_until_date is not None and signal["signal_date"] < active_until_date:
             trades.append(_empty_trade(signal, "skipped_overlap"))
             continue
-        trade = _simulate_signal(signal, symbol_prices, params)
+        trade = _simulate_signal(signal, symbol_prices, params, corp_actions=corp_actions)
         trades.append(trade)
         if trade.entry_date is not None:
             if trade.exit_date is not None:
@@ -281,6 +297,7 @@ def simulate_breakout_backtest(
     signals_df: pl.DataFrame,
     ohlcv_df: pl.DataFrame,
     params: BacktestParams,
+    corp_actions: pl.DataFrame | None = None,
 ) -> BacktestResult:
     signals = (
         signals_df.filter(pl.col("signal_type") == "BREAKOUT")
@@ -312,6 +329,7 @@ def simulate_breakout_backtest(
                     sym_signals,
                     prices_by_symbol.get(sym, []),
                     params,
+                    corp_actions,
                 )
                 for sym, sym_signals in signals_by_symbol.items()
             ]
@@ -320,7 +338,7 @@ def simulate_breakout_backtest(
     else:
         for sym, sym_signals in signals_by_symbol.items():
             all_trades.extend(
-                _simulate_symbol_group(sym_signals, prices_by_symbol.get(sym, []), params)
+                _simulate_symbol_group(sym_signals, prices_by_symbol.get(sym, []), params, corp_actions)
             )
 
     all_trades.sort(key=lambda t: (t.signal_date, t.symbol))
