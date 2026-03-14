@@ -5,8 +5,9 @@ interface ShortcutHint {
   desc: string
 }
 
-const WORKSPACE_SHORTCUTS: Record<1 | 2 | 3, ShortcutHint[]> = {
+const WORKSPACE_SHORTCUTS: Record<1 | 2 | 3 | 4, ShortcutHint[]> = {
   1: [
+    { key: '[ ]', desc: 'date' },
     { key: 'J K', desc: 'navigate' },
     { key: 'S', desc: 'shortlist' },
     { key: 'X', desc: 'reject' },
@@ -25,6 +26,12 @@ const WORKSPACE_SHORTCUTS: Record<1 | 2 | 3, ShortcutHint[]> = {
     { key: 'J K', desc: 'navigate' },
     { key: 'E', desc: 'edit' },
     { key: 'T', desc: 'trail stop' },
+    { key: '⌘K', desc: 'command' },
+  ],
+  4: [
+    { key: 'J K', desc: 'navigate' },
+    { key: 'R', desc: 'run backtest' },
+    { key: 'Esc', desc: 'back' },
     { key: '⌘K', desc: 'command' },
   ],
 }

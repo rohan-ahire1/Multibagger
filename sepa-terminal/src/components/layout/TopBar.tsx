@@ -4,6 +4,7 @@ const WORKSPACES = [
   { id: 1 as const, label: 'Market + Scanner' },
   { id: 2 as const, label: 'Analysis' },
   { id: 3 as const, label: 'Portfolio' },
+  { id: 4 as const, label: 'Backtest', key: '4' },
 ]
 
 function formatDate(date: Date): string {

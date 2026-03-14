@@ -6,4 +6,5 @@ export function useWorkspaceSwitch() {
   useHotkeys('1', () => setWorkspace(1), { preventDefault: true })
   useHotkeys('2', () => setWorkspace(2), { preventDefault: true })
   useHotkeys('3', () => setWorkspace(3), { preventDefault: true })
+  useHotkeys('4', () => setWorkspace(4), { preventDefault: true })
 }

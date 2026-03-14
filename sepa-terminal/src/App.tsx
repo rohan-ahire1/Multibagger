@@ -8,11 +8,18 @@ import { ShortcutOverlay } from '@/components/shared/ShortcutOverlay'
 import { MarketScanner } from '@/components/workspaces/MarketScanner'
 import { Analysis } from '@/components/workspaces/Analysis'
 import { Portfolio } from '@/components/workspaces/Portfolio'
+import { Backtest } from '@/components/workspaces/Backtest'
 import { useUIStore } from '@/stores/ui'
 import { useWorkspaceSwitch } from '@/hooks/useWorkspaceSwitch'
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { refetchOnWindowFocus: false } },
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: 2,
+      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
+    },
+  },
 })
 
 function AppContent() {
@@ -32,6 +39,7 @@ function AppContent() {
       {activeWorkspace === 1 && <MarketScanner />}
       {activeWorkspace === 2 && <Analysis />}
       {activeWorkspace === 3 && <Portfolio />}
+      {activeWorkspace === 4 && <Backtest />}
       <ShortcutBar />
       {commandPaletteOpen && <CommandPalette />}
       {shortcutOverlayOpen && <ShortcutOverlay />}
