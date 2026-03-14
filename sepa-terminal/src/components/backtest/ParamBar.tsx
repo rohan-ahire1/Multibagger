@@ -1,6 +1,14 @@
-import { useBacktestStore } from '@/stores/backtest'
+import { useBacktestStore, DATA_START_DATE } from '@/stores/backtest'
 import { useRunBacktest } from '@/api/useBacktest'
 import type { BacktestParams } from '@/lib/types'
+
+const RANGE_PRESETS = [
+  { label: '1Y', years: 1 },
+  { label: '3Y', years: 3 },
+  { label: '5Y', years: 5 },
+  { label: '10Y', years: 10 },
+  { label: 'All', years: 0 },
+] as const
 
 export function ParamBar() {
   const { params, setParams, setResult, isRunning, setRunning } = useBacktestStore()
@@ -16,13 +24,41 @@ export function ParamBar() {
     }
   }
 
+  function applyPreset(years: number) {
+    const now = new Date()
+    const endDate = now.toISOString().slice(0, 10)
+    if (years === 0) {
+      setParams({ startDate: DATA_START_DATE, endDate })
+    } else {
+      const start = new Date(now)
+      start.setFullYear(start.getFullYear() - years)
+      setParams({ startDate: start.toISOString().slice(0, 10), endDate })
+    }
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-3 px-4 py-2 border-b border-zinc-800 bg-[#0F1117]">
+      {/* Range presets */}
+      <div className="flex items-center gap-0.5">
+        {RANGE_PRESETS.map(({ label, years }) => (
+          <button
+            key={label}
+            onClick={() => applyPreset(years)}
+            className="text-[10px] px-2 py-0.5 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="w-px h-4 bg-zinc-700" />
+
       {/* Date Range */}
       <div className="flex items-center gap-1.5">
         <label className="text-[10px] uppercase tracking-wider text-zinc-500">From</label>
         <input
           type="date"
+          min={DATA_START_DATE}
           value={params.startDate}
           onChange={(e) => setParams({ startDate: e.target.value })}
           className="text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-zinc-200 font-mono focus:outline-none focus:border-zinc-500"
@@ -33,6 +69,7 @@ export function ParamBar() {
         <label className="text-[10px] uppercase tracking-wider text-zinc-500">To</label>
         <input
           type="date"
+          min={DATA_START_DATE}
           value={params.endDate}
           onChange={(e) => setParams({ endDate: e.target.value })}
           className="text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-zinc-200 font-mono focus:outline-none focus:border-zinc-500"

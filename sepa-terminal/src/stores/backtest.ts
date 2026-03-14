@@ -6,12 +6,13 @@ export interface SelectedTrade {
   signalDate: string
 }
 
+/** Data available from 2010-01-01 */
+export const DATA_START_DATE = '2010-01-01'
+
 function defaultParams(): BacktestParams {
   const now = new Date()
-  const yearAgo = new Date(now)
-  yearAgo.setFullYear(yearAgo.getFullYear() - 1)
   return {
-    startDate: yearAgo.toISOString().slice(0, 10),
+    startDate: DATA_START_DATE,
     endDate: now.toISOString().slice(0, 10),
     exitMode: 'v2_trail_21ema',
     targetR: null,
