@@ -10,6 +10,7 @@ from sepa_scanner.data_sources.corporate_actions import (
     build_adjusted_ohlcv,
     compute_adjustment_factors,
 )
+from sepa_scanner.data_sources.nse_meta import apply_india_filters
 from sepa_scanner.indicators.atr import add_atr_columns
 from sepa_scanner.indicators.contraction import add_contraction_columns
 from sepa_scanner.indicators.highs_lows import add_pivot_column, rolling_high_expr, rolling_low_expr
@@ -21,6 +22,7 @@ from sepa_scanner.settings import AppSettings
 from sepa_scanner.strategy.market_filter import classify_market_regime
 from sepa_scanner.strategy.market_regime import MarketRegime
 from sepa_scanner.strategy.ranking import rank_signals
+from sepa_scanner.strategy.sector_rs import compute_sector_rs
 from sepa_scanner.strategy.trend_template import add_trend_template_columns
 from sepa_scanner.strategy.vcp_setup import add_setup_columns
 
@@ -178,11 +180,14 @@ def _prepare_frame(frame: pl.DataFrame, settings: AppSettings, corp_actions: pl.
     return prepared
 
 
-def _eligible_universe(prepared: pl.DataFrame, settings: AppSettings, scan_date: date) -> pl.DataFrame:
+def _eligible_universe(
+    prepared: pl.DataFrame, settings: AppSettings, scan_date: date,
+    *, fno_symbols: set[str] | None = None, asm_gsm_symbols: set[str] | None = None,
+) -> pl.DataFrame:
     universe = settings.universe
     benchmark_symbol = settings.market.benchmark_symbol
 
-    return (
+    result = (
         prepared.filter(pl.col("date") == pl.lit(scan_date))
         .filter(pl.col("history_count") >= settings.data.min_history_days)
         .filter(pl.col("close") >= universe.min_price_inr)
@@ -192,6 +197,19 @@ def _eligible_universe(prepared: pl.DataFrame, settings: AppSettings, scan_date:
         .sort("adv50", descending=True)
         .head(universe.max_symbols)
     )
+
+    # Apply India-specific filters if configured
+    india_cfg = getattr(settings, "india_filter", None)
+    if india_cfg is not None:
+        result = apply_india_filters(
+            result,
+            fno_symbols=fno_symbols,
+            asm_gsm_symbols=asm_gsm_symbols,
+            min_market_cap_cr=india_cfg.min_market_cap_cr,
+            min_adtv_cr=india_cfg.min_adtv_cr,
+        )
+
+    return result
 
 
 def _add_lifecycle_columns(prepared: pl.DataFrame) -> pl.DataFrame:
@@ -369,6 +387,31 @@ def scan_for_date(
     scan_rows = universe_rows.join(rs_ranks, on="symbol", how="left").with_columns(
         pl.col("symbol").is_in(list(rs_pass_symbols)).alias("rs_pass")
     )
+
+    # Compute sector RS if sector_map available
+    sector_map = getattr(settings, "_sector_map", None)  # loaded at startup
+    if sector_map:
+        sector_scores = compute_sector_rs(
+            prepared.select("date", "symbol", "close"),
+            sector_map,
+            benchmark_symbol=settings.market.benchmark_symbol,
+            scan_date=scan_date,
+            lookbacks=settings.relative_strength.lookbacks,
+            weights=settings.relative_strength.weights,
+        )
+        # Filter: require stock's sector to be in top 70% (not bottom 30%)
+        if sector_scores:
+            all_scores = sorted(sector_scores.values())
+            cutoff_idx = max(0, int(len(all_scores) * 0.30))
+            sector_cutoff = all_scores[cutoff_idx] if cutoff_idx < len(all_scores) else float("-inf")
+            weak_sectors = {s for s, score in sector_scores.items() if score < sector_cutoff}
+            if weak_sectors:
+                # Add sector column and filter
+                symbol_to_sector = {sym: sec for sym, sec in sector_map.items()}
+                scan_rows = scan_rows.with_columns(
+                    pl.col("symbol").replace(symbol_to_sector, default="UNKNOWN").alias("sector")
+                ).filter(~pl.col("sector").is_in(list(weak_sectors)))
+
     num_trend_pass = scan_rows.filter(pl.col("trend_template_pass")).height
     num_rs_pass = scan_rows.filter(pl.col("rs_pass").fill_null(False)).height
     num_setup_pass = scan_rows.filter(
