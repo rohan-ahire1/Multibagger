@@ -124,6 +124,16 @@ class PortfolioSettings(BaseModel):
     risk_per_trade_pct: float = 0.01     # 1% risk per trade
 
 
+class IndiaFilterSettings(BaseModel):
+    prefer_fno: bool = True                    # prefer F&O stocks
+    exclude_asm_gsm: bool = True               # exclude ASM/GSM stocks
+    min_market_cap_cr: float = 500.0           # ₹500Cr minimum
+    min_adtv_cr: float = 5.0                   # ₹5Cr minimum ADTV
+    fno_list_path: str | None = None           # path to local F&O list CSV
+    asm_gsm_list_path: str | None = None       # path to local ASM/GSM list CSV
+    sector_map_path: str | None = None         # path to sector classification CSV
+
+
 class TelegramSettings(BaseModel):
     bot_token: str | None = None
     chat_id: str | None = None
@@ -162,6 +172,7 @@ class AppSettings(BaseModel):
     watchlist: WatchlistSettings = Field(default_factory=WatchlistSettings)
     market_filter: MarketFilterSettings = Field(default_factory=MarketFilterSettings)
     portfolio: PortfolioSettings = Field(default_factory=PortfolioSettings)
+    india_filter: IndiaFilterSettings | None = None
     telegram: TelegramSettings
     runtime: RuntimeSettings
     alert_channels: dict[str, Any] = Field(default_factory=dict)
