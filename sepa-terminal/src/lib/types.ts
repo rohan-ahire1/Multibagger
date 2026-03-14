@@ -121,14 +121,6 @@ export interface VCPMetrics {
   breakoutVolMult: number
 }
 
-export interface SignalHistoryEntry {
-  date: string
-  signalType: 'BREAKOUT' | 'WATCH'
-  result: 'win' | 'loss' | 'open'
-  rMultiple: number | null
-  returnPct: number | null
-}
-
 // --- Portfolio ---
 export type PositionStage =
   | 'shortlisted'
@@ -183,4 +175,78 @@ export interface ChartOverlays {
   refLines: boolean
   rsLine: boolean
   vcpBands: boolean
+}
+
+// --- Backtest types ---
+
+export interface BacktestParams {
+  startDate: string
+  endDate: string
+  exitMode: 'v1_fixed' | 'v2_trail_10d' | 'v2_trail_21ema'
+  targetR: number | null
+  pendingDays: number
+  maxHoldDays: number
+  trailActivationR: number
+}
+
+export interface BacktestTrade {
+  symbol: string
+  signalDate: string
+  status: 'not_filled' | 'stopped' | 'target' | 'time_stop' | 'incomplete_data' | 'skipped_overlap'
+  entryRef: number
+  stop: number
+  pivot: number | null
+  entryDate: string | null
+  entryPrice: number | null
+  exitDate: string | null
+  exitPrice: number | null
+  holdingDays: number | null
+  returnPct: number | null
+  rMultiple: number | null
+  maeR: number | null
+  mfeR: number | null
+  givebackPct: number | null
+}
+
+export interface BacktestSummary {
+  totalSignals: number
+  filledTrades: number
+  notFilledSignals: number
+  stoppedTrades: number
+  targetExits: number
+  timeStopExits: number
+  winRate: number
+  averageReturnPct: number | null
+  averageR: number | null
+  medianR: number | null
+  expectancy: number | null
+  payoffRatio: number | null
+  cumulativeR: number
+  maxDrawdown: number
+  longestLosingStreak: number
+  avgMfeR: number | null
+  avgMaeR: number | null
+  avgGivebackPct: number | null
+  exitMode: string
+}
+
+export interface EquityCurvePoint {
+  exitDate: string
+  symbol: string
+  rMultiple: number
+  cumulativeR: number
+  runningPeak: number
+  drawdown: number
+}
+
+export interface BacktestReport {
+  params: BacktestParams
+  summary: BacktestSummary
+  trades: BacktestTrade[]
+  equityCurve: EquityCurvePoint[]
+}
+
+export interface SymbolSignalHistory {
+  signals: Signal[]
+  trades: BacktestTrade[]
 }

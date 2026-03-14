@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import json
 from datetime import date, datetime
+from pathlib import Path
 
 import polars as pl
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from sepa_scanner.api.deps import get_duckdb_store
+from sepa_scanner.api.deps import get_duckdb_store, get_settings
+from sepa_scanner.settings import AppSettings
 from sepa_scanner.storage.duckdb_store import DuckDbStore
 
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
@@ -40,7 +43,8 @@ def get_diagnostics(
 def get_signal_history(
     symbol: str,
     store: DuckDbStore = Depends(get_duckdb_store),
-) -> list[dict]:
+    settings: AppSettings = Depends(get_settings),
+) -> dict:
     conn = store._connect()
     rows = conn.execute(
         """
@@ -52,4 +56,12 @@ def get_signal_history(
         [symbol],
     ).fetchall()
     columns = [desc[0] for desc in conn.description]
-    return [_serialize_dates(dict(zip(columns, row, strict=False))) for row in rows]
+    serialized_signals = [_serialize_dates(dict(zip(columns, row, strict=False))) for row in rows]
+
+    cache_path: Path = settings.runtime.data_dir / "backtest" / "latest.json"
+    filtered_trades: list[dict] = []
+    if cache_path.exists():
+        cached = json.loads(cache_path.read_text(encoding="utf-8"))
+        filtered_trades = [t for t in cached.get("trades", []) if t.get("symbol") == symbol]
+
+    return {"signals": serialized_signals, "trades": filtered_trades}
