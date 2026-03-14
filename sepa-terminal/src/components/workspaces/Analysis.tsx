@@ -177,25 +177,26 @@ export function Analysis() {
               />
             </div>
 
-            {/* Price chart */}
-            <div className="border-b border-border-default">
-              <PriceChart
-                data={ohlcvData}
-                overlays={chartOverlays}
-                timeframe={chartTimeframe}
-                height={340}
-                markers={markers}
-              />
-            </div>
-
-            {/* RS pane */}
-            <div className="border-b border-border-default">
-              <RSPane data={ohlcvData} />
-            </div>
-
-            {/* Volume pane */}
-            <div>
-              <VolumePane data={ohlcvData} />
+            {/* Resizable chart panes */}
+            <div className="flex-1 min-h-0">
+              <Group orientation="vertical">
+                <Panel defaultSize="70" minSize="30">
+                  <PriceChart
+                    data={ohlcvData}
+                    overlays={chartOverlays}
+                    timeframe={chartTimeframe}
+                    markers={markers}
+                  />
+                </Panel>
+                <Separator className="h-px bg-border-default hover:bg-border-hover transition-colors cursor-row-resize" />
+                <Panel defaultSize="15" minSize="8">
+                  <RSPane data={ohlcvData} />
+                </Panel>
+                <Separator className="h-px bg-border-default hover:bg-border-hover transition-colors cursor-row-resize" />
+                <Panel defaultSize="15" minSize="8">
+                  <VolumePane data={ohlcvData} />
+                </Panel>
+              </Group>
             </div>
           </div>
         </Panel>

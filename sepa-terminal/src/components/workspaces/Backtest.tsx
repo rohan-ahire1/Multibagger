@@ -150,7 +150,7 @@ export function Backtest() {
                 onTimeframeChange={setChartTimeframe}
                 onOverlayToggle={toggleChartOverlay}
               />
-              <div className="flex-1">
+              <div className="flex-1 min-h-0">
                 <PriceChart
                   data={ohlcvData}
                   entryRef={activeTrade.entryRef}

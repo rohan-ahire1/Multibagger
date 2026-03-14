@@ -1,4 +1,5 @@
 import type { SeriesMarker, Time } from 'lightweight-charts'
+import { Panel, Group, Separator } from 'react-resizable-panels'
 import type { SetupRow, OHLCVBar } from '@/lib/types'
 import { formatPrice, formatPct } from '@/lib/formatters'
 import { useUIStore } from '@/stores/ui'
@@ -98,9 +99,9 @@ export function SetupDetailCard({
     warnItems.push({ text: `India VIX elevated at ${regime.indiaVix.toFixed(1)}` })
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Detail Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border-default">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border-default shrink-0">
         <div className="flex items-center gap-3">
           <span className="text-lg font-medium text-text-primary">
             {setup.symbol}
@@ -138,49 +139,62 @@ export function SetupDetailCard({
         </div>
       </div>
 
-      {/* Chart */}
-      <div className="border-b border-border-default">
-        <ChartToolbar
-          timeframe={chartTimeframe}
-          overlays={chartOverlays}
-          onTimeframeChange={setChartTimeframe}
-          onOverlayToggle={toggleChartOverlay}
-        />
-        <PriceChart
-          data={ohlcvData}
-          entryRef={setup.entryRef ?? undefined}
-          stop={setup.stop ?? undefined}
-          pivot={setup.pivot}
-          overlays={chartOverlays}
-          timeframe={chartTimeframe}
-          markers={markers}
-        />
-      </div>
+      {/* Resizable chart + info */}
+      <div className="flex-1 min-h-0">
+        <Group orientation="vertical">
+          {/* Chart panel — draggable */}
+          <Panel defaultSize="55" minSize="25">
+            <div className="flex flex-col h-full overflow-hidden">
+              <div className="shrink-0">
+                <ChartToolbar
+                  timeframe={chartTimeframe}
+                  overlays={chartOverlays}
+                  onTimeframeChange={setChartTimeframe}
+                  onOverlayToggle={toggleChartOverlay}
+                />
+              </div>
+              <div className="flex-1 min-h-0">
+                <PriceChart
+                  data={ohlcvData}
+                  entryRef={setup.entryRef ?? undefined}
+                  stop={setup.stop ?? undefined}
+                  pivot={setup.pivot}
+                  overlays={chartOverlays}
+                  timeframe={chartTimeframe}
+                  markers={markers}
+                />
+              </div>
+            </div>
+          </Panel>
 
-      {/* Qualification */}
-      <div className="px-4 py-3 border-b border-border-default">
-        <QualificationPanel passItems={passItems} warnItems={warnItems} />
-      </div>
+          <Separator className="h-px bg-border-default hover:bg-border-hover transition-colors cursor-row-resize" />
 
-      {/* Trade Plan */}
-      <div className="px-4 py-3 border-b border-border-default">
-        <TradePlanCard
-          entryRef={setup.entryRef}
-          stop={setup.stop}
-          close={setup.close}
-        />
-      </div>
-
-      {/* Note Input */}
-      <div className="px-4 py-3">
-        <textarea
-          data-note-input
-          placeholder="Add note... (N to focus)"
-          value={noteValue}
-          onChange={(e) => setNote(setup.symbol, setup.scanDate, e.target.value)}
-          className="bg-bg-surface border border-border-strong rounded-md p-2 text-xs text-text-secondary w-full resize-none focus:border-green/50 focus:outline-none"
-          rows={3}
-        />
+          {/* Info panel — scrollable */}
+          <Panel defaultSize="45" minSize="20">
+            <div className="h-full overflow-y-auto">
+              <div className="px-4 py-3 border-b border-border-default">
+                <QualificationPanel passItems={passItems} warnItems={warnItems} />
+              </div>
+              <div className="px-4 py-3 border-b border-border-default">
+                <TradePlanCard
+                  entryRef={setup.entryRef}
+                  stop={setup.stop}
+                  close={setup.close}
+                />
+              </div>
+              <div className="px-4 py-3">
+                <textarea
+                  data-note-input
+                  placeholder="Add note... (N to focus)"
+                  value={noteValue}
+                  onChange={(e) => setNote(setup.symbol, setup.scanDate, e.target.value)}
+                  className="bg-bg-surface border border-border-strong rounded-md p-2 text-xs text-text-secondary w-full resize-none focus:border-green/50 focus:outline-none"
+                  rows={3}
+                />
+              </div>
+            </div>
+          </Panel>
+        </Group>
       </div>
     </div>
   )

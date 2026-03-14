@@ -19,11 +19,11 @@ export function RSPane({ data }: RSPaneProps) {
   if (rsData.length === 0) return null
 
   return (
-    <div className="relative" style={{ height: 80 }}>
+    <div className="relative h-full">
       <span className="absolute top-1 left-2 text-[10px] text-text-dim z-10">
         RS vs Nifty 50
       </span>
-      <ResponsiveContainer width="100%" height={80}>
+      <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={rsData} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
           <YAxis domain={['dataMin', 'dataMax']} hide />
           <Area

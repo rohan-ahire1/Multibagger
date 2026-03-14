@@ -41,11 +41,11 @@ export function VolumePane({ data }: VolumePaneProps) {
   if (volumeData.length === 0) return null
 
   return (
-    <div className="relative" style={{ height: 60 }}>
+    <div className="relative h-full">
       <span className="absolute top-1 left-2 text-[10px] text-text-dim z-10">
         Volume &middot; 50d avg: {formatVolume(avg50)}
       </span>
-      <ResponsiveContainer width="100%" height={60}>
+      <ResponsiveContainer width="100%" height="100%">
         <BarChart
           data={volumeData}
           margin={{ top: 0, right: 0, bottom: 0, left: 0 }}

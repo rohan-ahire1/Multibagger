@@ -19,7 +19,6 @@ interface PriceChartProps {
   pivot?: number
   overlays: ChartOverlays
   timeframe: ChartTimeframe
-  height?: number
   markers?: SeriesMarker<Time>[]
 }
 
@@ -93,7 +92,6 @@ export function PriceChart({
   pivot,
   overlays,
   timeframe,
-  height = 260,
   markers,
 }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -107,6 +105,8 @@ export function PriceChart({
       chartRef.current.remove()
       chartRef.current = null
     }
+
+    const containerHeight = containerRef.current.clientHeight || 260
 
     const chart = createChart(containerRef.current, {
       layout: {
@@ -122,7 +122,7 @@ export function PriceChart({
       rightPriceScale: { borderColor: '#1E2030' },
       timeScale: { borderColor: '#1E2030', timeVisible: false },
       width: containerRef.current.clientWidth,
-      height,
+      height: containerHeight,
     })
 
     chartRef.current = chart
@@ -241,11 +241,13 @@ export function PriceChart({
 
     chart.timeScale().fitContent()
 
-    // Resize observer
+    // Resize observer — tracks both width and height
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        const { width } = entry.contentRect
-        chart.applyOptions({ width })
+        const { width, height: h } = entry.contentRect
+        if (width > 0 && h > 0) {
+          chart.applyOptions({ width, height: h })
+        }
       }
     })
     resizeObserver.observe(containerRef.current)
@@ -255,13 +257,12 @@ export function PriceChart({
       chart.remove()
       chartRef.current = null
     }
-  }, [data, overlays, timeframe, height, entryRef, stop, pivot, markers])
+  }, [data, overlays, timeframe, entryRef, stop, pivot, markers])
 
   return (
     <div
       ref={containerRef}
-      style={{ height }}
-      className="w-full"
+      className="w-full h-full"
     />
   )
 }
