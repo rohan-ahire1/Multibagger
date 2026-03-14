@@ -2,9 +2,29 @@ import type { Position } from '@/lib/types'
 import { formatPrice, formatPct, formatR, formatINRCompact } from '@/lib/formatters'
 import { pnlColor, COLORS } from '@/lib/colors'
 import { StatusPill } from '@/components/shared/StatusPill'
+import { useScannerStore } from '@/stores/scanner'
+import { useUIStore } from '@/stores/ui'
 
 interface KanbanCardProps {
   position: Position
+}
+
+function ClickableTicker({ symbol, entryDate }: { symbol: string; entryDate: string }) {
+  const setSelectedSetup = useScannerStore((s) => s.setSelectedSetup)
+  const setWorkspace = useUIStore((s) => s.setWorkspace)
+
+  return (
+    <span
+      className="text-[13px] font-medium hover:text-green cursor-pointer transition-colors"
+      onClick={(e) => {
+        e.stopPropagation()
+        setSelectedSetup(`${symbol}:${entryDate}`)
+        setWorkspace(2)
+      }}
+    >
+      {symbol}
+    </span>
+  )
 }
 
 function InfoRow({ label, value, color }: { label: string; value: string; color?: string }) {
@@ -44,7 +64,7 @@ function ShortlistedCard({ position }: KanbanCardProps) {
   return (
     <>
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[13px] font-medium">{position.symbol}</span>
+        <ClickableTicker symbol={position.symbol} entryDate={position.entryDate} />
         <StatusPill label="BREAK" variant="green" />
       </div>
       <div className="space-y-1">
@@ -75,7 +95,7 @@ function WatchingCard({ position }: KanbanCardProps) {
   return (
     <>
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[13px] font-medium">{position.symbol}</span>
+        <ClickableTicker symbol={position.symbol} entryDate={position.entryDate} />
         <StatusPill label="WATCH" variant="amber" />
       </div>
       <div className="space-y-1">
@@ -95,7 +115,7 @@ function OpenCard({ position }: KanbanCardProps) {
   return (
     <>
       <div className="flex items-center justify-between mb-1">
-        <span className="text-[13px] font-medium">{position.symbol}</span>
+        <ClickableTicker symbol={position.symbol} entryDate={position.entryDate} />
         <StatusPill
           label={formatR(position.rMultiple)}
           variant={position.rMultiple >= 0 ? 'green' : 'red'}
@@ -129,7 +149,7 @@ function ManagingCard({ position }: KanbanCardProps) {
   return (
     <>
       <div className="flex items-center justify-between mb-1">
-        <span className="text-[13px] font-medium">{position.symbol}</span>
+        <ClickableTicker symbol={position.symbol} entryDate={position.entryDate} />
         <StatusPill
           label={formatR(position.rMultiple)}
           variant={position.rMultiple >= 0 ? 'green' : 'red'}
@@ -165,7 +185,7 @@ function ClosedCard({ position }: KanbanCardProps) {
   return (
     <>
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[13px] font-medium">{position.symbol}</span>
+        <ClickableTicker symbol={position.symbol} entryDate={position.entryDate} />
         <StatusPill
           label={formatR(position.rMultiple)}
           variant={position.rMultiple >= 0 ? 'green' : 'red'}

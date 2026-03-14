@@ -115,8 +115,9 @@ export function MarketScanner() {
   }, [scanDates, scanDate, setScanDate])
 
   // Fetch signals and watchlist for the selected date
-  const { data: signals = [] } = useSignals(scanDate)
-  const { data: watchlist = [] } = useWatchlist(scanDate)
+  const { data: signals = [], isLoading: signalsLoading } = useSignals(scanDate)
+  const { data: watchlist = [], isLoading: watchlistLoading } = useWatchlist(scanDate)
+  const dataLoading = signalsLoading || watchlistLoading
 
   // Build setup rows
   const allRows = useMemo(
@@ -200,6 +201,7 @@ export function MarketScanner() {
                   rows={filteredRows}
                   selectedId={selectedSetupId}
                   onSelect={setSelectedSetup}
+                  isLoading={dataLoading}
                 />
               </div>
             </Panel>

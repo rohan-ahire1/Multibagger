@@ -12,6 +12,7 @@ interface ScannerTableProps {
   rows: SetupRow[]
   selectedId: string | null
   onSelect: (id: string) => void
+  isLoading?: boolean
 }
 
 const columnHelper = createColumnHelper<SetupRow>()
@@ -91,13 +92,32 @@ const columns = [
   }),
 ]
 
-export function ScannerTable({ rows, selectedId, onSelect }: ScannerTableProps) {
+export function ScannerTable({ rows, selectedId, onSelect, isLoading }: ScannerTableProps) {
   const table = useReactTable({
     data: rows,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getRowId: (row) => row.id,
   })
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-text-muted text-sm">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 border-2 border-text-dim border-t-green rounded-full animate-spin" />
+          Loading signals...
+        </div>
+      </div>
+    )
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-text-muted text-sm">
+        No signals for this date
+      </div>
+    )
+  }
 
   return (
     <div className="overflow-y-auto flex-1">

@@ -104,7 +104,7 @@ export function Analysis() {
   if (!symbol) {
     return (
       <div className="flex-1 flex items-center justify-center text-text-muted text-sm">
-        Select a setup from the scanner to analyze
+        No setup selected. Press <kbd className="mx-1 px-1.5 py-0.5 bg-bg-elevated border border-border-strong rounded text-[11px] font-mono">1</kbd> to return to scanner.
       </div>
     )
   }
