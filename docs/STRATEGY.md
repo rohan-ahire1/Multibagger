@@ -1297,8 +1297,9 @@ These are hard constraints. Any AI session or contributor that changes these MUS
 13. **Wilder ATR uses the specific recurrence** `((prev * (period-1)) + TR) / period`
 14. **Backtest assumes worse outcome** when both stop and target are hit on the same candle
 15. **Backtest overlap rule**: later same-symbol signals are skipped while a prior trade is open
-16. **V2 trailing stops use D-1 data** — stop used for day t decisions was computed from data ≤ day t-1
+16. **V2 trailing stops use D-1 data for initial check** — stop used for day t open/low checks was computed from data ≤ day t-1
 17. **V2 trailing stops only ratchet up** — `active_stop = max(active_stop, trail_value)`
+18a. **Same-bar trigger**: after the trail ratchets up on bar t (using bar t data), if close ≤ new stop, exit immediately at the stop price on bar t — do not wait for bar t+1
 18. **MAE/MFE use initial risk denominator** — R-unit excursion metrics always reference the original entry-to-stop risk
 
 ### Architectural Invariants
@@ -1350,6 +1351,7 @@ Track every strategy change here. Include date, what changed, why, and who/what 
 | 2026-03-14 | Added 6 color-coded signal markers on all charts | Visual lifecycle: Watch, Breakout, Entry, Win Exit, Loss Exit, Not Filled | AI-assisted |
 | 2026-03-14 | W4 Backtest Dashboard with full data range (2010-present) | Leverage complete OHLCV history; 1Y/3Y/5Y/10Y/All presets | AI-assisted |
 | 2026-03-14 | Updated Section 16 (UI Behavior) to reflect new terminal | Strategy doc was still describing old Streamlit UI | AI-assisted |
+| 2026-03-14 | Trailing stop same-bar trigger exit | If trail ratchets up and close is already below it, exit immediately instead of waiting for next bar | AI-assisted |
 
 ### 2026-03-14 Parameter Correction Summary
 
