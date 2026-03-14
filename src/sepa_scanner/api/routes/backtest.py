@@ -23,11 +23,13 @@ router = APIRouter(prefix="/backtest", tags=["backtest"])
 class BacktestRunRequest(BaseModel):
     start_date: date
     end_date: date
-    exit_mode: str = "v2_trail_21ema"
+    exit_mode: str = "v3_trail_pct"
     target_r: float | None = None
     pending_days: int = 5
     max_hold_days: int = 90
-    trail_activation_r: float = 1.0
+    trail_activation_r: float = 2.0
+    trail_pct: float = 0.20
+    dead_money_days: int | None = 15
 
 
 def _cache_path(settings: AppSettings) -> Path:
@@ -58,6 +60,8 @@ def run_backtest(
         target_r=req.target_r,
         exit_mode=ExitMode(req.exit_mode),
         trail_activation_r=req.trail_activation_r,
+        trail_pct=req.trail_pct,
+        dead_money_days=req.dead_money_days,
     )
     store.initialize()
     conn = store._connect()
@@ -90,6 +94,8 @@ def run_backtest(
             "pending_days": req.pending_days,
             "max_hold_days": req.max_hold_days,
             "trail_activation_r": req.trail_activation_r,
+            "trail_pct": req.trail_pct,
+            "dead_money_days": req.dead_money_days,
         },
         "summary": summary_dict,
         "trades": trades_json,

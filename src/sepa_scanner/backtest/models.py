@@ -11,12 +11,14 @@ class ExitMode(str, Enum):
     V1_FIXED = "v1_fixed"
     V2_TRAIL_10D = "v2_trail_10d"
     V2_TRAIL_21EMA = "v2_trail_21ema"
+    V3_TRAIL_PCT = "v3_trail_pct"
 
 
 EXIT_MODE_LABELS: dict[ExitMode, str] = {
     ExitMode.V1_FIXED: "V1 Fixed Stop",
     ExitMode.V2_TRAIL_10D: "V2 Trail 10-Day Low",
     ExitMode.V2_TRAIL_21EMA: "V2 Trail 21-EMA",
+    ExitMode.V3_TRAIL_PCT: "V3 Trail Percentage",
 }
 
 
@@ -25,8 +27,10 @@ class BacktestParams:
     pending_days: int = 5
     max_hold_days: int = 90
     target_r: float | None = None
-    exit_mode: ExitMode = ExitMode.V2_TRAIL_21EMA
-    trail_activation_r: float = 1.0
+    exit_mode: ExitMode = ExitMode.V3_TRAIL_PCT
+    trail_activation_r: float = 2.0
+    trail_pct: float = 0.20
+    dead_money_days: int | None = 15
 
     def __post_init__(self) -> None:
         if self.pending_days <= 0:
@@ -37,6 +41,10 @@ class BacktestParams:
             raise ValueError("target_r must be positive when provided")
         if self.trail_activation_r <= 0:
             raise ValueError("trail_activation_r must be positive")
+        if self.trail_pct <= 0 or self.trail_pct >= 1.0:
+            raise ValueError("trail_pct must be between 0 and 1 (exclusive)")
+        if self.dead_money_days is not None and self.dead_money_days <= 0:
+            raise ValueError("dead_money_days must be positive when provided")
 
 
 @dataclass(slots=True)
@@ -87,7 +95,8 @@ class BacktestSummary:
     avg_mae_r: float | None = None
     avg_giveback_pct: float | None = None
     skipped_split_count: int = 0
-    exit_mode: str = ExitMode.V2_TRAIL_21EMA.value
+    dead_money_exits: int = 0
+    exit_mode: str = ExitMode.V3_TRAIL_PCT.value
 
 
 @dataclass(slots=True)

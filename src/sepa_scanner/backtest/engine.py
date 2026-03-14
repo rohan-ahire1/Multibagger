@@ -104,10 +104,12 @@ def _simulate_signal(
     entry_ref = float(signal["entry_ref"])
     initial_stop = float(signal["stop"])
 
-    # Check: skip if split during pending window
+    # Skip if any split/bonus in the indicator lookback window OR the trade window.
+    # SMA200 needs ~300 calendar days of history; add max_hold for the trade itself.
     if corp_actions is not None and not corp_actions.is_empty():
-        pending_end = signal["signal_date"] + timedelta(days=int(params.pending_days * 1.5) + 5)
-        if has_split_in_window(str(signal["symbol"]), signal["signal_date"], pending_end, corp_actions):
+        lookback_start = signal["signal_date"] - timedelta(days=400)
+        window_end = signal["signal_date"] + timedelta(days=int(params.max_hold_days * 1.5) + 5)
+        if has_split_in_window(str(signal["symbol"]), lookback_start, window_end, corp_actions):
             return _empty_trade(signal, "skipped_split")
 
     pending_bars = future_bars[: params.pending_days]
@@ -145,12 +147,6 @@ def _simulate_signal(
         entry_price=entry_price,
     )
 
-    # Check: skip if split during holding period
-    if corp_actions is not None and not corp_actions.is_empty():
-        max_exit = entry_date + timedelta(days=int(params.max_hold_days * 1.5) + 5)
-        if has_split_in_window(str(signal["symbol"]), entry_date, max_exit, corp_actions):
-            return _empty_trade(signal, "skipped_split")
-
     risk = _risk_per_share(entry_price, initial_stop)
     target_price = entry_price + (risk * params.target_r) if (risk and params.target_r is not None) else None
     exit_bars = future_bars[entry_index : entry_index + params.max_hold_days]
@@ -158,6 +154,8 @@ def _simulate_signal(
 
     active_stop = initial_stop
     trail_activated = False
+    breakeven_activated = False
+    highest_close = entry_price
     low_buffer: list[float] = []
     ema21: float | None = None
     mae_price = entry_price
@@ -215,10 +213,29 @@ def _simulate_signal(
                 mae_price=mae_price, mfe_price=mfe_price,
             )
 
+        # --- Dead money check: exit if not at +1R within dead_money_days ---
+        if (
+            params.dead_money_days is not None
+            and not breakeven_activated
+            and holding_days >= params.dead_money_days
+        ):
+            return _close_trade(
+                trade, status="dead_money", exit_date=bar["date"],
+                exit_price=close_price, holding_days=holding_days,
+                mae_price=mae_price, mfe_price=mfe_price,
+            )
+
         # --- Trailing stop update + same-bar trigger check ---
         if params.exit_mode != ExitMode.V1_FIXED and risk:
             prev_stop = active_stop
 
+            # Stage 1: breakeven at +1R (hardcoded threshold)
+            if not breakeven_activated:
+                if high_price >= entry_price + risk * 1.0:
+                    breakeven_activated = True
+                    active_stop = max(active_stop, entry_price)
+
+            # Stage 2: trail activation at +trail_activation_r
             if not trail_activated:
                 if high_price >= entry_price + risk * params.trail_activation_r:
                     trail_activated = True
@@ -236,6 +253,10 @@ def _simulate_signal(
                     else:
                         ema21 = _EMA21_ALPHA * close_price + (1 - _EMA21_ALPHA) * ema21
                     active_stop = max(active_stop, ema21)
+                elif params.exit_mode == ExitMode.V3_TRAIL_PCT:
+                    highest_close = max(highest_close, close_price)
+                    pct_trail_stop = highest_close * (1.0 - params.trail_pct)
+                    active_stop = max(active_stop, pct_trail_stop)
             else:
                 if params.exit_mode == ExitMode.V2_TRAIL_10D:
                     low_buffer.append(low_price)
@@ -246,6 +267,8 @@ def _simulate_signal(
                         ema21 = close_price
                     else:
                         ema21 = _EMA21_ALPHA * close_price + (1 - _EMA21_ALPHA) * ema21
+                if params.exit_mode == ExitMode.V3_TRAIL_PCT:
+                    highest_close = max(highest_close, close_price)
 
             # Trigger check: if the trail ratcheted up above close on this
             # bar, exit immediately instead of waiting for next bar's open.

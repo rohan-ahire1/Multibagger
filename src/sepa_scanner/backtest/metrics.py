@@ -110,5 +110,6 @@ def summarize_backtest(
         avg_mae_r=(sum(mae_values) / len(mae_values)) if mae_values else None,
         avg_giveback_pct=(sum(giveback_values) / len(giveback_values)) if giveback_values else None,
         skipped_split_count=skipped_split_count,
+        dead_money_exits=sum(1 for trade in trades if trade.status == "dead_money"),
         exit_mode=exit_mode.value,
     )
