@@ -1,0 +1,71 @@
+market:
+  timezone: "Asia/Kolkata"
+  benchmark_symbol: "NIFTYBEES"
+  scan_time_ist: "16:10"
+
+data:
+  redownload_days: 5
+  min_history_days: 320
+  bhavcopy_api_key: "favCapital"
+  http_timeout_sec: 30
+  max_retries: 5
+  apply_corporate_actions_adjustment: false
+
+universe:
+  allowed_series: ["EQ"]
+  min_price_inr: 50
+  min_adv50_inr: 50000000
+  min_avg_volume_shares: 200000
+  max_symbols: 1500
+
+trend_template:
+  sma_fast: 50
+  sma_mid: 150
+  sma_slow: 200
+  lookback_52w: 252
+  sma200_slope_lookback: 22
+  min_above_52w_low_pct: 0.30
+  max_below_52w_high_pct: 0.25
+
+relative_strength:
+  lookbacks: [63, 126, 189, 252]
+  weights: [0.4, 0.2, 0.2, 0.2]
+  rs_rank_min: 80
+  skip_recent_days: 21
+
+setup_vcp:
+  base_lookback: 65
+  max_range10_pct: 0.10
+  max_vol_dryup_ratio: 0.60
+  atr_period: 14
+  atr_contraction_factor: 0.75
+  max_extension_from_50sma_pct: 0.10
+  base_max_depth_pct: 0.35
+  pre_alert_proximity_pct: 0.03
+  contraction_smooth_window: 5
+  contraction_min_peak_pct: 0.02
+  contraction_min_count: 2
+
+breakout:
+  require_market_filter: true
+  breakout_buffer_pct: 0.003
+  breakout_vol_mult: 1.5
+  max_extension_breakout_pct: 0.15
+
+risk:
+  entry_buffer_pct: 0.003
+  max_stop_pct: 0.08
+  target_r: null
+
+alerts:
+  max_alerts_per_day: 10
+  send_watch_alerts: true
+  send_breakout_alerts: true
+  channels: ["telegram", "console"]
+
+market_filter:
+  benchmark_ema_period: 21
+  require_breadth_pct: 0.50
+
+watchlist:
+  max_candidates: 300
