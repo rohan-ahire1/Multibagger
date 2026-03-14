@@ -1,3 +1,4 @@
+import type { SeriesMarker, Time } from 'lightweight-charts'
 import type { SetupRow, OHLCVBar } from '@/lib/types'
 import { formatPrice, formatPct } from '@/lib/formatters'
 import { useUIStore } from '@/stores/ui'
@@ -12,6 +13,7 @@ interface SetupDetailCardProps {
   setup: SetupRow | null
   ohlcvData: OHLCVBar[]
   isLoading: boolean
+  markers?: SeriesMarker<Time>[]
 }
 
 function ShimmerPlaceholder() {
@@ -30,6 +32,7 @@ export function SetupDetailCard({
   setup,
   ohlcvData,
   isLoading,
+  markers,
 }: SetupDetailCardProps) {
   const chartTimeframe = useUIStore((s) => s.chartTimeframe)
   const chartOverlays = useUIStore((s) => s.chartOverlays)
@@ -150,6 +153,7 @@ export function SetupDetailCard({
           pivot={setup.pivot}
           overlays={chartOverlays}
           timeframe={chartTimeframe}
+          markers={markers}
         />
       </div>
 

@@ -3,7 +3,6 @@ import type {
   SectorPerformance,
   TrendTemplateResult,
   VCPMetrics,
-  SignalHistoryEntry,
   Position,
   PortfolioStats,
 } from './types'
@@ -299,60 +298,6 @@ export function generateMockSectorContext(
   }
 
   return { sector, ...data }
-}
-
-export function generateMockSignalHistory(): SignalHistoryEntry[] {
-  return [
-    {
-      date: '2025-11-12',
-      signalType: 'BREAKOUT',
-      result: 'win',
-      rMultiple: 3.2,
-      returnPct: 18.4,
-    },
-    {
-      date: '2025-09-28',
-      signalType: 'WATCH',
-      result: 'loss',
-      rMultiple: -1.0,
-      returnPct: -5.8,
-    },
-    {
-      date: '2025-08-05',
-      signalType: 'BREAKOUT',
-      result: 'win',
-      rMultiple: 1.8,
-      returnPct: 10.2,
-    },
-    {
-      date: '2025-06-18',
-      signalType: 'BREAKOUT',
-      result: 'loss',
-      rMultiple: -0.8,
-      returnPct: -4.6,
-    },
-    {
-      date: '2025-04-22',
-      signalType: 'WATCH',
-      result: 'win',
-      rMultiple: 2.4,
-      returnPct: 14.1,
-    },
-    {
-      date: '2025-02-10',
-      signalType: 'BREAKOUT',
-      result: 'open',
-      rMultiple: null,
-      returnPct: null,
-    },
-    {
-      date: '2024-12-03',
-      signalType: 'BREAKOUT',
-      result: 'win',
-      rMultiple: 4.1,
-      returnPct: 24.8,
-    },
-  ]
 }
 
 export function generateMockPortfolio(): Position[] {

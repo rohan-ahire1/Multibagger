@@ -4,11 +4,12 @@ import { Panel, Group, Separator } from 'react-resizable-panels'
 import { useUIStore } from '@/stores/ui'
 import { useScannerStore } from '@/stores/scanner'
 import { useOHLCV } from '@/api/useOHLCV'
+import { useSymbolSignalHistory } from '@/api/useSignalHistory'
 import {
   generateMockTrendTemplate,
   generateMockVCPMetrics,
-  generateMockSignalHistory,
 } from '@/lib/mock-data'
+import { buildChartMarkers } from '@/lib/chart-markers'
 import { formatPrice, formatPct } from '@/lib/formatters'
 import { ChartToolbar } from '@/components/chart/ChartToolbar'
 import { PriceChart } from '@/components/chart/PriceChart'
@@ -19,7 +20,7 @@ import { TrendTemplate } from '@/components/analysis/TrendTemplate'
 import { VCPMetrics } from '@/components/analysis/VCPMetrics'
 import { SectorContext } from '@/components/analysis/SectorContext'
 import { Fundamentals } from '@/components/analysis/Fundamentals'
-import { SignalHistory } from '@/components/analysis/SignalHistory'
+import { BacktestHistory } from '@/components/analysis/BacktestHistory'
 import { TradeThesis } from '@/components/analysis/TradeThesis'
 import { StatusPill } from '@/components/shared/StatusPill'
 
@@ -44,7 +45,16 @@ export function Analysis() {
   // Mock data
   const trendTemplate = useMemo(() => generateMockTrendTemplate(), [])
   const vcpMetrics = useMemo(() => generateMockVCPMetrics(), [])
-  const signalHistory = useMemo(() => generateMockSignalHistory(), [])
+
+  // Signal history + chart markers
+  const { data: signalHistory } = useSymbolSignalHistory(symbol ?? undefined)
+  const markers = useMemo(
+    () =>
+      signalHistory
+        ? buildChartMarkers(signalHistory.signals, signalHistory.trades)
+        : [],
+    [signalHistory]
+  )
 
   // Derive price info from OHLCV
   const lastBar = ohlcvData.length > 0 ? ohlcvData[ohlcvData.length - 1] : null
@@ -120,10 +130,10 @@ export function Analysis() {
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="flex-1 min-h-0 overflow-hidden">
       <Group orientation="horizontal">
         {/* Chart column — 70% */}
-        <Panel defaultSize={70} minSize={50}>
+        <Panel defaultSize="70" minSize="50">
           <div className="flex flex-col h-full overflow-hidden">
             {/* Symbol bar */}
             <div className="flex items-center justify-between px-4 py-2 border-b border-border-default">
@@ -174,6 +184,7 @@ export function Analysis() {
                 overlays={chartOverlays}
                 timeframe={chartTimeframe}
                 height={340}
+                markers={markers}
               />
             </div>
 
@@ -192,7 +203,7 @@ export function Analysis() {
         <Separator className="w-px bg-border-default hover:bg-border-hover transition-colors" />
 
         {/* Info column — 30% */}
-        <Panel defaultSize={30} minSize={20}>
+        <Panel defaultSize="30" minSize="20">
           <div className="flex flex-col h-full">
             {/* Scrollable info sections */}
             <div className="flex-1 overflow-y-auto">
@@ -227,7 +238,7 @@ export function Analysis() {
 
                 <div className="h-px bg-border-default" />
 
-                <SignalHistory entries={signalHistory} />
+                <BacktestHistory symbol={symbol} />
 
                 <div className="h-px bg-border-default" />
 

@@ -9,8 +9,11 @@ import { useScannerStore } from '@/stores/scanner'
 import { useReviewsStore } from '@/stores/reviews'
 import { useSignals, useWatchlist, useScanDates } from '@/api/useScannerData'
 import { useOHLCV } from '@/api/useOHLCV'
+import { useSymbolSignalHistory } from '@/api/useSignalHistory'
+import { buildChartMarkers } from '@/lib/chart-markers'
 import { SectorHeatmap } from '@/components/market/SectorHeatmap'
 import { BreadthPanel } from '@/components/market/BreadthPanel'
+import { ScanDatePicker } from '@/components/scanner/ScanDatePicker'
 import { QueueTabs } from '@/components/scanner/QueueTabs'
 import { ScannerTable } from '@/components/scanner/ScannerTable'
 import { SetupDetailCard } from '@/components/scanner/SetupDetailCard'
@@ -106,18 +109,20 @@ export function MarketScanner() {
   const setSelectedSetup = useScannerStore((s) => s.setSelectedSetup)
   const reviews = useReviewsStore((s) => s.reviews)
 
-  // Fetch scan dates and auto-set to most recent
-  const { data: scanDates } = useScanDates()
+  const { data: scanDates = [] } = useScanDates()
+
+  // Auto-set to most recent date on first load only
   useEffect(() => {
-    if (scanDates?.length && scanDates[0] !== scanDate) {
+    if (scanDates.length && !scanDates.includes(scanDate)) {
       setScanDate(scanDates[0])
     }
   }, [scanDates, scanDate, setScanDate])
 
   // Fetch signals and watchlist for the selected date
-  const { data: signals = [], isLoading: signalsLoading } = useSignals(scanDate)
-  const { data: watchlist = [], isLoading: watchlistLoading } = useWatchlist(scanDate)
+  const { data: signals = [], isLoading: signalsLoading, error: signalsError, refetch: refetchSignals } = useSignals(scanDate)
+  const { data: watchlist = [], isLoading: watchlistLoading, error: watchlistError, refetch: refetchWatchlist } = useWatchlist(scanDate)
   const dataLoading = signalsLoading || watchlistLoading
+  const dataError = signalsError ?? watchlistError
 
   // Build setup rows
   const allRows = useMemo(
@@ -169,20 +174,30 @@ export function MarketScanner() {
   const { data: ohlcvData = [], isLoading: ohlcvLoading } =
     useOHLCV(selectedSymbol)
 
+  // Signal history + chart markers for selected symbol
+  const { data: signalHistory } = useSymbolSignalHistory(selectedSymbol ?? undefined)
+  const markers = useMemo(
+    () =>
+      signalHistory
+        ? buildChartMarkers(signalHistory.signals, signalHistory.trades)
+        : [],
+    [signalHistory]
+  )
+
   // Wire keyboard triage
   useKeyboardTriage(setupIds)
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="flex-1 min-h-0 overflow-hidden">
       <Group orientation="vertical">
         {/* Top row: Market panels */}
-        <Panel defaultSize={22} minSize={12} maxSize={35}>
+        <Panel defaultSize="22" minSize="12" maxSize="35">
           <Group orientation="horizontal">
-            <Panel defaultSize={55} minSize={30}>
+            <Panel defaultSize="55" minSize="30">
               <SectorHeatmap />
             </Panel>
             <Separator className="w-px bg-border-default hover:bg-border-hover transition-colors" />
-            <Panel defaultSize={45} minSize={25}>
+            <Panel defaultSize="45" minSize="25">
               <BreadthPanel />
             </Panel>
           </Group>
@@ -191,17 +206,26 @@ export function MarketScanner() {
         <Separator className="h-px bg-border-default hover:bg-border-hover transition-colors" />
 
         {/* Bottom row: Scanner + Detail */}
-        <Panel defaultSize={78} minSize={50}>
+        <Panel defaultSize="78" minSize="50">
           <Group orientation="horizontal">
             {/* Left: Queue tabs + Table */}
-            <Panel defaultSize={45} minSize={25}>
+            <Panel defaultSize="45" minSize="25">
               <div className="flex flex-col h-full">
+                <div className="flex items-center justify-between px-2 py-1.5 border-b border-border-default">
+                  <ScanDatePicker
+                    scanDate={scanDate}
+                    scanDates={scanDates}
+                    onDateChange={setScanDate}
+                  />
+                </div>
                 <QueueTabs counts={counts} />
                 <ScannerTable
                   rows={filteredRows}
                   selectedId={selectedSetupId}
                   onSelect={setSelectedSetup}
                   isLoading={dataLoading}
+                  error={dataError instanceof Error ? dataError : null}
+                  onRetry={() => { refetchSignals(); refetchWatchlist() }}
                 />
               </div>
             </Panel>
@@ -209,11 +233,12 @@ export function MarketScanner() {
             <Separator className="w-px bg-border-default hover:bg-border-hover transition-colors" />
 
             {/* Right: Detail card */}
-            <Panel defaultSize={55} minSize={30}>
+            <Panel defaultSize="55" minSize="30">
               <SetupDetailCard
                 setup={selectedSetup}
                 ohlcvData={ohlcvData}
                 isLoading={ohlcvLoading}
+                markers={markers}
               />
             </Panel>
           </Group>
