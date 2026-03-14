@@ -68,3 +68,23 @@ def get_backtest_ohlcv(
         .filter(pl.col("symbol").is_in(symbols))
         .sort(["symbol", "date"])
     )
+
+
+def get_corporate_actions(
+    conn: duckdb.DuckDBPyConnection,
+    symbols: list[str],
+) -> pl.DataFrame:
+    """Fetch corporate actions for the given symbols."""
+    if not symbols:
+        return pl.DataFrame(schema={
+            "symbol": pl.String, "isin": pl.String,
+            "action_type": pl.String, "ex_date": pl.Date,
+            "ratio_num": pl.Int32, "ratio_den": pl.Int32,
+            "old_face_value": pl.Float64, "new_face_value": pl.Float64,
+            "adjustment_factor": pl.Float64,
+            "description": pl.String, "source": pl.String,
+        })
+    return conn.execute(
+        "SELECT * FROM corporate_actions WHERE symbol IN (SELECT UNNEST(?)) ORDER BY symbol, ex_date",
+        [symbols],
+    ).pl()
