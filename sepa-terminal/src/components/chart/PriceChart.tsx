@@ -239,7 +239,24 @@ export function PriceChart({
       }
     }
 
-    chart.timeScale().fitContent()
+    // If signals exist, show ±2 years from the latest signal; otherwise show all
+    if (markers && markers.length > 0) {
+      const sorted = [...markers].sort((a, b) =>
+        (a.time as string).localeCompare(b.time as string)
+      )
+      const latest = sorted[sorted.length - 1].time as string
+      const anchor = new Date(latest + 'T00:00:00')
+      const from = new Date(anchor)
+      from.setFullYear(from.getFullYear() - 2)
+      const to = new Date(anchor)
+      to.setFullYear(to.getFullYear() + 2)
+      chart.timeScale().setVisibleRange({
+        from: from.toISOString().slice(0, 10) as unknown as Time,
+        to: to.toISOString().slice(0, 10) as unknown as Time,
+      })
+    } else {
+      chart.timeScale().fitContent()
+    }
 
     // Resize observer — tracks both width and height
     const resizeObserver = new ResizeObserver((entries) => {
