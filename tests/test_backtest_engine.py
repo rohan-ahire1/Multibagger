@@ -742,3 +742,85 @@ def test_backtest_breakeven_applies_to_v2_trail_modes() -> None:
     # Breakeven at 101.0 should trigger since low=100.5 < 101.0
     assert trade.status == "stopped"
     assert trade.exit_price == 101.0
+
+
+def test_backtest_dead_money_exit_when_no_progress() -> None:
+    """Exit at dead_money_days if position hasn't reached +1R."""
+    signals = _signal(entry_ref=101.0, stop=95.0)  # risk = 6, +1R = 107.0
+    # 4 bars of flat trading — never reaches +1R
+    prices = _ohlcv(
+        [
+            {"date": date(2026, 3, 3), "symbol": "ABC",
+             "open": 100.0, "high": 101.5, "low": 99.8, "close": 101.0},
+            {"date": date(2026, 3, 4), "symbol": "ABC",
+             "open": 101.0, "high": 102.0, "low": 100.5, "close": 101.5},
+            {"date": date(2026, 3, 5), "symbol": "ABC",
+             "open": 101.5, "high": 102.5, "low": 100.0, "close": 101.0},
+            {"date": date(2026, 3, 6), "symbol": "ABC",
+             "open": 101.0, "high": 102.0, "low": 99.5, "close": 100.8},
+        ]
+    )
+
+    result = simulate_breakout_backtest(
+        signals, prices,
+        BacktestParams(max_hold_days=10, dead_money_days=3),
+    )
+
+    trade = result.trades[0]
+    assert trade.status == "dead_money"
+    assert trade.holding_days == 3
+    assert trade.exit_date == date(2026, 3, 5)
+    assert trade.exit_price == 101.0
+
+
+def test_backtest_dead_money_disabled_when_none() -> None:
+    """dead_money_days=None disables the feature."""
+    signals = _signal(entry_ref=101.0, stop=95.0)
+    prices = _ohlcv(
+        [
+            {"date": date(2026, 3, 3), "symbol": "ABC",
+             "open": 100.0, "high": 101.5, "low": 99.8, "close": 101.0},
+            {"date": date(2026, 3, 4), "symbol": "ABC",
+             "open": 101.0, "high": 102.0, "low": 100.5, "close": 101.5},
+            {"date": date(2026, 3, 5), "symbol": "ABC",
+             "open": 101.5, "high": 102.5, "low": 100.0, "close": 101.0},
+        ]
+    )
+
+    result = simulate_breakout_backtest(
+        signals, prices,
+        BacktestParams(max_hold_days=3, dead_money_days=None),
+    )
+
+    trade = result.trades[0]
+    # Should reach time_stop, not dead_money
+    assert trade.status == "time_stop"
+    assert trade.holding_days == 3
+
+
+def test_backtest_dead_money_skipped_when_breakeven_reached() -> None:
+    """If +1R is reached (breakeven activated), dead money does not trigger."""
+    signals = _signal(entry_ref=101.0, stop=95.0)  # risk = 6, +1R = 107.0
+    prices = _ohlcv(
+        [
+            {"date": date(2026, 3, 3), "symbol": "ABC",
+             "open": 100.0, "high": 101.5, "low": 99.8, "close": 101.0},
+            # Day 2: reaches +1R
+            {"date": date(2026, 3, 4), "symbol": "ABC",
+             "open": 101.0, "high": 108.0, "low": 100.5, "close": 107.5},
+            # Day 3: still holding, past dead_money_days=2
+            {"date": date(2026, 3, 5), "symbol": "ABC",
+             "open": 107.0, "high": 108.0, "low": 105.0, "close": 106.0},
+        ]
+    )
+
+    result = simulate_breakout_backtest(
+        signals, prices,
+        BacktestParams(max_hold_days=3, dead_money_days=2),
+    )
+
+    trade = result.trades[0]
+    # +1R was reached on day 2, so dead_money should NOT trigger on day 3
+    assert trade.status != "dead_money"
+    # Should be time_stop at day 3
+    assert trade.status == "time_stop"

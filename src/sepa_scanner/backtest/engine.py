@@ -214,9 +214,12 @@ def _simulate_signal(
             )
 
         # --- Dead money check: exit if not at +1R within dead_money_days ---
+        # Check both the flag AND whether this bar's high would reach +1R
+        reached_1r_this_bar = risk and high_price >= entry_price + risk * 1.0
         if (
             params.dead_money_days is not None
             and not breakeven_activated
+            and not reached_1r_this_bar
             and holding_days >= params.dead_money_days
         ):
             return _close_trade(
