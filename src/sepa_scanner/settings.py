@@ -112,6 +112,18 @@ class MarketFilterSettings(BaseModel):
     breadth_weak_pct: float = 0.40
 
 
+class PortfolioSettings(BaseModel):
+    max_heat_pct: float = 0.10           # max 10% total open risk
+    max_positions: int = 10              # max concurrent positions
+    max_sector_positions: int = 3        # max per sector
+    max_sector_pct: float = 0.40         # max 40% in any one sector
+    drawdown_half_pct: float = 0.10      # halve sizes at -10% from peak
+    drawdown_stop_pct: float = 0.15      # stop new entries at -15%
+    drawdown_close_pct: float = 0.20     # close all at -20%
+    initial_capital: float = 1_000_000.0
+    risk_per_trade_pct: float = 0.01     # 1% risk per trade
+
+
 class TelegramSettings(BaseModel):
     bot_token: str | None = None
     chat_id: str | None = None
@@ -149,6 +161,7 @@ class AppSettings(BaseModel):
     alerts: AlertsSettings
     watchlist: WatchlistSettings = Field(default_factory=WatchlistSettings)
     market_filter: MarketFilterSettings = Field(default_factory=MarketFilterSettings)
+    portfolio: PortfolioSettings = Field(default_factory=PortfolioSettings)
     telegram: TelegramSettings
     runtime: RuntimeSettings
     alert_channels: dict[str, Any] = Field(default_factory=dict)
@@ -214,6 +227,7 @@ def load_settings(config_dir: Path | None = None) -> AppSettings:
         alerts=AlertsSettings.model_validate(config_values["alerts"]),
         watchlist=WatchlistSettings.model_validate(config_values.get("watchlist", {})),
         market_filter=MarketFilterSettings.model_validate(config_values.get("market_filter", {})),
+        portfolio=PortfolioSettings.model_validate(config_values.get("portfolio", {})),
         telegram=telegram,
         runtime=runtime,
         alert_channels=alert_channels,

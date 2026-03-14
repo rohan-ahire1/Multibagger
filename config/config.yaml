@@ -71,5 +71,16 @@ market_filter:
   breadth_strong_pct: 0.60
   breadth_weak_pct: 0.40
 
+portfolio:
+  max_heat_pct: 0.10
+  max_positions: 10
+  max_sector_positions: 3
+  max_sector_pct: 0.40
+  drawdown_half_pct: 0.10
+  drawdown_stop_pct: 0.15
+  drawdown_close_pct: 0.20
+  initial_capital: 1000000
+  risk_per_trade_pct: 0.01
+
 watchlist:
   max_candidates: 300
