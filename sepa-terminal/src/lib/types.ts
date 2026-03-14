@@ -192,7 +192,7 @@ export interface BacktestParams {
 export interface BacktestTrade {
   symbol: string
   signalDate: string
-  status: 'not_filled' | 'stopped' | 'target' | 'time_stop' | 'incomplete_data' | 'skipped_overlap'
+  status: 'not_filled' | 'stopped' | 'target' | 'time_stop' | 'incomplete_data' | 'skipped_overlap' | 'skipped_split'
   entryRef: number
   stop: number
   pivot: number | null
@@ -227,6 +227,7 @@ export interface BacktestSummary {
   avgMfeR: number | null
   avgMaeR: number | null
   avgGivebackPct: number | null
+  skippedSplitCount: number
   exitMode: string
 }
 

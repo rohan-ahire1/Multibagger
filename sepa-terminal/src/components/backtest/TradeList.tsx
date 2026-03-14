@@ -34,6 +34,8 @@ function statusPillProps(status: BacktestTrade['status']): { label: string; vari
       return { label: 'No Data', variant: 'blue' }
     case 'skipped_overlap':
       return { label: 'Skipped', variant: 'blue' }
+    case 'skipped_split':
+      return { label: 'Split Skip', variant: 'purple' }
     default:
       return { label: status, variant: 'blue' }
   }

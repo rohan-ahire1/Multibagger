@@ -40,6 +40,13 @@ export function StatsSummary({ summary }: StatsSummaryProps) {
       label: 'Filled',
       value: String(summary.filledTrades),
     },
+    ...(summary.skippedSplitCount > 0
+      ? [{
+          label: 'Split Skip',
+          value: String(summary.skippedSplitCount),
+          color: '#a78bfa',
+        }]
+      : []),
     {
       label: 'Win Rate',
       value: formatPct(summary.winRate),
