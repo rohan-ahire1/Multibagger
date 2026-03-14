@@ -358,6 +358,7 @@ def scan_for_date(
             weights=settings.relative_strength.weights,
             scan_date=scan_date,
             symbols=candidate_symbols,
+            skip_recent_days=settings.relative_strength.skip_recent_days,
         )
     rs_pass_symbols = set(
         rs_ranks.filter(pl.col("rs_rank") >= settings.relative_strength.rs_rank_min)["symbol"].to_list()
@@ -542,6 +543,7 @@ def scan_batch(
         benchmark_symbol=settings.market.benchmark_symbol,
         lookbacks=settings.relative_strength.lookbacks,
         weights=settings.relative_strength.weights,
+        skip_recent_days=settings.relative_strength.skip_recent_days,
     )
 
     for scan_date in scan_dates:
