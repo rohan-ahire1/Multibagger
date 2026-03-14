@@ -23,7 +23,7 @@ trend_template:
   sma_mid: 150
   sma_slow: 200
   lookback_52w: 252
-  sma200_slope_lookback: 22
+  sma200_slope_lookback: 66
   min_above_52w_low_pct: 0.30
   max_below_52w_high_pct: 0.25
 
