@@ -88,7 +88,28 @@ def summarize_backtest(
         if t.giveback_pct is not None and t.r_multiple is not None and float(t.r_multiple) > 0
     ]
 
-    skipped_split_count = sum(1 for trade in trades if trade.status == "skipped_split")
+    # Phased exit counts and percentages
+    breakeven_exits = sum(1 for t in closed_trades if t.exit_reason == "breakeven_stop")
+    trail_exits = sum(1 for t in closed_trades if t.exit_reason and t.exit_reason.startswith("trail_"))
+    tighten_exits = sum(1 for t in closed_trades if t.exit_reason and t.exit_reason.startswith("tighten_"))
+    climax_sells = sum(1 for t in closed_trades if t.exit_reason == "climax_sell")
+    extension_sells = sum(1 for t in closed_trades if t.exit_reason and t.exit_reason.startswith("extension_"))
+    partial_profit_exits = sum(1 for t in closed_trades if t.partial_exit_pct is not None)
+
+    denom = len(closed_trades)
+    _breakeven_phases = {"breakeven", "partial_profit", "trailing", "tighten", "exit"}
+    pct_reaching_breakeven = (
+        sum(1 for t in closed_trades if (t.exit_phase in _breakeven_phases) or (t.partial_exit_pct is not None)) / denom
+        if denom else 0.0
+    )
+    pct_reaching_partial = sum(1 for t in closed_trades if t.partial_exit_pct is not None) / denom if denom else 0.0
+    _trail_phases = {"trailing", "tighten", "exit"}
+    pct_reaching_trail = sum(1 for t in closed_trades if t.exit_phase in _trail_phases) / denom if denom else 0.0
+
+    partial_r_values = [float(t.partial_exit_r) for t in closed_trades if t.partial_exit_r is not None]
+    avg_partial_r = (sum(partial_r_values) / len(partial_r_values)) if partial_r_values else None
+
+    exit_engine = "minervini_phased" if exit_mode == ExitMode.MINERVINI_PHASED else "legacy"
 
     return BacktestSummary(
         total_signals=len(trades),
@@ -109,7 +130,17 @@ def summarize_backtest(
         avg_mfe_r=(sum(mfe_values) / len(mfe_values)) if mfe_values else None,
         avg_mae_r=(sum(mae_values) / len(mae_values)) if mae_values else None,
         avg_giveback_pct=(sum(giveback_values) / len(giveback_values)) if giveback_values else None,
-        skipped_split_count=skipped_split_count,
         dead_money_exits=sum(1 for trade in trades if trade.status == "dead_money"),
         exit_mode=exit_mode.value,
+        breakeven_exits=breakeven_exits,
+        partial_profit_exits=partial_profit_exits,
+        trail_exits=trail_exits,
+        tighten_exits=tighten_exits,
+        climax_sells=climax_sells,
+        extension_sells=extension_sells,
+        avg_partial_r=avg_partial_r,
+        pct_reaching_breakeven=pct_reaching_breakeven,
+        pct_reaching_partial=pct_reaching_partial,
+        pct_reaching_trail=pct_reaching_trail,
+        exit_engine=exit_engine,
     )

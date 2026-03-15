@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 from sepa_scanner.backtest.metrics import build_equity_curve, summarize_backtest
-from sepa_scanner.backtest.models import BacktestTrade
+from sepa_scanner.backtest.models import BacktestTrade, ExitMode
 
 
 def _trade(
@@ -180,22 +180,55 @@ def test_backtest_metrics_include_force_closed_incomplete_trade_in_closed_stats(
     assert summary.average_r == -0.08333333333333333
 
 
-def test_skipped_split_excluded_from_metrics() -> None:
+def test_phased_exit_summary_fields() -> None:
     trades = [
         BacktestTrade(
-            symbol="ABC", signal_date=date(2026, 3, 2), status="stopped",
-            entry_ref=101.0, stop=95.0, entry_date=date(2026, 3, 3),
-            entry_price=101.0, exit_date=date(2026, 3, 5), exit_price=95.0,
-            holding_days=2, return_pct=-5.94, r_multiple=-1.0,
+            symbol="A",
+            signal_date=date(2026, 3, 1),
+            status="stopped",
+            entry_ref=101.0,
+            stop=92.0,
+            pivot=100.0,
+            entry_date=date(2026, 3, 2),
+            entry_price=101.0,
+            exit_date=date(2026, 3, 20),
+            exit_price=120.0,
+            holding_days=18,
+            return_pct=18.81,
+            r_multiple=2.11,
+            exit_phase="trailing",
+            exit_reason="trail_trail_21ema",
+            partial_exit_price=117.0,
+            partial_exit_r=1.78,
+            partial_exit_pct=0.50,
+            trail_mode_used="trail_21ema",
         ),
         BacktestTrade(
-            symbol="XYZ", signal_date=date(2026, 3, 4), status="skipped_split",
-            entry_ref=200.0, stop=190.0,
+            symbol="B",
+            signal_date=date(2026, 3, 5),
+            status="stopped",
+            entry_ref=201.0,
+            stop=185.0,
+            pivot=200.0,
+            entry_date=date(2026, 3, 6),
+            entry_price=201.0,
+            exit_date=date(2026, 3, 10),
+            exit_price=185.0,
+            holding_days=4,
+            return_pct=-7.96,
+            r_multiple=-1.0,
+            exit_phase="initial_stop",
+            exit_reason="initial_stop",
         ),
     ]
-    summary = summarize_backtest(trades)
-    assert summary.total_signals == 2
-    assert summary.filled_trades == 1
-    assert summary.skipped_split_count == 1
-    assert summary.stopped_trades == 1
-    assert summary.win_rate == 0.0
+
+    summary = summarize_backtest(trades, exit_mode=ExitMode.MINERVINI_PHASED)
+
+    assert summary.trail_exits == 1
+    assert summary.breakeven_exits == 0
+    assert summary.partial_profit_exits == 1
+    assert summary.exit_engine == "minervini_phased"
+    assert summary.avg_partial_r == 1.78
+    assert summary.pct_reaching_trail == 0.5
+    assert summary.pct_reaching_partial == 0.5
+

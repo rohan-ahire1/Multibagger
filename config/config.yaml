@@ -9,7 +9,6 @@ data:
   bhavcopy_api_key: "favCapital"
   http_timeout_sec: 30
   max_retries: 5
-  apply_corporate_actions_adjustment: false
 
 universe:
   allowed_series: ["EQ"]
@@ -84,3 +83,24 @@ portfolio:
 
 watchlist:
   max_candidates: 300
+
+exit_strategy:
+  breakeven_activation_r: 1.0
+  partial_profit_r: 2.0
+  partial_profit_pct: 0.50
+  trail_activation_r: 2.0
+  max_loss_pct: 0.08
+  absolute_max_loss_pct: 0.10
+  trail_mode: "adaptive"
+  trail_pct: 0.20
+  trail_pct_bull: 0.25
+  trail_pct_bear: 0.15
+  extension_limit_200d: 2.0
+  extension_limit_200d_extreme: 2.5
+  extension_limit_50d: 1.25
+  largest_day_gain_pct: 0.15
+  gap_sell_threshold: 0.10
+  time_stop_days: 15
+  max_hold_before_tighten: 40
+  climax_min_hold_days: 15
+  climax_conditions_required: 3
