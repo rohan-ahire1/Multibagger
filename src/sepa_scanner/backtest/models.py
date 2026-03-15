@@ -78,6 +78,13 @@ class BacktestTrade:
     mae_r: float | None = None
     mfe_r: float | None = None
     giveback_pct: float | None = None
+    exit_phase: str | None = None
+    exit_reason: str | None = None
+    partial_exit_price: float | None = None
+    partial_exit_date: date | None = None
+    partial_exit_r: float | None = None
+    partial_exit_pct: float | None = None
+    trail_mode_used: str | None = None
 
 
 @dataclass(slots=True)
@@ -107,6 +114,17 @@ class BacktestSummary:
     avg_giveback_pct: float | None = None
     dead_money_exits: int = 0
     exit_mode: str = ExitMode.V2_TRAIL_10D.value
+    breakeven_exits: int = 0
+    partial_profit_exits: int = 0
+    trail_exits: int = 0
+    tighten_exits: int = 0
+    climax_sells: int = 0
+    extension_sells: int = 0
+    avg_partial_r: float | None = None
+    pct_reaching_breakeven: float = 0.0
+    pct_reaching_partial: float = 0.0
+    pct_reaching_trail: float = 0.0
+    exit_engine: str = "legacy"
 
 
 @dataclass(slots=True)

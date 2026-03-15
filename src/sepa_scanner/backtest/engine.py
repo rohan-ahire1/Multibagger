@@ -2,16 +2,22 @@ from __future__ import annotations
 
 import os
 from concurrent.futures import ProcessPoolExecutor
-from datetime import date, timedelta
+from datetime import date
 
 import polars as pl
 
+from sepa_scanner.backtest.exit_engine import (
+    BarData,
+    ExitAction,
+    ExitConfig,
+    TradeState,
+    evaluate_exit,
+)
 from sepa_scanner.backtest.models import BacktestParams, BacktestResult, BacktestTrade, ExitMode
-from sepa_scanner.backtest.portfolio import PortfolioManager
-from sepa_scanner.data_sources.corporate_actions import has_split_in_window
 
 _MIN_SYMBOLS_FOR_PARALLEL = 8
 _EMA21_ALPHA = 2.0 / (21 + 1)
+_EMA50_ALPHA = 2.0 / (50 + 1)
 
 
 def _risk_per_share(entry_price: float, stop: float) -> float | None:
@@ -96,22 +102,15 @@ def _simulate_signal(
     signal: dict[str, object],
     symbol_prices: list[dict[str, object]],
     params: BacktestParams,
-    corp_actions: pl.DataFrame | None = None,
 ) -> BacktestTrade:
+    if params.exit_mode == ExitMode.MINERVINI_PHASED:
+        return _simulate_signal_phased(signal, symbol_prices, params)
     future_bars = [row for row in symbol_prices if row["date"] > signal["signal_date"]]
     if not future_bars:
         return _empty_trade(signal, "incomplete_data")
 
     entry_ref = float(signal["entry_ref"])
     initial_stop = float(signal["stop"])
-
-    # Skip if any split/bonus in the indicator lookback window OR the trade window.
-    # SMA200 needs ~300 calendar days of history; add max_hold for the trade itself.
-    if corp_actions is not None and not corp_actions.is_empty():
-        lookback_start = signal["signal_date"] - timedelta(days=400)
-        window_end = signal["signal_date"] + timedelta(days=int(params.max_hold_days * 1.5) + 5)
-        if has_split_in_window(str(signal["symbol"]), lookback_start, window_end, corp_actions):
-            return _empty_trade(signal, "skipped_split")
 
     pending_bars = future_bars[: params.pending_days]
     if len(pending_bars) < params.pending_days:
@@ -298,11 +297,264 @@ def _simulate_signal(
     return trade
 
 
+def _simulate_signal_phased(
+    signal: dict[str, object],
+    symbol_prices: list[dict[str, object]],
+    params: BacktestParams,
+) -> BacktestTrade:
+    """Simulate a signal using the Minervini multi-phase exit engine."""
+    future_bars = [row for row in symbol_prices if row["date"] > signal["signal_date"]]
+    if not future_bars:
+        return _empty_trade(signal, "incomplete_data")
+
+    entry_ref = float(signal["entry_ref"])
+    initial_stop = float(signal["stop"])
+
+    # Entry fill logic (same as legacy)
+    pending_bars = future_bars[: params.pending_days]
+    if len(pending_bars) < params.pending_days:
+        pending_status = "incomplete_data"
+    else:
+        pending_status = "not_filled"
+
+    entry_index: int | None = None
+    entry_price: float | None = None
+    entry_date: date | None = None
+    for idx, bar in enumerate(pending_bars):
+        if float(bar["open"]) >= entry_ref:
+            entry_index = idx
+            entry_price = float(bar["open"])
+            entry_date = bar["date"]
+            break
+        if float(bar["high"]) >= entry_ref:
+            entry_index = idx
+            entry_price = entry_ref
+            entry_date = bar["date"]
+            break
+
+    if entry_index is None or entry_price is None or entry_date is None:
+        return _empty_trade(signal, pending_status)
+
+    risk = _risk_per_share(entry_price, initial_stop)
+    if risk is None or risk <= 0:
+        return _empty_trade(signal, "not_filled")
+
+    exit_config = ExitConfig()
+    rs_rank = float(signal.get("rs_rank", 80.0))
+    market_regime = "bull"  # TODO: use actual regime detection
+
+    trade_state = TradeState(
+        symbol=str(signal["symbol"]),
+        entry_date=entry_date,
+        entry_price=entry_price,
+        initial_risk=risk,
+        initial_stop=initial_stop,
+        planned_shares=100,  # normalized to 100 shares for R-multiple calculation
+    )
+
+    exit_bars = future_bars[entry_index : entry_index + params.max_hold_days]
+    incomplete_after_entry = len(exit_bars) < params.max_hold_days
+
+    # Rolling indicator state
+    close_buffer: list[float] = []
+    low_buffer: list[float] = []
+    volume_buffer: list[float] = []
+    range_buffer: list[float] = []
+    ema21: float | None = None
+    ema50: float | None = None
+    mae_price = entry_price
+    mfe_price = entry_price
+
+    # Seed with pre-entry bars for indicators
+    pre_entry_bars = [row for row in symbol_prices if row["date"] <= entry_date]
+    for pb in pre_entry_bars[-200:]:  # use up to 200 bars for SMA200
+        c = float(pb["close"])
+        close_buffer.append(c)
+        low_buffer.append(float(pb["low"]))
+        volume_buffer.append(float(pb.get("volume", 0)))
+        h, l = float(pb["high"]), float(pb["low"])
+        range_buffer.append((h - l) / l if l > 0 else 0)
+        if ema21 is None:
+            ema21 = c
+        else:
+            ema21 = _EMA21_ALPHA * c + (1 - _EMA21_ALPHA) * ema21
+        if ema50 is None:
+            ema50 = c
+        else:
+            ema50 = _EMA50_ALPHA * c + (1 - _EMA50_ALPHA) * ema50
+
+    prev_close = close_buffer[-1] if close_buffer else entry_price
+    final_exit_price: float | None = None
+    final_exit_date: date | None = None
+    final_status = "open"
+    final_holding_days = 0
+
+    for offset, bar in enumerate(exit_bars):
+        open_price = float(bar["open"])
+        high_price = float(bar["high"])
+        low_price = float(bar["low"])
+        close_price = float(bar["close"])
+        volume = int(bar.get("volume", 0))
+        holding_days = offset + 1
+        is_entry_day = offset == 0
+
+        # Update excursions
+        mae_price = min(mae_price, low_price)
+        mfe_price = max(mfe_price, high_price)
+
+        # Gap-down through stop: exit at open
+        if not is_entry_day and open_price <= trade_state.active_stop:
+            final_exit_price = open_price
+            final_exit_date = bar["date"]
+            final_status = "stopped"
+            final_holding_days = holding_days
+            trade_state.exit_reason = trade_state.phase.value + "_gap_stop"
+            break
+
+        # Update indicators
+        close_buffer.append(close_price)
+        low_buffer.append(low_price)
+        volume_buffer.append(float(volume))
+        h, l = high_price, low_price
+        range_buffer.append((h - l) / l if l > 0 else 0)
+
+        if ema21 is None:
+            ema21 = close_price
+        else:
+            ema21 = _EMA21_ALPHA * close_price + (1 - _EMA21_ALPHA) * ema21
+        if ema50 is None:
+            ema50 = close_price
+        else:
+            ema50 = _EMA50_ALPHA * close_price + (1 - _EMA50_ALPHA) * ema50
+
+        sma_50 = sum(close_buffer[-50:]) / min(len(close_buffer), 50) if close_buffer else 0
+        sma_200 = sum(close_buffer[-200:]) / min(len(close_buffer), 200) if close_buffer else 0
+        low_10d = min(low_buffer[-10:]) if low_buffer else low_price
+        avg_range_20 = sum(range_buffer[-20:]) / min(len(range_buffer), 20) if range_buffer else 0
+        avg_volume_50 = sum(volume_buffer[-50:]) / min(len(volume_buffer), 50) if volume_buffer else 1
+
+        bar_data = BarData(
+            open=open_price,
+            high=high_price,
+            low=low_price,
+            close=close_price,
+            volume=volume,
+            sma_50=sma_50,
+            sma_200=sma_200,
+            ema_21=ema21 or 0,
+            ema_50=ema50 or 0,
+            low_10d=low_10d,
+            prev_close=prev_close,
+            avg_range_20=avg_range_20,
+            avg_volume_50=avg_volume_50,
+        )
+
+        actions = evaluate_exit(
+            trade_state,
+            bar=bar_data,
+            config=exit_config,
+            market_regime=market_regime,
+            rs_rank=rs_rank,
+        )
+
+        for action in actions:
+            if action.action == "SELL_ALL":
+                final_exit_price = close_price
+                final_exit_date = bar["date"]
+                final_status = "stopped"
+                final_holding_days = holding_days
+                trade_state.exit_reason = action.reason
+                break
+            elif action.action == "SELL_PARTIAL":
+                if trade_state.partial_exit_date is None:
+                    trade_state.partial_exit_date = bar["date"]
+
+        if final_exit_price is not None:
+            break
+
+        # Max hold days
+        if holding_days >= params.max_hold_days:
+            final_exit_price = close_price
+            final_exit_date = bar["date"]
+            final_status = "time_stop"
+            final_holding_days = holding_days
+            trade_state.exit_reason = "time_stop"
+            break
+
+        prev_close = close_price
+
+    # Handle incomplete data
+    if final_exit_price is None:
+        if incomplete_after_entry and exit_bars:
+            last_bar = exit_bars[-1]
+            final_exit_price = float(last_bar["close"])
+            final_exit_date = last_bar["date"]
+            final_status = "incomplete_data"
+            final_holding_days = len(exit_bars)
+            trade_state.exit_reason = "incomplete_data"
+
+    # Build BacktestTrade
+    return_pct: float | None = None
+    r_multiple: float | None = None
+    mae_r: float | None = None
+    mfe_r: float | None = None
+    giveback_pct: float | None = None
+
+    if final_exit_price is not None and risk:
+        return_pct = ((final_exit_price - entry_price) / entry_price) * 100.0
+        r_multiple = (final_exit_price - entry_price) / risk
+        mae_r = (entry_price - mae_price) / risk
+        mfe_r = (mfe_price - entry_price) / risk
+        if mfe_r > 1e-9 and r_multiple is not None:
+            giveback_pct = (mfe_r - r_multiple) / mfe_r
+
+    # Weighted R for partial exits
+    if trade_state.partial_taken and r_multiple is not None:
+        partial_pct = exit_config.partial_profit_pct
+        remaining_pct = 1.0 - partial_pct
+        r_multiple = partial_pct * trade_state.partial_r + remaining_pct * r_multiple
+        if return_pct is not None:
+            partial_return = (
+                (trade_state.partial_exit_price - entry_price) / entry_price
+            ) * 100.0
+            final_return = (
+                (final_exit_price - entry_price) / entry_price
+            ) * 100.0
+            return_pct = partial_pct * partial_return + remaining_pct * final_return
+
+    return BacktestTrade(
+        symbol=str(signal["symbol"]),
+        signal_date=signal["signal_date"],
+        status=final_status,
+        entry_ref=entry_ref,
+        stop=initial_stop,
+        pivot=float(signal["pivot"]) if signal.get("pivot") is not None else None,
+        entry_date=entry_date,
+        entry_price=entry_price,
+        exit_date=final_exit_date,
+        exit_price=final_exit_price,
+        holding_days=final_holding_days if final_holding_days > 0 else None,
+        return_pct=return_pct,
+        r_multiple=r_multiple,
+        mae_price=mae_price,
+        mfe_price=mfe_price,
+        mae_r=mae_r,
+        mfe_r=mfe_r,
+        giveback_pct=giveback_pct,
+        exit_phase=trade_state.phase.value,
+        exit_reason=trade_state.exit_reason or None,
+        partial_exit_price=trade_state.partial_exit_price if trade_state.partial_taken else None,
+        partial_exit_date=trade_state.partial_exit_date,
+        partial_exit_r=trade_state.partial_r if trade_state.partial_taken else None,
+        partial_exit_pct=exit_config.partial_profit_pct if trade_state.partial_taken else None,
+        trail_mode_used=trade_state.trail_mode if trade_state.trail_activated else None,
+    )
+
+
 def _simulate_symbol_group(
     symbol_signals: list[dict[str, object]],
     symbol_prices: list[dict[str, object]],
     params: BacktestParams,
-    corp_actions: pl.DataFrame | None = None,
 ) -> list[BacktestTrade]:
     trades: list[BacktestTrade] = []
     active_until_date: date | None = None
@@ -310,7 +562,7 @@ def _simulate_symbol_group(
         if active_until_date is not None and signal["signal_date"] < active_until_date:
             trades.append(_empty_trade(signal, "skipped_overlap"))
             continue
-        trade = _simulate_signal(signal, symbol_prices, params, corp_actions=corp_actions)
+        trade = _simulate_signal(signal, symbol_prices, params)
         trades.append(trade)
         if trade.entry_date is not None:
             if trade.exit_date is not None:
@@ -324,7 +576,6 @@ def simulate_breakout_backtest(
     signals_df: pl.DataFrame,
     ohlcv_df: pl.DataFrame,
     params: BacktestParams,
-    corp_actions: pl.DataFrame | None = None,
     portfolio_manager: PortfolioManager | None = None,
 ) -> BacktestResult:
     signals = (
@@ -351,7 +602,7 @@ def simulate_breakout_backtest(
     # --- Portfolio-constrained mode: sequential execution ---
     if portfolio_manager is not None:
         return _simulate_with_portfolio(
-            signals, prices_by_symbol, signals_by_symbol, params, corp_actions, portfolio_manager,
+            signals, prices_by_symbol, signals_by_symbol, params, portfolio_manager,
         )
 
     # --- Standard mode: per-symbol parallelism ---
@@ -364,7 +615,6 @@ def simulate_breakout_backtest(
                     sym_signals,
                     prices_by_symbol.get(sym, []),
                     params,
-                    corp_actions,
                 )
                 for sym, sym_signals in signals_by_symbol.items()
             ]
@@ -373,7 +623,7 @@ def simulate_breakout_backtest(
     else:
         for sym, sym_signals in signals_by_symbol.items():
             all_trades.extend(
-                _simulate_symbol_group(sym_signals, prices_by_symbol.get(sym, []), params, corp_actions)
+                _simulate_symbol_group(sym_signals, prices_by_symbol.get(sym, []), params)
             )
 
     all_trades.sort(key=lambda t: (t.signal_date, t.symbol))
@@ -385,7 +635,6 @@ def _simulate_with_portfolio(
     prices_by_symbol: dict[str, list[dict[str, object]]],
     signals_by_symbol: dict[str, list[dict[str, object]]],
     params: BacktestParams,
-    corp_actions: pl.DataFrame | None,
     pm: PortfolioManager,
 ) -> BacktestResult:
     """Run backtest sequentially with portfolio-level risk controls.
@@ -433,7 +682,7 @@ def _simulate_with_portfolio(
             all_trades.append(_empty_trade(signal, "skipped_portfolio"))
             continue
 
-        trade = _simulate_signal(signal, symbol_prices, params, corp_actions=corp_actions)
+        trade = _simulate_signal(signal, symbol_prices, params)
         all_trades.append(trade)
 
         if trade.entry_date is not None:

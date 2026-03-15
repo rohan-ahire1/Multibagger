@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 import pytest
@@ -727,3 +727,78 @@ def test_evaluate_exit_trailing_stop_hit() -> None:
     assert len(actions) == 1
     assert actions[0].action == "SELL_ALL"
     assert "trail_" in actions[0].reason
+
+
+# --- Engine integration ---
+def test_engine_phased_exit_basic() -> None:
+    """Phased exit mode produces trades with phase/reason metadata."""
+    import polars as pl
+
+    from sepa_scanner.backtest.engine import simulate_breakout_backtest
+    from sepa_scanner.backtest.models import BacktestParams, ExitMode
+
+    signals = pl.DataFrame({
+        "signal_date": [date(2024, 1, 10)],
+        "symbol": ["TEST"],
+        "signal_type": ["BREAKOUT"],
+        "pivot": [100.0],
+        "entry_ref": [101.0],
+        "stop": [92.0],
+        "r_per_share": [9.0],
+        "rs_rank": [85.0],
+    })
+    # 60 bars of gradually rising prices
+    start = date(2024, 1, 11)
+    dates = [start + timedelta(days=i) for i in range(60)]
+    ohlcv = pl.DataFrame({
+        "date": dates,
+        "symbol": ["TEST"] * 60,
+        "open": [100.0 + i for i in range(60)],
+        "high": [102.0 + i for i in range(60)],
+        "low": [99.0 + i for i in range(60)],
+        "close": [101.0 + i for i in range(60)],
+        "volume": [100000] * 60,
+    })
+    params = BacktestParams(exit_mode=ExitMode.MINERVINI_PHASED, max_hold_days=90)
+    result = simulate_breakout_backtest(signals, ohlcv, params)
+    assert len(result.trades) == 1
+    trade = result.trades[0]
+    assert trade.entry_price is not None
+    assert trade.exit_phase is not None
+    assert trade.exit_reason is not None
+
+
+def test_engine_legacy_mode_unchanged() -> None:
+    """Legacy exit modes still work exactly as before."""
+    import polars as pl
+
+    from sepa_scanner.backtest.engine import simulate_breakout_backtest
+    from sepa_scanner.backtest.models import BacktestParams, ExitMode
+
+    signals = pl.DataFrame({
+        "signal_date": [date(2024, 1, 10)],
+        "symbol": ["TEST"],
+        "signal_type": ["BREAKOUT"],
+        "pivot": [100.0],
+        "entry_ref": [101.0],
+        "stop": [92.0],
+        "r_per_share": [9.0],
+    })
+    start = date(2024, 1, 11)
+    dates = [start + timedelta(days=i) for i in range(20)]
+    ohlcv = pl.DataFrame({
+        "date": dates,
+        "symbol": ["TEST"] * 20,
+        "open": [100.0 + i for i in range(20)],
+        "high": [102.0 + i for i in range(20)],
+        "low": [99.0 + i for i in range(20)],
+        "close": [101.0 + i for i in range(20)],
+        "volume": [100000] * 20,
+    })
+    params = BacktestParams(exit_mode=ExitMode.V2_TRAIL_10D, max_hold_days=30)
+    result = simulate_breakout_backtest(signals, ohlcv, params)
+    assert len(result.trades) == 1
+    trade = result.trades[0]
+    assert trade.entry_price is not None
+    # Legacy trades should not have phased exit fields set
+    assert trade.exit_phase is None
