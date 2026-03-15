@@ -7,11 +7,21 @@ from enum import Enum
 import polars as pl
 
 
+class ExitPhase(str, Enum):
+    INITIAL_STOP = "initial_stop"
+    BREAKEVEN = "breakeven"
+    PARTIAL_PROFIT = "partial_profit"
+    TRAILING = "trailing"
+    TIGHTEN = "tighten"
+    EXIT = "exit"
+
+
 class ExitMode(str, Enum):
     V1_FIXED = "v1_fixed"
     V2_TRAIL_10D = "v2_trail_10d"
     V2_TRAIL_21EMA = "v2_trail_21ema"
     V3_TRAIL_PCT = "v3_trail_pct"
+    MINERVINI_PHASED = "minervini_phased"
 
 
 EXIT_MODE_LABELS: dict[ExitMode, str] = {
@@ -19,6 +29,7 @@ EXIT_MODE_LABELS: dict[ExitMode, str] = {
     ExitMode.V2_TRAIL_10D: "V2 Trail 10-Day Low",
     ExitMode.V2_TRAIL_21EMA: "V2 Trail 21-EMA",
     ExitMode.V3_TRAIL_PCT: "V3 Trail Percentage",
+    ExitMode.MINERVINI_PHASED: "Minervini Phased",
 }
 
 
@@ -27,7 +38,7 @@ class BacktestParams:
     pending_days: int = 5
     max_hold_days: int = 90
     target_r: float | None = None
-    exit_mode: ExitMode = ExitMode.V3_TRAIL_PCT
+    exit_mode: ExitMode = ExitMode.V2_TRAIL_10D
     trail_activation_r: float = 2.0
     trail_pct: float = 0.20
     dead_money_days: int | None = 15
@@ -94,9 +105,8 @@ class BacktestSummary:
     avg_mfe_r: float | None = None
     avg_mae_r: float | None = None
     avg_giveback_pct: float | None = None
-    skipped_split_count: int = 0
     dead_money_exits: int = 0
-    exit_mode: str = ExitMode.V3_TRAIL_PCT.value
+    exit_mode: str = ExitMode.V2_TRAIL_10D.value
 
 
 @dataclass(slots=True)
