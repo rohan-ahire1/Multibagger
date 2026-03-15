@@ -1029,6 +1029,38 @@ active_stop = max(active_stop, ema21(t))                        # ratchet up onl
 The EMA is seeded from entry-day close and warms up over the holding period.
 
 **Pre-activation indicator tracking:**
+
+### 15.10.1 Minervini Multi-Phase Exit Engine
+
+The phased exit engine replaces the single trailing stop with a 6-phase system. All parameters are controlled by the `exit_strategy` section in `config/config.yaml`.
+
+**Phases (strictly sequential):**
+
+| Phase | Description |
+|-------|-------------|
+| INITIAL_STOP | From entry until +1R. Stop at initial structural stop. Time stop at 15 days if no +1R. |
+| BREAKEVEN | Stop moves to entry price. Still 100% position. |
+| PARTIAL_PROFIT | Sell 50% at +2R. Lock in partial gains. |
+| TRAILING | Adaptive trail selection based on RS rank + market regime. Modes: 21-EMA, 50-EMA, 10-day low, percentage (20%), or adaptive. |
+| TIGHTEN | Triggered by first close below 21-EMA after sustained run, hold time >40 days, or extension above 50-DMA. Tightens trail: 50-EMA→21-EMA, 21-EMA→10-day low. |
+| EXIT | Close below active trailing stop → sell remaining. |
+
+**Sell-into-strength rules (can exit before normal phase progression):**
+- Extension from 200-DMA: sell 50% if >2× 200-DMA, sell all if >2.5×
+- Largest single-day gain >15% on high volume: sell 50%
+- Gap-up >10% on 3× volume: sell 50%
+
+**Climax top detection:** 3-of-5 conditions (wide range, high volume, upper wick, extended, gap-up) triggers consideration for exit.
+
+**Adaptive trail selection:**
+- RS ≥95, gain >30% → 50-EMA
+- RS ≥90, bull market, gain >20% → 50-EMA
+- Bull market → 20% percentage trail
+- Otherwise → 21-EMA
+
+**Legacy compatibility:** Old exit modes (V1_FIXED, V2_TRAIL_10D, V2_TRAIL_21EMA, V3_TRAIL_PCT) remain for A/B comparison when `exit_engine: "legacy"` is set in config.
+
+**Pre-activation indicator tracking:**
 - All trailing modes maintain their indicator state (low buffer / EMA / highest close) from entry day onward, even before trail activation
 - This ensures the indicator has warm-up data when activation occurs
 
@@ -1208,7 +1240,20 @@ portfolio:
 
 watchlist:
   max_candidates: 300
+
+exit_strategy:
+  breakeven_activation_r: 1.0
+  partial_profit_r: 2.0
+  partial_profit_pct: 0.50
+  trail_activation_r: 2.0
+  trail_mode: "adaptive"
+  trail_pct: 0.20
+  time_stop_days: 15
+  max_hold_before_tighten: 40
+  # ... (see config/config.yaml for full parameter list)
 ```
+
+The `exit_strategy` section controls all Minervini phased exit parameters. When `exit_engine: "minervini_phased"` is used in backtest requests, these values drive phase transitions, trail selection, sell-into-strength thresholds, and climax detection. Use `exit_engine: "legacy"` for A/B comparison against V1/V2/V3 fixed modes.
 
 ### 17.2 Full Parameter Reference Table
 
@@ -1434,9 +1479,12 @@ These are hard constraints. Any AI session or contributor that changes these MUS
 14. **Backtest assumes worse outcome** when both stop and target are hit on the same candle
 15. **Backtest overlap rule**: later same-symbol signals are skipped while a prior trade is open
 16. **Trailing stops use D-1 data for initial check** — stop used for day t open/low checks was computed from data ≤ day t-1
-17. **Trailing stops only ratchet up** — `active_stop = max(active_stop, trail_value)` (applies to V2 and V3 modes)
+17. **Trailing stops only ratchet up** — `active_stop = max(active_stop, trail_value)` (applies to V2, V3, and phased modes)
 18a. **Same-bar trigger**: after the trail ratchets up on bar t (using bar t data), if close ≤ new stop, exit immediately at the stop price on bar t — do not wait for bar t+1
 18. **MAE/MFE use initial risk denominator** — R-unit excursion metrics always reference the original entry-to-stop risk
+19. **Phased exit: partial profit rounds DOWN** — shares sold at partial profit use floor division to avoid fractional shares
+20. **Phased exit: phase transitions are strictly sequential** — no skipping phases (e.g. cannot go from BREAKEVEN to TIGHTEN without TRAILING)
+21. **Gap-down through stop exits at open price** — when `open <= stop`, exit at open price, not stop price
 
 ### Architectural Invariants
 
@@ -1488,6 +1536,7 @@ Track every strategy change here. Include date, what changed, why, and who/what 
 | 2026-03-14 | W4 Backtest Dashboard with full data range (2010-present) | Leverage complete OHLCV history; 1Y/3Y/5Y/10Y/All presets | AI-assisted |
 | 2026-03-14 | Updated Section 16 (UI Behavior) to reflect new terminal | Strategy doc was still describing old Streamlit UI | AI-assisted |
 | 2026-03-14 | Trailing stop same-bar trigger exit | If trail ratchets up and close is already below it, exit immediately instead of waiting for next bar | AI-assisted |
+| 2026-03-15 | Added Minervini multi-phase exit engine | Replace single trailing stop with 6-phase system: initial→breakeven→partial→trail→tighten→exit. Adds partial profits, adaptive trail selection, climax detection, sell-into-strength rules. Legacy modes preserved for A/B comparison. | AI-assisted |
 
 ### 2026-03-15 — V2 Critical Evaluation Implementation
 
