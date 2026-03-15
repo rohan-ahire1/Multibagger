@@ -81,11 +81,19 @@ export function ParamBar() {
         <label className="text-[10px] uppercase tracking-wider text-zinc-500">Exit</label>
         <select
           value={params.exitMode}
-          onChange={(e) => setParams({ exitMode: e.target.value as BacktestParams['exitMode'] })}
+          onChange={(e) => {
+            const mode = e.target.value as BacktestParams['exitMode']
+            setParams({
+              exitMode: mode,
+              exitEngine: mode === 'minervini_phased' ? 'minervini_phased' : 'legacy',
+            })
+          }}
           className="text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-zinc-200 focus:outline-none focus:border-zinc-500"
         >
-          <option value="v2_trail_21ema">Trail 21 EMA</option>
+          <option value="minervini_phased">Minervini Phased</option>
           <option value="v2_trail_10d">Trail 10D Low</option>
+          <option value="v2_trail_21ema">Trail 21 EMA</option>
+          <option value="v3_trail_pct">Trail % Stop</option>
           <option value="v1_fixed">Fixed Stop</option>
         </select>
       </div>

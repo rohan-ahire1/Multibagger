@@ -14,11 +14,12 @@ function defaultParams(): BacktestParams {
   return {
     startDate: DATA_START_DATE,
     endDate: now.toISOString().slice(0, 10),
-    exitMode: 'v2_trail_21ema',
+    exitMode: 'minervini_phased',
     targetR: null,
     pendingDays: 5,
     maxHoldDays: 90,
-    trailActivationR: 1.0,
+    trailActivationR: 2.0,
+    exitEngine: 'minervini_phased',
   }
 }
 

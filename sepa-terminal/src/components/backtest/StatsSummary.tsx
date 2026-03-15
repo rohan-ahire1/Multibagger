@@ -26,7 +26,7 @@ function Metric({ label, value, color }: MetricItem) {
 }
 
 export function StatsSummary({ summary }: StatsSummaryProps) {
-  const winRateColor = summary.winRate > 40 ? '#22c55e' : '#f87171'
+  const winRateColor = summary.winRate > 0.40 ? '#22c55e' : '#f87171'
   const avgRColor =
     summary.averageR != null ? (summary.averageR >= 0 ? '#22c55e' : '#f87171') : undefined
   const cumRColor = summary.cumulativeR >= 0 ? '#22c55e' : '#f87171'
@@ -40,16 +40,9 @@ export function StatsSummary({ summary }: StatsSummaryProps) {
       label: 'Filled',
       value: String(summary.filledTrades),
     },
-    ...(summary.skippedSplitCount > 0
-      ? [{
-          label: 'Split Skip',
-          value: String(summary.skippedSplitCount),
-          color: '#a78bfa',
-        }]
-      : []),
     {
       label: 'Win Rate',
-      value: formatPct(summary.winRate),
+      value: formatPct(summary.winRate * 100),
       color: winRateColor,
     },
     {
@@ -88,12 +81,41 @@ export function StatsSummary({ summary }: StatsSummaryProps) {
     },
     {
       label: 'Giveback',
-      value: summary.avgGivebackPct != null ? formatPct(summary.avgGivebackPct) : '—',
+      value: summary.avgGivebackPct != null ? formatPct(summary.avgGivebackPct * 100) : '—',
     },
   ]
 
+  if (summary.exitEngine === 'minervini_phased') {
+    metrics.push(
+      {
+        label: 'BE%',
+        value: formatPct(summary.pctReachingBreakeven * 100),
+        color: '#22c55e',
+      },
+      {
+        label: 'Partial%',
+        value: formatPct(summary.pctReachingPartial * 100),
+        color: '#22c55e',
+      },
+      {
+        label: 'Trail%',
+        value: formatPct(summary.pctReachingTrail * 100),
+        color: '#22c55e',
+      },
+      {
+        label: 'Avg Partial R',
+        value: summary.avgPartialR != null ? formatR(summary.avgPartialR) : '—',
+        color: '#22c55e',
+      },
+      {
+        label: 'Climax Sells',
+        value: String(summary.climaxSells),
+      },
+    )
+  }
+
   return (
-    <div className="grid grid-cols-3 gap-x-4 gap-y-3 px-4 py-3 border-b border-zinc-800 bg-[#0F1117]">
+    <div className="grid grid-cols-4 gap-x-4 gap-y-3 px-4 py-3 border-b border-zinc-800 bg-[#0F1117]">
       {metrics.map((m) => (
         <Metric key={m.label} label={m.label} value={m.value} color={m.color} />
       ))}

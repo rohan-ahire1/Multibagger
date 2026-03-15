@@ -8,7 +8,7 @@ import {
 } from '@tanstack/react-table'
 import { useState } from 'react'
 import type { BacktestTrade } from '@/lib/types'
-import { formatPrice, formatR, formatDate } from '@/lib/formatters'
+import { formatPrice, formatR, formatDate, formatPct } from '@/lib/formatters'
 import { StatusPill } from '@/components/shared/StatusPill'
 import { useBacktestStore } from '@/stores/backtest'
 
@@ -36,6 +36,10 @@ function statusPillProps(status: BacktestTrade['status']): { label: string; vari
       return { label: 'Skipped', variant: 'blue' }
     case 'skipped_split':
       return { label: 'Split Skip', variant: 'purple' }
+    case 'dead_money':
+      return { label: 'Dead $', variant: 'amber' }
+    case 'skipped_portfolio':
+      return { label: 'Skipped', variant: 'blue' }
     default:
       return { label: status, variant: 'blue' }
   }
@@ -82,6 +86,17 @@ const columns = [
       )
     },
   }),
+  columnHelper.accessor('returnPct', {
+    header: 'P&L%',
+    size: 60,
+    meta: { align: 'right' },
+    cell: (info) => {
+      const val = info.getValue()
+      if (val == null) return <span className="text-zinc-500">—</span>
+      const color = val >= 0 ? 'text-green-400' : 'text-red-400'
+      return <span className={`tabular-nums font-mono ${color}`}>{formatPct(val)}</span>
+    },
+  }),
   columnHelper.accessor('rMultiple', {
     header: 'R',
     size: 50,
@@ -99,6 +114,41 @@ const columns = [
     cell: (info) => {
       const { label, variant } = statusPillProps(info.getValue())
       return <StatusPill label={label} variant={variant} />
+    },
+  }),
+  columnHelper.accessor('exitPhase', {
+    header: 'Phase',
+    size: 65,
+    cell: (info) => {
+      const val = info.getValue()
+      if (!val) return <span className="text-zinc-500">—</span>
+      const labels: Record<string, string> = {
+        initial_stop: 'INIT',
+        breakeven: 'BE',
+        partial_profit: 'PARTIAL',
+        trailing: 'TRAIL',
+        tighten: 'TIGHT',
+        exit: 'EXIT',
+      }
+      return <span className="text-[11px] font-mono text-zinc-400">{labels[val] ?? val}</span>
+    },
+  }),
+  columnHelper.accessor('exitReason', {
+    header: 'Reason',
+    size: 85,
+    cell: (info) => {
+      const val = info.getValue()
+      if (!val) return <span className="text-zinc-500">—</span>
+      return <span className="text-[11px] font-mono text-zinc-400">{val}</span>
+    },
+  }),
+  columnHelper.accessor('holdingDays', {
+    header: 'Days',
+    size: 45,
+    meta: { align: 'right' },
+    cell: (info) => {
+      const val = info.getValue()
+      return <span className="tabular-nums text-zinc-400">{val ?? '—'}</span>
     },
   }),
 ]

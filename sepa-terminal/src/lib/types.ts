@@ -172,6 +172,8 @@ export interface ChartOverlays {
   sma50: boolean
   sma150: boolean
   sma200: boolean
+  ema21: boolean
+  trail10Low: boolean
   refLines: boolean
   rsLine: boolean
   vcpBands: boolean
@@ -182,17 +184,18 @@ export interface ChartOverlays {
 export interface BacktestParams {
   startDate: string
   endDate: string
-  exitMode: 'v1_fixed' | 'v2_trail_10d' | 'v2_trail_21ema'
+  exitMode: 'v1_fixed' | 'v2_trail_10d' | 'v2_trail_21ema' | 'v3_trail_pct' | 'minervini_phased'
   targetR: number | null
   pendingDays: number
   maxHoldDays: number
   trailActivationR: number
+  exitEngine: 'legacy' | 'minervini_phased'
 }
 
 export interface BacktestTrade {
   symbol: string
   signalDate: string
-  status: 'not_filled' | 'stopped' | 'target' | 'time_stop' | 'incomplete_data' | 'skipped_overlap' | 'skipped_split'
+  status: 'not_filled' | 'stopped' | 'target' | 'time_stop' | 'incomplete_data' | 'skipped_overlap' | 'skipped_split' | 'dead_money' | 'skipped_portfolio'
   entryRef: number
   stop: number
   pivot: number | null
@@ -206,6 +209,13 @@ export interface BacktestTrade {
   maeR: number | null
   mfeR: number | null
   givebackPct: number | null
+  exitPhase: string | null
+  exitReason: string | null
+  partialExitPrice: number | null
+  partialExitDate: string | null
+  partialExitR: number | null
+  partialExitPct: number | null
+  trailModeUsed: string | null
 }
 
 export interface BacktestSummary {
@@ -227,8 +237,18 @@ export interface BacktestSummary {
   avgMfeR: number | null
   avgMaeR: number | null
   avgGivebackPct: number | null
-  skippedSplitCount: number
   exitMode: string
+  breakevenExits: number
+  partialProfitExits: number
+  trailExits: number
+  tightenExits: number
+  climaxSells: number
+  extensionSells: number
+  avgPartialR: number | null
+  pctReachingBreakeven: number
+  pctReachingPartial: number
+  pctReachingTrail: number
+  exitEngine: string
 }
 
 export interface EquityCurvePoint {

@@ -30,6 +30,7 @@ export function useRunBacktest() {
         pending_days: params.pendingDays,
         max_hold_days: params.maxHoldDays,
         trail_activation_r: params.trailActivationR,
+        exit_engine: params.exitEngine,
       }
       const raw = await apiFetch<unknown>('/backtest/run', {
         method: 'POST',
