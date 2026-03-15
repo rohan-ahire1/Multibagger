@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from sepa_scanner.api.deps import get_duckdb_store, get_parquet_store, get_settings
 from sepa_scanner.backtest.engine import simulate_breakout_backtest
 from sepa_scanner.backtest.metrics import build_equity_curve, summarize_backtest
+from sepa_scanner.backtest.signal_analysis import analyze_signal_quality
 from sepa_scanner.backtest.models import BacktestParams, ExitMode
 from sepa_scanner.backtest.queries import get_backtest_ohlcv, get_backtest_signals
 from sepa_scanner.settings import AppSettings
@@ -80,6 +81,9 @@ def run_backtest(
     ohlcv_df = get_backtest_ohlcv(parquet, symbols, req.start_date, extended_end)
 
     result = simulate_breakout_backtest(signals_df, ohlcv_df, params)
+    signal_analysis = analyze_signal_quality(
+        signals_df, ohlcv_df, pending_days=req.pending_days
+    )
     summary = summarize_backtest(result.trades, exit_mode=params.exit_mode)
     equity_curve = build_equity_curve(result.trades)
 
@@ -106,6 +110,7 @@ def run_backtest(
         "summary": summary_dict,
         "trades": trades_json,
         "equity_curve": equity_json,
+        "signal_analysis": signal_analysis,
     }
 
     cache = _cache_path(settings)
