@@ -13,6 +13,8 @@ interface ScannerTableProps {
   selectedId: string | null
   onSelect: (id: string) => void
   isLoading?: boolean
+  error?: Error | null
+  onRetry?: () => void
 }
 
 const columnHelper = createColumnHelper<SetupRow>()
@@ -92,7 +94,14 @@ const columns = [
   }),
 ]
 
-export function ScannerTable({ rows, selectedId, onSelect, isLoading }: ScannerTableProps) {
+export function ScannerTable({
+  rows,
+  selectedId,
+  onSelect,
+  isLoading,
+  error,
+  onRetry,
+}: ScannerTableProps) {
   const table = useReactTable({
     data: rows,
     columns,
@@ -107,6 +116,22 @@ export function ScannerTable({ rows, selectedId, onSelect, isLoading }: ScannerT
           <div className="w-4 h-4 border-2 border-text-dim border-t-green rounded-full animate-spin" />
           Loading signals...
         </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-text-muted text-sm px-4">
+        <div>Failed to load signals for this date.</div>
+        {onRetry && (
+          <button
+            onClick={onRetry}
+            className="text-xs px-3 py-1 rounded border border-border-strong hover:border-green hover:text-text-primary transition-colors"
+          >
+            Retry
+          </button>
+        )}
       </div>
     )
   }

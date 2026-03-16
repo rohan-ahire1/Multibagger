@@ -69,34 +69,6 @@ export interface OHLCVBar {
   volume: number
 }
 
-// --- Market Context (mock for now) ---
-export interface MarketRegime {
-  regime: 'bull' | 'caution' | 'defensive'
-  regimeLabel: string
-  nifty50Price: number
-  nifty50Change: number
-  nifty50ChangePct: number
-  niftyVs200dma: number
-  breadthAbove50d: number
-  breadthAbove200d: number
-  indiaVix: number
-  fiiToday: number // crores
-  diiToday: number
-  fii5d: number
-  dii5d: number
-  newHighsMinusLows: number
-  signalCountBreakout: number
-  signalCountWatch: number
-}
-
-export interface SectorPerformance {
-  sector: string
-  change1m: number
-  change3m: number
-  change6m: number
-  rrqQuadrant: 'leading' | 'weakening' | 'lagging' | 'improving'
-}
-
 // --- Diagnostics / Analysis ---
 export interface TrendTemplateCondition {
   label: string
@@ -121,52 +93,8 @@ export interface VCPMetrics {
   breakoutVolMult: number
 }
 
-// --- Portfolio ---
-export type PositionStage =
-  | 'shortlisted'
-  | 'watching'
-  | 'open'
-  | 'managing'
-  | 'closed'
-export type StopMethod = 'initial' | 'breakeven' | '21ema' | '10dlow'
-
-export interface Position {
-  id: string
-  symbol: string
-  sector: string
-  entryDate: string
-  entryPrice: number
-  shares: number
-  initialStop: number
-  currentStop: number
-  stopMethod: StopMethod
-  stage: PositionStage
-  currentPrice: number
-  unrealizedPnl: number
-  rMultiple: number
-  daysHeld: number
-  exitPrice?: number
-  exitDate?: string
-  exitReason?: string
-}
-
-export interface PortfolioStats {
-  portfolioValue: number
-  capitalBase: number
-  unrealizedPnl: number
-  unrealizedPnlPct: number
-  openPositions: number
-  openSectors: number
-  capitalAtRiskPct: number
-  capitalAtRiskAmt: number
-  avgR: number
-  closedTrades: number
-  winRate: number
-  expectancy: number
-}
-
 // --- Chart config ---
-export type ChartTimeframe = 'D' | 'W' | 'M'
+export type ChartTimeframe = 'D' | 'W'
 
 export interface ChartOverlays {
   sma50: boolean
@@ -175,8 +103,6 @@ export interface ChartOverlays {
   ema21: boolean
   trail10Low: boolean
   refLines: boolean
-  rsLine: boolean
-  vcpBands: boolean
 }
 
 // --- Backtest types ---
@@ -184,12 +110,12 @@ export interface ChartOverlays {
 export interface BacktestParams {
   startDate: string
   endDate: string
-  exitMode: 'v1_fixed' | 'v2_trail_10d' | 'v2_trail_21ema' | 'v3_trail_pct' | 'minervini_phased'
+  exitMode: 'minervini_phased'
   targetR: number | null
   pendingDays: number
   maxHoldDays: number
   trailActivationR: number
-  exitEngine: 'legacy' | 'minervini_phased'
+  exitEngine: 'minervini_phased'
 }
 
 export interface BacktestTrade {
@@ -260,11 +186,69 @@ export interface EquityCurvePoint {
   drawdown: number
 }
 
+export interface DayReachedBreakdown {
+  day: number
+  count: number
+  pctOfReached: number
+}
+
+export interface PerDayReturn {
+  day: number
+  avgReturnPct: number
+  positiveCount: number
+  total: number
+  positivePct: number
+}
+
+export interface GapAnalysis {
+  gapUpCount: number
+  total: number
+  gapUpPct: number
+  avgGapPct: number
+  bigGapUpCount: number
+  bigGapDownCount: number
+}
+
+export interface UnfilledAnalysis {
+  count: number
+  avgMaxGainPct: number
+  avgLastDayReturnPct: number
+  profitableAtLastDay: number
+  profitableAtLastDayPct: number
+}
+
+export interface PostEntryReturn {
+  day: number
+  avgReturnPct: number
+  profitableCount: number
+  total: number
+  profitablePct: number
+}
+
+export interface SignalAnalysis {
+  totalWithData: number
+  pivotReached: number
+  pivotNotReached: number
+  pivotReachedPct: number
+  dayReachedBreakdown: DayReachedBreakdown[]
+  profitableAtLastDay: number
+  profitableAtLastDayPct: number
+  avgLastDayReturnPct: number
+  medianLastDayReturnPct: number
+  avgMaxGainPct: number
+  avgMaxLossPct: number
+  perDayReturns: PerDayReturn[]
+  gapAnalysis: GapAnalysis
+  unfilledAnalysis: UnfilledAnalysis
+  postEntryReturns?: PostEntryReturn[]
+}
+
 export interface BacktestReport {
   params: BacktestParams
   summary: BacktestSummary
   trades: BacktestTrade[]
   equityCurve: EquityCurvePoint[]
+  signalAnalysis?: SignalAnalysis
 }
 
 export interface SymbolSignalHistory {

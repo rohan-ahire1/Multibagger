@@ -10,10 +10,9 @@ export interface SelectedTrade {
 export const DATA_START_DATE = '2010-01-01'
 
 function defaultParams(): BacktestParams {
-  const now = new Date()
   return {
     startDate: DATA_START_DATE,
-    endDate: now.toISOString().slice(0, 10),
+    endDate: DATA_START_DATE,
     exitMode: 'minervini_phased',
     targetR: null,
     pendingDays: 5,

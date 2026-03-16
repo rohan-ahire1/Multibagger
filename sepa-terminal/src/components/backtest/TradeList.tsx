@@ -60,52 +60,35 @@ const columns = [
       <span className="tabular-nums text-zinc-400">{formatDate(info.getValue())}</span>
     ),
   }),
-  columnHelper.accessor('entryPrice', {
-    header: 'Entry',
-    size: 70,
-    meta: { align: 'right' },
-    cell: (info) => {
-      const val = info.getValue()
-      return (
-        <span className="tabular-nums text-zinc-300">
-          {val != null ? formatPrice(val) : '—'}
-        </span>
-      )
-    },
-  }),
-  columnHelper.accessor('exitPrice', {
-    header: 'Exit',
-    size: 70,
-    meta: { align: 'right' },
-    cell: (info) => {
-      const val = info.getValue()
-      return (
-        <span className="tabular-nums text-zinc-300">
-          {val != null ? formatPrice(val) : '—'}
-        </span>
-      )
-    },
-  }),
   columnHelper.accessor('returnPct', {
-    header: 'P&L%',
-    size: 60,
+    header: 'Return %',
+    size: 78,
     meta: { align: 'right' },
     cell: (info) => {
       const val = info.getValue()
       if (val == null) return <span className="text-zinc-500">—</span>
       const color = val >= 0 ? 'text-green-400' : 'text-red-400'
-      return <span className={`tabular-nums font-mono ${color}`}>{formatPct(val)}</span>
+      return <span className={`tabular-nums font-mono font-semibold ${color}`}>{formatPct(val)}</span>
     },
   }),
   columnHelper.accessor('rMultiple', {
-    header: 'R',
-    size: 50,
+    header: 'R-Multiple',
+    size: 82,
     meta: { align: 'right' },
     cell: (info) => {
       const val = info.getValue()
       if (val == null) return <span className="text-zinc-500">—</span>
       const color = val >= 0 ? 'text-green-400' : 'text-red-400'
-      return <span className={`tabular-nums font-mono ${color}`}>{formatR(val)}</span>
+      return <span className={`tabular-nums font-mono font-semibold ${color}`}>{formatR(val)}</span>
+    },
+  }),
+  columnHelper.accessor('holdingDays', {
+    header: 'Days',
+    size: 52,
+    meta: { align: 'right' },
+    cell: (info) => {
+      const val = info.getValue()
+      return <span className="tabular-nums text-zinc-300">{val ?? '—'}</span>
     },
   }),
   columnHelper.accessor('status', {
@@ -133,6 +116,32 @@ const columns = [
       return <span className="text-[11px] font-mono text-zinc-400">{labels[val] ?? val}</span>
     },
   }),
+  columnHelper.accessor('entryPrice', {
+    header: 'Entry',
+    size: 70,
+    meta: { align: 'right' },
+    cell: (info) => {
+      const val = info.getValue()
+      return (
+        <span className="tabular-nums text-zinc-300">
+          {val != null ? formatPrice(val) : '—'}
+        </span>
+      )
+    },
+  }),
+  columnHelper.accessor('exitPrice', {
+    header: 'Exit',
+    size: 70,
+    meta: { align: 'right' },
+    cell: (info) => {
+      const val = info.getValue()
+      return (
+        <span className="tabular-nums text-zinc-300">
+          {val != null ? formatPrice(val) : '—'}
+        </span>
+      )
+    },
+  }),
   columnHelper.accessor('exitReason', {
     header: 'Reason',
     size: 85,
@@ -140,15 +149,6 @@ const columns = [
       const val = info.getValue()
       if (!val) return <span className="text-zinc-500">—</span>
       return <span className="text-[11px] font-mono text-zinc-400">{val}</span>
-    },
-  }),
-  columnHelper.accessor('holdingDays', {
-    header: 'Days',
-    size: 45,
-    meta: { align: 'right' },
-    cell: (info) => {
-      const val = info.getValue()
-      return <span className="tabular-nums text-zinc-400">{val ?? '—'}</span>
     },
   }),
 ]
@@ -230,13 +230,17 @@ export function TradeList({ trades }: TradeListProps) {
             const isSelected =
               selectedTrade?.symbol === trade.symbol &&
               selectedTrade?.signalDate === trade.signalDate
+            const pnl = trade.rMultiple ?? trade.returnPct ?? 0
+            const tone = pnl > 0
+              ? (isSelected ? 'bg-emerald-950/60' : 'bg-emerald-950/25 hover:bg-emerald-950/40')
+              : pnl < 0
+              ? (isSelected ? 'bg-red-950/60' : 'bg-red-950/20 hover:bg-red-950/35')
+              : (isSelected ? 'bg-zinc-800' : 'hover:bg-zinc-900')
             return (
               <tr
                 key={`${trade.symbol}-${trade.signalDate}`}
                 onClick={() => selectTrade({ symbol: trade.symbol, signalDate: trade.signalDate })}
-                className={`cursor-pointer text-xs transition-colors ${
-                  isSelected ? 'bg-zinc-800' : 'hover:bg-zinc-900'
-                }`}
+                className={`cursor-pointer text-xs transition-colors ${tone}`}
                 style={{ height: 34 }}
               >
                 {row.getVisibleCells().map((cell) => {

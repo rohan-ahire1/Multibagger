@@ -6,6 +6,7 @@ export function useSignals(date: string) {
   return useQuery({
     queryKey: ['signals', date],
     queryFn: () => apiFetch<Signal[]>(`/scanner/signals?date=${date}`),
+    enabled: Boolean(date),
     staleTime: 5 * 60 * 1000,
   })
 }
@@ -14,6 +15,7 @@ export function useWatchlist(date: string) {
   return useQuery({
     queryKey: ['watchlist', date],
     queryFn: () => apiFetch<WatchlistCandidate[]>(`/scanner/watchlist?date=${date}`),
+    enabled: Boolean(date),
     staleTime: 5 * 60 * 1000,
   })
 }

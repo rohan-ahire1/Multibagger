@@ -10,6 +10,7 @@ import { ParamBar } from '@/components/backtest/ParamBar'
 import { StatsSummary } from '@/components/backtest/StatsSummary'
 import { EquityCurve } from '@/components/backtest/EquityCurve'
 import { TradeList } from '@/components/backtest/TradeList'
+import { SignalAnalysis } from '@/components/backtest/SignalAnalysis'
 import { PriceChart } from '@/components/chart/PriceChart'
 import { ChartToolbar } from '@/components/chart/ChartToolbar'
 
@@ -120,6 +121,7 @@ export function Backtest() {
         {/* Left column — ~40% */}
         <div className="w-[40%] flex flex-col border-r border-zinc-800 overflow-hidden">
           <StatsSummary summary={result.summary} />
+          {result.signalAnalysis && <SignalAnalysis data={result.signalAnalysis} />}
           <TradeList trades={trades} />
         </div>
 

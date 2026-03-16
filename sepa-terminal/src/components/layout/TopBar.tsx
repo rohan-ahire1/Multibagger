@@ -1,27 +1,38 @@
+import { useBacktestStore } from '@/stores/backtest'
 import { useUIStore } from '@/stores/ui'
+import { formatDate } from '@/lib/formatters'
 
 const WORKSPACES = [
-  { id: 1 as const, label: 'Market + Scanner' },
-  { id: 2 as const, label: 'Analysis' },
-  { id: 3 as const, label: 'Portfolio' },
-  { id: 4 as const, label: 'Backtest', key: '4' },
+  { id: 1 as const, label: 'Scanner' },
+  { id: 2 as const, label: 'Backtest' },
 ]
 
-function formatDate(date: Date): string {
-  const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-  ]
-  return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`
+function describeActiveRange(
+  activeWorkspace: 1 | 2,
+  scanDate: string,
+  startDate: string,
+  endDate: string,
+): string {
+  if (activeWorkspace === 1) {
+    return scanDate ? `Scan ${formatDate(scanDate)}` : 'Scan date unavailable'
+  }
+  return `${formatDate(startDate)} to ${formatDate(endDate)}`
 }
 
 export function TopBar() {
   const activeWorkspace = useUIStore((s) => s.activeWorkspace)
   const setWorkspace = useUIStore((s) => s.setWorkspace)
+  const scanDate = useUIStore((s) => s.scanDate)
+  const backtestParams = useBacktestStore((s) => s.params)
+  const activeRange = describeActiveRange(
+    activeWorkspace,
+    scanDate,
+    backtestParams.startDate,
+    backtestParams.endDate,
+  )
 
   return (
     <div className="h-10 bg-bg-secondary border-b border-border-default px-4 flex items-center justify-between shrink-0">
-      {/* Left: Logo */}
       <div className="flex items-center gap-2">
         <span className="text-[15px] font-medium text-text-primary">
           SEPA Terminal
@@ -31,7 +42,6 @@ export function TopBar() {
         </span>
       </div>
 
-      {/* Center: Workspace tabs */}
       <div className="flex items-center gap-1">
         {WORKSPACES.map((ws) => {
           const isActive = activeWorkspace === ws.id
@@ -51,10 +61,9 @@ export function TopBar() {
         })}
       </div>
 
-      {/* Right: Date + shortcut hint */}
       <div className="flex items-center gap-3">
         <span className="text-xs text-text-muted">
-          {formatDate(new Date())}
+          {activeRange}
         </span>
         <kbd className="text-xs text-text-faint border border-border-strong rounded px-1.5 font-mono">
           Cmd+K

@@ -75,16 +75,25 @@ export function ChartToolbar({
 
       <Divider />
 
-      {/* Ref lines & RS line */}
+      {/* Trail overlays */}
+      <ToolbarButton
+        label="21E"
+        active={overlays.ema21}
+        onClick={() => onOverlayToggle('ema21')}
+      />
+      <ToolbarButton
+        label="10L"
+        active={overlays.trail10Low}
+        onClick={() => onOverlayToggle('trail10Low')}
+      />
+
+      <Divider />
+
+      {/* Ref lines */}
       <ToolbarButton
         label="Ref"
         active={overlays.refLines}
         onClick={() => onOverlayToggle('refLines')}
-      />
-      <ToolbarButton
-        label="RS"
-        active={overlays.rsLine}
-        onClick={() => onOverlayToggle('rsLine')}
       />
     </div>
   )

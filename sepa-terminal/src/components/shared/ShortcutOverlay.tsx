@@ -6,13 +6,12 @@ interface ShortcutGroup {
   shortcuts: { keys: string[]; description: string }[]
 }
 
-const workspace1Shortcuts: ShortcutGroup[] = [
+const scannerShortcuts: ShortcutGroup[] = [
   {
     title: 'Navigation',
     shortcuts: [
       { keys: ['J'], description: 'Next setup' },
       { keys: ['K'], description: 'Previous setup' },
-      { keys: ['Enter', '\u2192'], description: 'Open in analysis' },
     ],
   },
   {
@@ -21,61 +20,39 @@ const workspace1Shortcuts: ShortcutGroup[] = [
       { keys: ['S'], description: 'Shortlist' },
       { keys: ['X'], description: 'Reject' },
       { keys: ['W'], description: 'Watch' },
-      { keys: ['\u2318Z'], description: 'Undo last action' },
+      { keys: ['⌘Z'], description: 'Undo last action' },
     ],
   },
   {
     title: 'Other',
     shortcuts: [
       { keys: ['N'], description: 'Focus note' },
-      { keys: ['D'], description: 'Daily timeframe' },
-      { keys: ['\u21E7W'], description: 'Weekly timeframe' },
-      { keys: ['\u2318K'], description: 'Command palette' },
+      { keys: ['⌘K'], description: 'Command palette' },
       { keys: ['?'], description: 'Show shortcuts' },
     ],
   },
 ]
 
-const workspace2Shortcuts: ShortcutGroup[] = [
+const backtestShortcuts: ShortcutGroup[] = [
   {
     title: 'Navigation',
     shortcuts: [
-      { keys: ['Esc'], description: 'Back to scanner' },
+      { keys: ['J'], description: 'Next trade' },
+      { keys: ['K'], description: 'Previous trade' },
     ],
   },
   {
     title: 'Chart',
     shortcuts: [
       { keys: ['D'], description: 'Daily timeframe' },
-      { keys: ['\u21E7W'], description: 'Weekly timeframe' },
-      { keys: ['M'], description: 'Monthly timeframe' },
+      { keys: ['W'], description: 'Weekly timeframe' },
     ],
   },
   {
     title: 'Actions',
     shortcuts: [
-      { keys: ['S'], description: 'Shortlist' },
-      { keys: ['N'], description: 'Focus thesis' },
-      { keys: ['\u2318K'], description: 'Command palette' },
-      { keys: ['?'], description: 'Show shortcuts' },
-    ],
-  },
-]
-
-const workspace3Shortcuts: ShortcutGroup[] = [
-  {
-    title: 'Navigation',
-    shortcuts: [
-      { keys: ['J'], description: 'Next position' },
-      { keys: ['K'], description: 'Previous position' },
-    ],
-  },
-  {
-    title: 'Actions',
-    shortcuts: [
-      { keys: ['E'], description: 'Edit position (stub)' },
-      { keys: ['T'], description: 'Trail stop (stub)' },
-      { keys: ['\u2318K'], description: 'Command palette' },
+      { keys: ['R'], description: 'Run backtest' },
+      { keys: ['⌘K'], description: 'Command palette' },
       { keys: ['?'], description: 'Show shortcuts' },
     ],
   },
@@ -112,24 +89,22 @@ function ShortcutSection({ group }: { group: ShortcutGroup }) {
         {group.title}
       </h3>
       <div className="divide-y divide-border-subtle">
-        {group.shortcuts.map((s, i) => (
-          <ShortcutRow key={i} keys={s.keys} description={s.description} />
+        {group.shortcuts.map((shortcut, i) => (
+          <ShortcutRow key={i} keys={shortcut.keys} description={shortcut.description} />
         ))}
       </div>
     </div>
   )
 }
 
-const shortcutsByWorkspace: Record<number, ShortcutGroup[]> = {
-  1: workspace1Shortcuts,
-  2: workspace2Shortcuts,
-  3: workspace3Shortcuts,
+const shortcutsByWorkspace: Record<1 | 2, ShortcutGroup[]> = {
+  1: scannerShortcuts,
+  2: backtestShortcuts,
 }
 
-const workspaceLabels: Record<number, string> = {
-  1: 'Market + Scanner',
-  2: 'Analysis',
-  3: 'Portfolio',
+const workspaceLabels: Record<1 | 2, string> = {
+  1: 'Scanner',
+  2: 'Backtest',
 }
 
 export function ShortcutOverlay() {
@@ -146,7 +121,7 @@ export function ShortcutOverlay() {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [close])
 
-  const groups = shortcutsByWorkspace[activeWorkspace] ?? workspace1Shortcuts
+  const groups = shortcutsByWorkspace[activeWorkspace]
 
   return (
     <div

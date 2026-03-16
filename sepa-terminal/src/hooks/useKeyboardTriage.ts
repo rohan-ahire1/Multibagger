@@ -13,7 +13,6 @@ export function useKeyboardTriage(setupIds: string[]) {
   const watch = useReviewsStore((s) => s.watch)
   const undoLast = useReviewsStore((s) => s.undoLast)
   const scanDate = useUIStore((s) => s.scanDate)
-  const setWorkspace = useUIStore((s) => s.setWorkspace)
 
   const isInputFocused = useCallback(() => {
     const el = document.activeElement
@@ -72,14 +71,6 @@ export function useKeyboardTriage(setupIds: string[]) {
       if (sym) watch(sym, scanDate)
     },
     [scanDate, selectedSetupId]
-  )
-
-  useHotkeys(
-    'Enter, ArrowRight',
-    () => {
-      if (!isInputFocused() && selectedSetupId) setWorkspace(2)
-    },
-    [selectedSetupId]
   )
 
   useHotkeys('mod+z', () => {

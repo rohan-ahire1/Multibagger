@@ -4,7 +4,6 @@ import type { SetupRow, OHLCVBar } from '@/lib/types'
 import { formatPrice, formatPct } from '@/lib/formatters'
 import { useUIStore } from '@/stores/ui'
 import { useReviewsStore } from '@/stores/reviews'
-import { useMarketStore } from '@/stores/market'
 import { ChartToolbar } from '@/components/chart/ChartToolbar'
 import { PriceChart } from '@/components/chart/PriceChart'
 import { QualificationPanel } from '@/components/shared/QualificationPanel'
@@ -44,7 +43,6 @@ export function SetupDetailCard({
   const watch = useReviewsStore((s) => s.watch)
   const setNote = useReviewsStore((s) => s.setNote)
   const getReview = useReviewsStore((s) => s.getReview)
-  const regime = useMarketStore((s) => s.regime)
 
   if (!setup) {
     return (
@@ -89,14 +87,10 @@ export function SetupDetailCard({
     })
 
   const warnItems: Array<{ text: string }> = []
-  if (regime.breadthAbove50d < 50)
-    warnItems.push({ text: 'Market breadth deteriorating (<50% above 50d)' })
   if (setup.rsRank < 70)
     warnItems.push({ text: `RS Rank only ${Math.round(setup.rsRank)} — below threshold` })
   if (setup.volMult < 1.0)
     warnItems.push({ text: 'Volume below average — lack of conviction' })
-  if (regime.indiaVix > 20)
-    warnItems.push({ text: `India VIX elevated at ${regime.indiaVix.toFixed(1)}` })
 
   return (
     <div className="flex flex-col h-full overflow-hidden">

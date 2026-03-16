@@ -3,14 +3,14 @@ import { persist } from 'zustand/middleware'
 import type { ChartTimeframe, ChartOverlays } from '@/lib/types'
 
 interface UIStore {
-  activeWorkspace: 1 | 2 | 3 | 4
+  activeWorkspace: 1 | 2
   scanDate: string
   commandPaletteOpen: boolean
   shortcutOverlayOpen: boolean
   chartTimeframe: ChartTimeframe
   chartOverlays: ChartOverlays
   panelSizes: Record<string, number[]>
-  setWorkspace: (ws: 1 | 2 | 3 | 4) => void
+  setWorkspace: (ws: 1 | 2) => void
   setScanDate: (date: string) => void
   toggleCommandPalette: () => void
   toggleShortcutOverlay: () => void
@@ -23,7 +23,7 @@ export const useUIStore = create<UIStore>()(
   persist(
     (set) => ({
       activeWorkspace: 1,
-      scanDate: new Date().toISOString().slice(0, 10),
+      scanDate: '',
       commandPaletteOpen: false,
       shortcutOverlayOpen: false,
       chartTimeframe: 'D',
@@ -31,9 +31,9 @@ export const useUIStore = create<UIStore>()(
         sma50: true,
         sma150: true,
         sma200: true,
+        ema21: false,
+        trail10Low: false,
         refLines: true,
-        rsLine: false,
-        vcpBands: false,
       },
       panelSizes: {},
       setWorkspace: (ws) => set({ activeWorkspace: ws }),

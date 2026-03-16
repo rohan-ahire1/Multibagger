@@ -32,6 +32,30 @@ function computeSMA(data: OHLCVBar[], period: number) {
   return result
 }
 
+function computeEMA(data: OHLCVBar[], period: number) {
+  if (data.length === 0) return []
+  const k = 2 / (period + 1)
+  const result: { time: string; value: number }[] = []
+  let ema = data[0].close
+  for (let i = 0; i < data.length; i++) {
+    ema = data[i].close * k + ema * (1 - k)
+    if (i >= period - 1) {
+      result.push({ time: data[i].date, value: ema })
+    }
+  }
+  return result
+}
+
+function computeTrailingLow(data: OHLCVBar[], period: number) {
+  const result: { time: string; value: number }[] = []
+  for (let i = period - 1; i < data.length; i++) {
+    let low = data[i].low
+    for (let j = i - period + 1; j < i; j++) low = Math.min(low, data[j].low)
+    result.push({ time: data[i].date, value: low })
+  }
+  return result
+}
+
 function resampleWeekly(data: OHLCVBar[]): OHLCVBar[] {
   const weeks = new Map<string, OHLCVBar>()
   for (const bar of data) {
@@ -56,30 +80,10 @@ function resampleWeekly(data: OHLCVBar[]): OHLCVBar[] {
   return Array.from(weeks.values()).sort((a, b) => a.date.localeCompare(b.date))
 }
 
-function resampleMonthly(data: OHLCVBar[]): OHLCVBar[] {
-  const months = new Map<string, OHLCVBar>()
-  for (const bar of data) {
-    const key = bar.date.slice(0, 7) + '-01'
-
-    const existing = months.get(key)
-    if (existing) {
-      existing.high = Math.max(existing.high, bar.high)
-      existing.low = Math.min(existing.low, bar.low)
-      existing.close = bar.close
-      existing.volume += bar.volume
-    } else {
-      months.set(key, { ...bar, date: key })
-    }
-  }
-  return Array.from(months.values()).sort((a, b) => a.date.localeCompare(b.date))
-}
-
 function resample(data: OHLCVBar[], timeframe: ChartTimeframe): OHLCVBar[] {
   switch (timeframe) {
     case 'W':
       return resampleWeekly(data)
-    case 'M':
-      return resampleMonthly(data)
     default:
       return data
   }
@@ -94,9 +98,6 @@ function toBucketKey(dateStr: string, timeframe: ChartTimeframe): string {
     const monday = new Date(d)
     monday.setDate(diff)
     return monday.toISOString().slice(0, 10)
-  }
-  if (timeframe === 'M') {
-    return dateStr.slice(0, 7) + '-01'
   }
   return dateStr
 }
@@ -247,6 +248,27 @@ export function PriceChart({
       sma200Series.setData(computeSMA(resampled, 200))
     }
 
+    if (overlays.ema21) {
+      const ema21Series = chart.addSeries(LineSeries, {
+        color: '#a855f7',
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      })
+      ema21Series.setData(computeEMA(resampled, 21))
+    }
+
+    if (overlays.trail10Low) {
+      const trail10Series = chart.addSeries(LineSeries, {
+        color: '#f97316',
+        lineWidth: 1,
+        lineStyle: LineStyle.Dotted,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      })
+      trail10Series.setData(computeTrailingLow(resampled, 10))
+    }
+
     // Reference price lines
     if (overlays.refLines) {
       if (pivot != null) {
@@ -281,24 +303,7 @@ export function PriceChart({
       }
     }
 
-    // If signals exist, show ±2 years from the latest signal; otherwise show all
-    if (markers && markers.length > 0) {
-      const sorted = [...markers].sort((a, b) =>
-        (a.time as string).localeCompare(b.time as string)
-      )
-      const latest = sorted[sorted.length - 1].time as string
-      const anchor = new Date(latest + 'T00:00:00')
-      const from = new Date(anchor)
-      from.setFullYear(from.getFullYear() - 2)
-      const to = new Date(anchor)
-      to.setFullYear(to.getFullYear() + 2)
-      chart.timeScale().setVisibleRange({
-        from: from.toISOString().slice(0, 10) as unknown as Time,
-        to: to.toISOString().slice(0, 10) as unknown as Time,
-      })
-    } else {
-      chart.timeScale().fitContent()
-    }
+    chart.timeScale().fitContent()
 
     // Resize observer — tracks both width and height
     const resizeObserver = new ResizeObserver((entries) => {
