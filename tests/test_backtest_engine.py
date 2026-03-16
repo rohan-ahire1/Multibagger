@@ -55,7 +55,9 @@ def test_backtest_fills_gap_up_at_next_open() -> None:
         ]
     )
 
-    result = simulate_breakout_backtest(signals, prices, BacktestParams(max_hold_days=2))
+    result = simulate_breakout_backtest(
+        signals, prices, BacktestParams(max_hold_days=2, exit_mode=ExitMode.V1_FIXED)
+    )
 
     trade = result.trades[0]
     assert trade.entry_date == date(2026, 3, 3)
@@ -85,7 +87,9 @@ def test_backtest_fills_intraday_at_entry_reference() -> None:
         ]
     )
 
-    result = simulate_breakout_backtest(signals, prices, BacktestParams(max_hold_days=2))
+    result = simulate_breakout_backtest(
+        signals, prices, BacktestParams(max_hold_days=2, exit_mode=ExitMode.V1_FIXED)
+    )
 
     trade = result.trades[0]
     assert trade.entry_date == date(2026, 3, 3)
@@ -115,7 +119,9 @@ def test_backtest_marks_signal_not_filled_when_trigger_never_hits() -> None:
         ]
     )
 
-    result = simulate_breakout_backtest(signals, prices, BacktestParams(pending_days=2))
+    result = simulate_breakout_backtest(
+        signals, prices, BacktestParams(pending_days=2, exit_mode=ExitMode.V1_FIXED)
+    )
 
     trade = result.trades[0]
     assert trade.status == "not_filled"
@@ -146,7 +152,9 @@ def test_backtest_exits_at_stop_when_low_breaks_after_entry() -> None:
         ]
     )
 
-    result = simulate_breakout_backtest(signals, prices, BacktestParams(max_hold_days=5))
+    result = simulate_breakout_backtest(
+        signals, prices, BacktestParams(max_hold_days=5, exit_mode=ExitMode.V1_FIXED)
+    )
 
     trade = result.trades[0]
     assert trade.status == "stopped"
@@ -177,7 +185,9 @@ def test_backtest_exits_gap_below_stop_at_open() -> None:
         ]
     )
 
-    result = simulate_breakout_backtest(signals, prices, BacktestParams(max_hold_days=5))
+    result = simulate_breakout_backtest(
+        signals, prices, BacktestParams(max_hold_days=5, exit_mode=ExitMode.V1_FIXED)
+    )
 
     trade = result.trades[0]
     assert trade.status == "stopped"
@@ -207,7 +217,9 @@ def test_backtest_gap_stop_counts_open_but_not_post_exit_intraday_range_for_excu
         ]
     )
 
-    result = simulate_breakout_backtest(signals, prices, BacktestParams(max_hold_days=5))
+    result = simulate_breakout_backtest(
+        signals, prices, BacktestParams(max_hold_days=5, exit_mode=ExitMode.V1_FIXED)
+    )
 
     trade = result.trades[0]
     assert trade.status == "stopped"
@@ -315,7 +327,9 @@ def test_backtest_uses_time_stop_when_no_other_exit_occurs() -> None:
         ]
     )
 
-    result = simulate_breakout_backtest(signals, prices, BacktestParams(max_hold_days=3))
+    result = simulate_breakout_backtest(
+        signals, prices, BacktestParams(max_hold_days=3, exit_mode=ExitMode.V1_FIXED)
+    )
 
     trade = result.trades[0]
     assert trade.status == "time_stop"
@@ -368,7 +382,9 @@ def test_backtest_skips_later_signal_when_same_symbol_trade_is_still_open() -> N
         ]
     )
 
-    result = simulate_breakout_backtest(signals, prices, BacktestParams(max_hold_days=4))
+    result = simulate_breakout_backtest(
+        signals, prices, BacktestParams(max_hold_days=4, exit_mode=ExitMode.V1_FIXED)
+    )
 
     assert len(result.trades) == 2
     assert result.trades[0].status == "time_stop"
@@ -420,7 +436,9 @@ def test_backtest_allows_same_symbol_signal_on_prior_trade_exit_date() -> None:
         ]
     )
 
-    result = simulate_breakout_backtest(signals, prices, BacktestParams(max_hold_days=2))
+    result = simulate_breakout_backtest(
+        signals, prices, BacktestParams(max_hold_days=2, exit_mode=ExitMode.V1_FIXED)
+    )
 
     assert len(result.trades) == 2
     assert result.trades[0].status == "stopped"
@@ -452,7 +470,9 @@ def test_backtest_force_closes_entered_trade_at_last_close_when_history_ends() -
         ]
     )
 
-    result = simulate_breakout_backtest(signals, prices, BacktestParams(max_hold_days=10))
+    result = simulate_breakout_backtest(
+        signals, prices, BacktestParams(max_hold_days=10, exit_mode=ExitMode.V1_FIXED)
+    )
 
     trade = result.trades[0]
     assert trade.status == "incomplete_data"
@@ -763,7 +783,7 @@ def test_backtest_dead_money_exit_when_no_progress() -> None:
 
     result = simulate_breakout_backtest(
         signals, prices,
-        BacktestParams(max_hold_days=10, dead_money_days=3),
+        BacktestParams(max_hold_days=10, dead_money_days=3, exit_mode=ExitMode.V1_FIXED),
     )
 
     trade = result.trades[0]
@@ -789,7 +809,7 @@ def test_backtest_dead_money_disabled_when_none() -> None:
 
     result = simulate_breakout_backtest(
         signals, prices,
-        BacktestParams(max_hold_days=3, dead_money_days=None),
+        BacktestParams(max_hold_days=3, dead_money_days=None, exit_mode=ExitMode.V1_FIXED),
     )
 
     trade = result.trades[0]
@@ -816,7 +836,7 @@ def test_backtest_dead_money_skipped_when_breakeven_reached() -> None:
 
     result = simulate_breakout_backtest(
         signals, prices,
-        BacktestParams(max_hold_days=3, dead_money_days=2),
+        BacktestParams(max_hold_days=3, dead_money_days=2, exit_mode=ExitMode.V1_FIXED),
     )
 
     trade = result.trades[0]

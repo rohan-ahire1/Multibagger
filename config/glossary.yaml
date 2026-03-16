@@ -1,0 +1,177 @@
+# SEPA Strategy Glossary — term definitions for the teacher/tooltip system.
+# Sourced from docs/STRATEGY.md.  Keep alphabetical.
+
+terms:
+  ADV50:
+    short: "50-day Average Daily Value"
+    detail: >
+      The average rupee value traded per day over the last 50 sessions.
+      Used as a liquidity filter — stocks below the minimum ADV50
+      threshold are excluded from the universe because they're too
+      illiquid for reliable swing entries.
+
+  ATR:
+    short: "Average True Range"
+    detail: >
+      A measure of daily price volatility, computed using Wilder's
+      exponential smoothing over 14 days. In the VCP setup, declining
+      ATR signals that volatility is contracting — a hallmark of a
+      tightening base before a potential breakout.
+
+  Base Depth:
+    short: "Correction depth from base high"
+    detail: >
+      How far price has pulled back from its recent high within the
+      base period (40 days). Shallower bases (≤30%) indicate controlled
+      corrections where institutional holders are not aggressively
+      selling — a sign of accumulation.
+
+  Breakout:
+    short: "Price clears pivot on volume"
+    detail: >
+      A BREAKOUT signal fires when price closes above the pivot level
+      (prior resistance) on at least 1.5x average volume. This is the
+      actual entry trigger — it means buyers have overwhelmed supply at
+      the resistance level with institutional-grade participation.
+
+  Entry Reference:
+    short: "Entry price with buffer"
+    detail: >
+      The pivot price plus a small buffer (0.1%). This is the
+      reference price used for risk calculations. The buffer avoids
+      false signals from price barely touching the pivot.
+
+  Market Filter:
+    short: "Benchmark health check"
+    detail: >
+      A simple check on NIFTYBEES to confirm the broad market is
+      favorable. When the market filter is OFF, new BREAKOUT signals
+      are suppressed because breakouts in a weak market have lower
+      success rates.
+
+  Near Pivot:
+    short: "Distance from breakout level"
+    detail: >
+      The percentage distance between the current price and the pivot
+      (prior resistance). Stocks within 3% of their pivot are
+      considered "near pivot" — they're closest to a potential breakout
+      and deserve the most attention.
+
+  Pivot:
+    short: "Prior resistance / breakout level"
+    detail: >
+      The highest high over the base period (40 days), shifted by one
+      day to exclude today. This represents the level where prior
+      selling pressure was strongest. A close above this level on
+      volume signals that supply has been absorbed.
+
+  R per Share:
+    short: "Risk per share in rupees"
+    detail: >
+      The difference between the entry reference and the stop price.
+      This is the "R" unit used for position sizing and measuring
+      trade outcomes. A 2R winner means the trade gained twice the
+      initial risk.
+
+  Range10:
+    short: "10-day price range"
+    detail: >
+      The high-low range over the last 10 days as a percentage of the
+      close price. A tighter range (≤8%) indicates the base is
+      contracting — price is coiling, which often precedes a
+      directional move.
+
+  Relative Strength:
+    short: "Performance vs benchmark"
+    detail: >
+      A weighted measure of how much a stock has outperformed
+      NIFTYBEES over 63, 126, and 252 days. The RS rank is the
+      percentile among all eligible stocks. An RS rank of 82 means
+      the stock has outperformed 82% of the universe — it's a
+      relative strength leader.
+
+  RS Rank:
+    short: "Relative strength percentile"
+    detail: >
+      The cross-sectional percentile (0–100) of a stock's weighted
+      relative strength score versus all eligible symbols. Minimum
+      threshold is 70 — only the top 30% of the market by relative
+      performance qualifies.
+
+  SMA:
+    short: "Simple Moving Average"
+    detail: >
+      The arithmetic mean of closing prices over a period. The scanner
+      uses SMA50 (short-term), SMA150 (medium-term), and SMA200
+      (long-term). When these averages are stacked bullishly
+      (50 > 150 > 200 and all rising), the stock is in a Stage 2
+      uptrend.
+
+  Stage 2:
+    short: "Confirmed uptrend phase"
+    detail: >
+      In Stan Weinstein's stage analysis, Stage 2 is the advancing
+      phase where a stock is trending higher with all moving averages
+      aligned bullishly. This is the only stage where the SEPA
+      strategy looks for entries — it avoids Stage 1 (basing),
+      Stage 3 (topping), and Stage 4 (declining).
+
+  Stop Loss:
+    short: "Maximum loss exit price"
+    detail: >
+      The price at which a trade should be exited to cap losses. The
+      scanner uses the higher of two levels — the structural stop
+      (10-day low) and the maximum-loss stop (entry minus 8%) — to
+      always use the tighter stop.
+
+  Trend Template:
+    short: "9-condition uptrend filter"
+    detail: >
+      A set of 9 quantitative conditions that must ALL be true to
+      confirm a Stage 2 uptrend. These check that price is above key
+      moving averages, the averages are properly stacked, the 200-day
+      SMA is rising, and price is well above its yearly low while near
+      its yearly high.
+
+  VCP:
+    short: "Volatility Contraction Pattern"
+    detail: >
+      A base pattern where price range tightens and volume dries up
+      over successive contractions. This indicates sellers are being
+      absorbed by patient buyers. The scanner checks 6 conditions for
+      a VCP: tight range, volume dry-up, declining ATR, ATR
+      contraction, non-extension, and contained base depth.
+
+  Volume Dry-Up:
+    short: "Volume contraction ratio"
+    detail: >
+      The ratio of 10-day average volume to 50-day average volume
+      (vol10 / vol50). A ratio below 0.80 means recent volume is
+      significantly below normal — sellers are drying up, which is
+      bullish when combined with a tight price range.
+
+  Volume Multiplier:
+    short: "Today's volume vs 50-day average"
+    detail: >
+      The ratio of today's volume to the 50-day average volume. For a
+      BREAKOUT signal, this must be at least 1.5x — strong volume
+      confirms that institutional buyers are participating in the move
+      above resistance.
+
+  Watch:
+    short: "Near-pivot setup alert"
+    detail: >
+      A WATCH signal fires when a stock passes all trend template
+      conditions, has strong relative strength, meets VCP setup
+      criteria, and is within 3% of its pivot — but hasn't broken out
+      yet. It means the stock is worth monitoring for an imminent
+      breakout.
+
+  Watchlist:
+    short: "Broad setup candidate pool"
+    detail: >
+      All stocks that pass the trend template, relative strength, and
+      VCP setup conditions, regardless of distance from pivot. Up to
+      300 candidates, ranked by proximity to pivot and RS rank. This
+      is the broader pool from which WATCH and BREAKOUT signals are
+      derived.

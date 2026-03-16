@@ -1,0 +1,15 @@
+.venv/
+.cursor/
+.claude/
+
+.pytest_cache/
+**/__pycache__/
+*.py[cod]
+.DS_Store
+
+data/
+mean_reversion_rankings.csv
+
+sepa-terminal/node_modules/
+sepa-terminal/dist/
+sepa-terminal/.superpowers/

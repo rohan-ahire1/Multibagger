@@ -15,7 +15,7 @@ import typer
 
 from sepa_scanner.backtest.engine import simulate_breakout_backtest
 from sepa_scanner.backtest.metrics import build_equity_curve, summarize_backtest
-from sepa_scanner.backtest.models import BacktestParams, BacktestReport
+from sepa_scanner.backtest.models import BacktestParams, BacktestReport, ExitMode
 from sepa_scanner.alerts.console import ConsoleAlertChannel
 from sepa_scanner.alerts.telegram import TelegramAlertChannel
 from sepa_scanner.calendar import (
@@ -24,13 +24,7 @@ from sepa_scanner.calendar import (
     previous_trading_days,
     trading_days_between,
 )
-from sepa_scanner.data_sources.nse_bhavcopy import (
-    DownloadMeta,
-    LEGACY_CUTOFF,
-    NseBhavcopyClient,
-    parse_bhavcopy_zip,
-    parse_legacy_bhavcopy_zip,
-)
+from sepa_scanner.data_sources.yfinance_adjusted import download_adjusted_history
 from sepa_scanner.logging_setup import setup_logging
 from sepa_scanner.settings import AppSettings, load_settings
 from sepa_scanner.storage.duckdb_store import DuckDbStore
@@ -38,6 +32,7 @@ from sepa_scanner.storage.parquet_store import ParquetOhlcvStore
 from sepa_scanner.strategy.signal_engine import ScanResult, scan_for_date
 from sepa_scanner.types import DownloadManifest, RunLog, Signal, WatchlistCandidate
 from sepa_scanner.backtest.queries import get_backtest_ohlcv, get_backtest_signals
+from sepa_scanner.utils.http import bootstrap_nse_session, build_nse_session
 from sepa_scanner.utils.io import ensure_directory, export_dataframe
 
 
@@ -53,7 +48,7 @@ def resolve_settings(config_dir: Path | None = None) -> AppSettings:
 
 def _stores(settings: AppSettings) -> tuple[ParquetOhlcvStore, DuckDbStore]:
     data_dir = ensure_directory(settings.runtime.data_dir)
-    parquet_store = ParquetOhlcvStore(root=ensure_directory(data_dir / "ohlcv_parquet"))
+    parquet_store = ParquetOhlcvStore(root=ensure_directory(data_dir / "yf_adjusted"))
     duckdb_store = DuckDbStore(db_path=ensure_directory(data_dir / "db") / "sepa.duckdb")
     return parquet_store, duckdb_store
 
@@ -151,41 +146,16 @@ def run_backfill_command(
 ) -> list[date]:
     settings = resolve_settings(config_dir)
     parquet_store, _ = _stores(settings)
-    client = NseBhavcopyClient(settings)
-    raw_dir = _raw_dir(settings)
-    allowed = settings.universe.allowed_series
-    dates = trading_days_between(start, end)
-
-    from rich.progress import Progress
-
-    def _download(trade_date: date) -> tuple[date, Path | None]:
-        result = client.download_for_date(
-            trade_date, raw_dir=raw_dir, final_only=final_only, sleep_seconds=sleep_seconds,
-        )
-        return trade_date, result[0] if result else None
-
-    downloaded: list[tuple[date, Path]] = []
-    with Progress() as progress:
-        task = progress.add_task("Downloading bhavcopy", total=len(dates))
-        with ThreadPoolExecutor(max_workers=3) as pool:
-            futures = {pool.submit(_download, d): d for d in dates}
-            for future in as_completed(futures):
-                trade_date, archive = future.result()
-                if archive is not None:
-                    downloaded.append((trade_date, archive))
-                progress.advance(task)
-
-    downloaded.sort(key=lambda x: x[0])
-    processed: list[date] = []
-    with Progress() as progress:
-        task = progress.add_task("Parsing bhavcopy", total=len(downloaded))
-        for trade_date, archive in downloaded:
-            progress.update(task, description=f"Parse {trade_date}")
-            parser = parse_legacy_bhavcopy_zip if trade_date < LEGACY_CUTOFF else parse_bhavcopy_zip
-            parquet_store.upsert(parser(archive, allowed_series=allowed))
-            processed.append(trade_date)
-            progress.advance(task)
-    return processed
+    symbols = _resolve_runtime_symbols(settings, parquet_store)
+    frame, _failed = download_adjusted_history(
+        symbols,
+        start=start,
+        end=end + timedelta(days=1),
+    )
+    if frame.is_empty():
+        return []
+    parquet_store.upsert(frame)
+    return sorted(frame["date"].unique().to_list())
 
 
 def run_update_command(
@@ -194,43 +164,48 @@ def run_update_command(
     days: int,
     target_date: date | None,
     force: bool,
-) -> tuple[date, DownloadMeta | None]:
+) -> tuple[date, None]:
     settings = resolve_settings(config_dir)
     parquet_store, _ = _stores(settings)
-    client = NseBhavcopyClient(settings)
-    latest_meta: DownloadMeta | None = None
+    symbols = _resolve_runtime_symbols(settings, parquet_store)
 
     if target_date is not None:
-        target_dates = [target_date]
-        latest_date = target_date
+        start_date = target_date
+        end_date = target_date + timedelta(days=1)
     else:
-        latest_date, latest_archive, latest_meta = client.download_latest(
-            _raw_dir(settings), force=force
-        )
-        parquet_store.upsert(
-            parse_bhavcopy_zip(latest_archive, allowed_series=settings.universe.allowed_series)
-        )
-        target_dates = previous_trading_days(latest_date, days)
+        end_anchor = date.today()
+        start_date = previous_trading_days(end_anchor, days)[0]
+        end_date = end_anchor + timedelta(days=1)
 
-    from rich.progress import Progress
+    frame, _failed = download_adjusted_history(
+        symbols,
+        start=start_date,
+        end=end_date,
+    )
+    if not frame.is_empty():
+        parquet_store.upsert(frame)
+        return frame["date"].max(), None
 
-    with Progress() as progress:
-        task = progress.add_task("Updating OHLCV", total=len(target_dates))
-        for trade_date in target_dates:
-            progress.update(task, description=f"Update {trade_date}")
-            result = client.download_for_date(
-                trade_date,
-                raw_dir=_raw_dir(settings),
-                final_only=False,
-                force=force,
-            )
-            if result is not None:
-                archive, _meta = result
-                parquet_store.upsert(
-                    parse_bhavcopy_zip(archive, allowed_series=settings.universe.allowed_series)
-                )
-            progress.advance(task)
-    return latest_date, latest_meta
+    latest_existing = parquet_store.latest_date()
+    if latest_existing is not None:
+        return latest_existing, None
+    return target_date or start_date, None
+
+
+def _resolve_runtime_symbols(
+    settings: AppSettings,
+    parquet_store: ParquetOhlcvStore,
+) -> list[str]:
+    if settings.manual_universe:
+        return sorted(set(settings.manual_universe))
+
+    existing = parquet_store.read_frame(columns=["symbol"])
+    if not existing.is_empty():
+        return sorted(existing["symbol"].unique().to_list())
+
+    raise typer.BadParameter(
+        "No full symbol universe available. Populate config/universe.yaml or seed data/yf_adjusted/ohlcv_all.parquet first."
+    )
 
 
 def _build_channels(settings: AppSettings, *, no_telegram: bool) -> list:
@@ -254,17 +229,20 @@ def run_scan_command(
     export_csv: bool,
     no_telegram: bool,
     force: bool = False,
-    download_meta: DownloadMeta | None = None,
+    download_meta: object | None = None,
 ) -> ScanResult:
     settings = resolve_settings(config_dir)
     parquet_store, duckdb_store = _stores(settings)
-    client = NseBhavcopyClient(settings)
     actual_scan_date = scan_date or parquet_store.latest_date()
     if actual_scan_date is None:
         raise typer.Exit(code=1)
 
     cache_path = settings.runtime.data_dir / "cache" / "nse_holidays_trading.json"
-    cm_holidays = load_cm_holidays(client.session, cache_path)
+    holiday_session = bootstrap_nse_session(
+        build_nse_session(),
+        timeout=settings.data.http_timeout_sec,
+    )
+    cm_holidays = load_cm_holidays(holiday_session, cache_path)
     if not force and not is_cm_trading_day(actual_scan_date, cm_holidays):
         LOGGER.info("Skipping scan: %s is not a CM trading day", actual_scan_date)
         _write_run_log(
@@ -314,8 +292,6 @@ def run_scan_command(
             result=result,
             started_at=started_at,
             status="success",
-            bhavcopy_sha256=download_meta.sha256_zip if download_meta else None,
-            bhavcopy_url=download_meta.url if download_meta else None,
         )
         return result
     except Exception as exc:
@@ -368,6 +344,7 @@ def run_backtest_command(
         pending_days=pending_days,
         max_hold_days=max_hold_days,
         target_r=target_r,
+        exit_mode=ExitMode.MINERVINI_PHASED,
     )
     signals = get_backtest_signals(
         duckdb_store._connect(),
@@ -379,7 +356,7 @@ def run_backtest_command(
     if signals.is_empty():
         return BacktestReport(
             params=params,
-            summary=summarize_backtest([]),
+            summary=summarize_backtest([], exit_mode=params.exit_mode),
             trades=pl.DataFrame(),
             equity_curve=build_equity_curve([]),
         )

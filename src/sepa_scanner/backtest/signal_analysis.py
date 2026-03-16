@@ -1,6 +1,68 @@
 from __future__ import annotations
 
+from datetime import date
+
 import polars as pl
+
+from sepa_scanner.backtest.models import BacktestTrade
+
+
+def analyze_post_entry_returns(
+    trades: list[BacktestTrade],
+    ohlcv_df: pl.DataFrame,
+    forward_days: int = 10,
+) -> list[dict]:
+    filled = [t for t in trades if t.entry_date is not None and t.entry_price is not None]
+    if not filled:
+        return [
+            {"day": d, "avg_return_pct": 0.0, "profitable_count": 0, "total": 0, "profitable_pct": 0.0}
+            for d in range(1, forward_days + 1)
+        ]
+
+    symbols = list({t.symbol for t in filled})
+    prices_by_sym: dict[str, pl.DataFrame] = {}
+    for sym in symbols:
+        prices_by_sym[sym] = ohlcv_df.filter(pl.col("symbol") == sym).sort("date")
+
+    per_day: list[list[float]] = [[] for _ in range(forward_days)]
+
+    for trade in filled:
+        sym_prices = prices_by_sym.get(trade.symbol)
+        if sym_prices is None or sym_prices.is_empty():
+            continue
+
+        entry_price = trade.entry_price
+        assert entry_price is not None
+        assert trade.entry_date is not None
+
+        future = sym_prices.filter(pl.col("date") > pl.lit(trade.entry_date)).head(forward_days)
+        closes = future["close"].to_list()
+
+        for i, c in enumerate(closes):
+            ret_pct = (float(c) - entry_price) / entry_price * 100.0
+            per_day[i].append(ret_pct)
+
+    result = []
+    for day_idx in range(forward_days):
+        rets = per_day[day_idx]
+        if not rets:
+            result.append({
+                "day": day_idx + 1,
+                "avg_return_pct": 0.0,
+                "profitable_count": 0,
+                "total": 0,
+                "profitable_pct": 0.0,
+            })
+        else:
+            profitable = sum(1 for r in rets if r > 0)
+            result.append({
+                "day": day_idx + 1,
+                "avg_return_pct": sum(rets) / len(rets),
+                "profitable_count": profitable,
+                "total": len(rets),
+                "profitable_pct": profitable / len(rets) * 100.0,
+            })
+    return result
 
 
 def analyze_signal_quality(

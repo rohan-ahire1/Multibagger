@@ -157,32 +157,3 @@ def test_duckdb_store_upserts_and_fetches_setup_reviews(tmp_path: Path) -> None:
     assert rows[0]["note"] == "Promote if market confirms"
 
 
-def test_upsert_and_fetch_corporate_actions(tmp_path: Path) -> None:
-    import polars as pl
-
-    store = DuckDbStore(tmp_path / "test.duckdb")
-    store.initialize()
-
-    actions = pl.DataFrame({
-        "symbol": ["IRCTC", "TCS"],
-        "isin": [None, None],
-        "action_type": ["split", "bonus"],
-        "ex_date": [date(2022, 10, 28), date(2018, 7, 18)],
-        "ratio_num": [None, 1],
-        "ratio_den": [None, 1],
-        "old_face_value": [10.0, None],
-        "new_face_value": [2.0, None],
-        "adjustment_factor": [0.2, 0.5],
-        "description": ["5:1 split", "1:1 bonus"],
-        "source": ["seed", "seed"],
-    })
-    store.upsert_corporate_actions(actions)
-    result = store.fetch_corporate_actions()
-    assert result.height == 2
-    assert set(result["symbol"].to_list()) == {"IRCTC", "TCS"}
-
-    filtered = store.fetch_corporate_actions_for_symbols(["IRCTC"])
-    assert filtered.height == 1
-    assert filtered["symbol"].to_list() == ["IRCTC"]
-
-    store.close()

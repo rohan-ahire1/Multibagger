@@ -59,7 +59,7 @@ The scanner produces two signal types:
 - An EOD alert scanner for the NSE cash market
 - A tool to identify SEPA-style setups and breakouts
 - A backtesting framework to evaluate BREAKOUT signal quality
-- A Streamlit UI for inspecting signals, watchlists, and backtests
+- A local terminal UI for inspecting signals, watchlists, and backtests
 
 ### What This Project Is NOT
 
@@ -77,42 +77,41 @@ The scanner produces two signal types:
 |---|---|
 | Market | NSE cash market only |
 | Timeframe | Daily EOD only |
-| Data source | Official NSE CM-UDiFF bhavcopy |
+| Data source | yfinance adjusted EOD OHLCV |
 | Output | Alerts only (console + optional Telegram) |
 | Runtime target | A few seconds for ~1,000-1,500 symbols on MacBook Air M2 |
 | Compute engine | Polars for hot path, DuckDB for persistence |
 | Benchmark | NIFTYBEES (fixed for market filter and RS calculations) |
-| Corporate actions | Adjustment disabled by default; raw history used |
-| Reliability | Rerunnable downloads, partition-safe upserts, non-fatal Telegram fallback |
-| Artifact integrity | Bhavcopy ZIPs are SHA-256 hashed; re-downloads archive the previous file if the hash differs |
+| Corporate actions | Adjusted OHLC plus split-adjusted historical volume |
+| Reliability | Rerunnable downloads, deterministic yfinance normalization, non-fatal Telegram fallback |
+| Validation | Bhavcopy retained only as an optional raw-price validation source |
 | Calendar correctness | Scans are gated on the NSE CM trading calendar (holidays fetched from NSE API and cached locally); `--force` overrides |
 
 ---
 
 ## 3. Data Layer
 
-### 3.1 Data Source: NSE CM-UDiFF Bhavcopy
+### 3.1 Data Source: yfinance Adjusted OHLCV
 
-The scanner uses the official NSE merged-daily-reports API to fetch the CM-UDiFF bhavcopy zip.
+The scanner uses yfinance as the canonical OHLCV source for runtime scanning and backtesting.
 
-**Discovery flow:**
-1. Create a `requests` session and warm NSE cookies by loading `https://www.nseindia.com/`
-2. For current-day discovery, call `https://www.nseindia.com/api/merged-daily-reports?key=favCapital`
-3. Select the item named `CM-UDiFF Common Bhavcopy Final (zip)` and use its archive link
-4. For backfill or fallback, try direct archive URLs using `F` first and `P` second when provisional downloads are allowed
+**Normalization flow:**
+1. Download Yahoo history with `auto_adjust=False` and `actions=True`
+2. Derive adjusted OHLC from the `Adj Close / Close` ratio
+3. Derive split-adjusted historical volume from `Stock Splits`
+4. Preserve liquidity by computing `turnover` from raw close times raw volume
+5. Deduplicate on `(date, symbol)` and sort by `symbol, date`
 
-**Caching:** Raw archives cached as `data/raw/YYYY-MM-DD.zip`. Downloads use a temp-file + SHA-256 + archive workflow: the response is written to a temp file, hashed, and if a previous file exists with a different hash it is renamed to `{stem}__{sha[:8]}.zip` before the new file replaces it.
+**Validation:** Bhavcopy is retained only as an optional validation source for same-day raw-price checks against Yahoo data.
 
-**Parsing:** The zipped CSV is parsed with Polars, columns normalized, filtered to allowed series (default `[EQ]`), invalid rows dropped, deduplicated on `(date, symbol)`, and sorted by `symbol, date`.
-
-**Trading Calendar:** The scan command fetches NSE CM trading holidays from `https://www.nseindia.com/api/holiday-master?type=trading`, cached to `data/cache/nse_holidays_trading.json` (max age 24h). If the scan date is not a CM trading day (weekend or holiday), the scan inserts a run with `status='skipped_non_trading_day'` and exits cleanly. The `--force` flag overrides this check. Backfill does not use the CM calendar — it relies on 404 responses for non-trading dates.
+**Trading Calendar:** The scan command fetches NSE CM trading holidays from `https://www.nseindia.com/api/holiday-master?type=trading`, cached to `data/cache/nse_holidays_trading.json` (max age 24h). If the scan date is not a CM trading day (weekend or holiday), the scan inserts a run with `status='skipped_non_trading_day'` and exits cleanly. The `--force` flag overrides this check.
 
 ### 3.2 Storage: Parquet (OHLCV)
 
-- Root: `data/ohlcv_parquet/`
-- Partitioning: `year=YYYY/month=MM/ohlcv.parquet`
+- Root: `data/yf_adjusted/`
+- Primary file: `ohlcv_all.parquet`
 - Compression: zstd
-- Upsert: only affected year/month partitions are rewritten (replace rows for incoming dates, then rewrite the compact partition file)
+- Upsert: incoming dates replace existing `(date, symbol)` rows in the flat parquet file
 
 **OHLCV Schema:**
 
@@ -120,13 +119,12 @@ The scanner uses the official NSE merged-daily-reports API to fetch the CM-UDiFF
 |---|---|---|
 | date | Date | Trading date |
 | symbol | String | NSE symbol |
-| series | String | NSE series (e.g. "EQ") |
-| open | Float64 | Open price |
-| high | Float64 | High price |
-| low | Float64 | Low price |
-| close | Float64 | Close / last traded price |
-| volume | Int64 | Shares traded |
-| turnover | Float64 | Turnover in INR (if available) |
+| open | Float64 | Adjusted open price |
+| high | Float64 | Adjusted high price |
+| low | Float64 | Adjusted low price |
+| close | Float64 | Adjusted close price |
+| volume | Int64 | Split-adjusted shares traded |
+| turnover | Float64 | Raw traded value in INR (`raw_close * raw_volume`) |
 
 ### 3.3 Storage: DuckDB (Runs, Signals, Watchlist)
 
@@ -361,7 +359,7 @@ The universe determines which symbols are eligible for signal generation on day 
 ### Key Definitions
 
 - `history_count` = number of bars available for that symbol within the loaded scan frame (computed as `pl.len().over("symbol")`). This is bounded by how much history is loaded, not the full store.
-- `adv50` = 50-day simple moving average of `traded_value` where `traded_value = coalesce(turnover, close * volume)`
+- `adv50` = 50-day simple moving average of `traded_value` where `traded_value = turnover` when present, else `close * volume`
 - `vol50` = 50-day simple moving average of `volume`
 
 ---
@@ -1095,18 +1093,18 @@ CAGR and capital curves are **not shown** unless a portfolio simulation is expli
 
 React + Vite terminal app ("SEPA Terminal") served locally. FastAPI backend wraps the existing Python scanner and backtest engines.
 
+Only two terminal views are supported in the stabilized product: `Scanner` and `Backtest`. Any older references to analysis, portfolio, or mock market panels are historical only and not part of the supported UI contract.
+
 ### Workspaces
 
 | Key | Workspace | Purpose |
 |-----|-----------|---------|
-| 1 | **Market Scanner** | Daily signal triage — sector heatmap, breadth panel, signal/watchlist table, setup detail card with chart |
-| 2 | **Analysis** | Deep-dive on a single symbol — multi-pane chart (price + RS + volume, all vertically resizable), trend template, VCP metrics, sector context, fundamentals, backtest history, trade thesis |
-| 3 | **Portfolio** | Position tracker (shortlisted → watching → open → managing → closed) with portfolio stats |
-| 4 | **Backtest** | Full backtest dashboard — param bar with date range (data from 2010) and quick presets (1Y/3Y/5Y/10Y/All), stats summary, equity curve + drawdown, sortable trade list, per-trade chart with markers |
+| 1 | **Scanner** | Daily signal triage — signal/watchlist table, setup detail card, chart, qualification summary, and review notes |
+| 2 | **Backtest** | Full backtest dashboard — param bar with date range (data from 2010) and quick presets (1Y/3Y/5Y/10Y/All), stats summary, equity curve, sortable trade list, and per-trade chart with markers |
 
 ### Signal Markers on Charts
 
-Six color-coded markers rendered below candles via Lightweight Charts v5 `createSeriesMarkers()`. Present on **all** chart instances (W1, W2, W4):
+Six color-coded markers rendered below candles via Lightweight Charts v5 `createSeriesMarkers()`. Present on the supported chart instances in `Scanner` and `Backtest`:
 
 | Marker | Color | Text | Meaning |
 |--------|-------|------|---------|
@@ -1117,7 +1115,7 @@ Six color-coded markers rendered below candles via Lightweight Charts v5 `create
 | Loss Exit | #ef4444 (red) | X- | Closed with negative R |
 | Not Filled | #6b7280 (gray) | NF | Signal expired unfilled |
 
-On weekly/monthly charts, markers are deduplicated — one per type per candle. Charts auto-zoom to ±2 years around the latest signal when markers exist.
+On weekly charts, markers are deduplicated — one per type per candle. Charts always fit the full available history; they do not auto-window around the most recent signal.
 
 ### Chart Panels
 
@@ -1125,13 +1123,7 @@ All chart panes are vertically resizable via drag separators (`react-resizable-p
 
 ### Data Range
 
-OHLCV data is available from **2010-01-01**. The OHLCV API returns all available data by default (no date filter). Backtest defaults to the full range; quick presets (1Y/3Y/5Y/10Y/All) are provided in the param bar.
-
-### Cross-Navigation
-
-- W1 → W2: selecting a setup and pressing `2` opens deep analysis
-- W2 → W4: clicking a trade in the BacktestHistory card navigates to W4 with that trade selected
-- W4 → W2: `Escape` returns to previous workspace
+OHLCV data is available from **2010-01-01**. The OHLCV API returns all available data by default (no date filter). Scanner dates and backtest end dates are aligned to actual available signal data rather than to the wall-clock date. Quick presets (1Y/3Y/5Y/10Y/All) are provided in the backtest param bar.
 
 ### API Layer
 
@@ -1140,8 +1132,8 @@ FastAPI backend mounted at `/api`:
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/api/scanner/dates` | GET | Available scan dates |
-| `/api/scanner/{date}/signals` | GET | Signals for a scan date |
-| `/api/scanner/{date}/watchlist` | GET | Watchlist candidates |
+| `/api/scanner/signals?date=YYYY-MM-DD` | GET | Signals for a scan date |
+| `/api/scanner/watchlist?date=YYYY-MM-DD` | GET | Watchlist candidates |
 | `/api/analysis/{symbol}/signal-history` | GET | Symbol's signals + backtest trades |
 | `/api/ohlcv/{symbol}` | GET | Full OHLCV history (from 2010) |
 | `/api/backtest/run` | POST | Run backtest with params |
@@ -1162,10 +1154,8 @@ market:
 data:
   redownload_days: 5
   min_history_days: 320
-  bhavcopy_api_key: "favCapital"
   http_timeout_sec: 30
   max_retries: 5
-  apply_corporate_actions_adjustment: false
 
 universe:
   allowed_series: ["EQ"]
@@ -1264,10 +1254,8 @@ The `exit_strategy` section controls all Minervini phased exit parameters. When 
 | | scan_time_ist | string | "16:10" | Expected scan time (IST) |
 | **data** | redownload_days | int | 5 | Days to refresh on update |
 | | min_history_days | int | 320 | Min bars required for a symbol |
-| | bhavcopy_api_key | string | "favCapital" | NSE API key for bhavcopy discovery |
 | | http_timeout_sec | int | 30 | HTTP request timeout |
 | | max_retries | int | 5 | Max download retries |
-| | apply_corporate_actions_adjustment | bool | false | Enable split/bonus adjustment |
 | **universe** | allowed_series | list[str] | ["EQ"] | Allowed NSE series codes |
 | | min_price_inr | float | 50 | Minimum price in ₹ |
 | | min_adv50_inr | float | 50,000,000 | Min 50-day avg daily value in ₹ |
@@ -1494,7 +1482,7 @@ These are hard constraints. Any AI session or contributor that changes these MUS
 4. **NSE cash market only** — no derivatives
 5. **NIFTYBEES is the benchmark** — used for market filter AND relative strength
 6. **Backtest engine consumes persisted signals** — it does NOT recompute strategy logic
-7. **Corporate actions adjustment is disabled by default**
+7. **Adjusted OHLCV comes directly from yfinance normalization** — there is no separate runtime corporate-actions adjustment module
 8. **Telegram failure is non-fatal** — scan continues in console-only mode
 
 ### Config Invariants
@@ -1537,6 +1525,7 @@ Track every strategy change here. Include date, what changed, why, and who/what 
 | 2026-03-14 | Updated Section 16 (UI Behavior) to reflect new terminal | Strategy doc was still describing old Streamlit UI | AI-assisted |
 | 2026-03-14 | Trailing stop same-bar trigger exit | If trail ratchets up and close is already below it, exit immediately instead of waiting for next bar | AI-assisted |
 | 2026-03-15 | Added Minervini multi-phase exit engine | Replace single trailing stop with 6-phase system: initial→breakeven→partial→trail→tighten→exit. Adds partial profits, adaptive trail selection, climax detection, sell-into-strength rules. Legacy modes preserved for A/B comparison. | AI-assisted |
+| 2026-03-17 | Stabilized the supported product path | Active runtime is yfinance → Parquet/DuckDB → FastAPI → terminal, default backtest path is `minervini_phased`, and supported UI is limited to Scanner + Backtest | AI-assisted |
 
 ### 2026-03-15 — V2 Critical Evaluation Implementation
 

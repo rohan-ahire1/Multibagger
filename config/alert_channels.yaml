@@ -1,0 +1,4 @@
+telegram:
+  enabled: true
+console:
+  enabled: true

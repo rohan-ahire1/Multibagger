@@ -54,7 +54,7 @@ def build_equity_curve(
 
 def summarize_backtest(
     trades: list[BacktestTrade],
-    exit_mode: ExitMode = ExitMode.V1_FIXED,
+    exit_mode: ExitMode = ExitMode.MINERVINI_PHASED,
 ) -> BacktestSummary:
     closed_trades = _closed_trades(trades)
     winners = [float(trade.r_multiple) for trade in closed_trades if float(trade.r_multiple) > 0]

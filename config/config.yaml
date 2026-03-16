@@ -6,7 +6,6 @@ market:
 data:
   redownload_days: 5
   min_history_days: 320
-  bhavcopy_api_key: "favCapital"
   http_timeout_sec: 30
   max_retries: 5
 
@@ -43,7 +42,7 @@ setup_vcp:
   pre_alert_proximity_pct: 0.03
   contraction_smooth_window: 5
   contraction_min_peak_pct: 0.02
-  contraction_min_count: 2
+  contraction_min_count: 0
   contraction_standard_count: 3
 
 breakout:

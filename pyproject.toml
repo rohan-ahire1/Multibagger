@@ -24,6 +24,8 @@ dependencies = [
   "typer>=0.15.1",
   "fastapi[standard]>=0.115.0",
   "uvicorn>=0.34.0",
+  "pyarrow>=23.0.1",
+  "yfinance>=0.2.65",
 ]
 
 [project.scripts]

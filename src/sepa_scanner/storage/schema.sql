@@ -123,18 +123,3 @@ CREATE TABLE IF NOT EXISTS daily_diagnostics (
     created_at TIMESTAMP NOT NULL,
     UNIQUE(diag_date, symbol)
 );
-
-CREATE TABLE IF NOT EXISTS corporate_actions (
-    symbol TEXT NOT NULL,
-    isin TEXT,
-    action_type TEXT NOT NULL,
-    ex_date DATE NOT NULL,
-    ratio_num INTEGER,
-    ratio_den INTEGER,
-    old_face_value DOUBLE,
-    new_face_value DOUBLE,
-    adjustment_factor DOUBLE NOT NULL,
-    description TEXT,
-    source TEXT,
-    UNIQUE(symbol, ex_date, action_type)
-);

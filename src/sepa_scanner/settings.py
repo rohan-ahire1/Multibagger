@@ -17,10 +17,9 @@ class MarketSettings(BaseModel):
 class DataSettings(BaseModel):
     redownload_days: int
     min_history_days: int
-    bhavcopy_api_key: str
+    bhavcopy_api_key: str = "favCapital"
     http_timeout_sec: int
     max_retries: int
-    apply_corporate_actions_adjustment: bool = False
 
 
 class UniverseSettings(BaseModel):
@@ -202,8 +201,23 @@ def _load_dotenv(path: Path) -> dict[str, str]:
     return values
 
 
+def _default_config_dir() -> Path:
+    """Resolve config/ relative to the project root, not CWD.
+
+    Walks up from this file's location (src/sepa_scanner/settings.py)
+    to find the directory containing config/config.yaml.
+    """
+    anchor = Path(__file__).resolve().parent  # src/sepa_scanner/
+    for parent in (anchor, anchor.parent, anchor.parent.parent):
+        candidate = parent / "config" / "config.yaml"
+        if candidate.exists():
+            return parent / "config"
+    # Fall back to CWD-relative (original behavior)
+    return Path("config").resolve()
+
+
 def load_settings(config_dir: Path | None = None) -> AppSettings:
-    resolved_config_dir = (config_dir or Path("config")).resolve()
+    resolved_config_dir = (config_dir or _default_config_dir()).resolve()
     base_dir = resolved_config_dir.parent
     dotenv = _load_dotenv(base_dir / ".env")
     config_values = _read_yaml(resolved_config_dir / "config.yaml")

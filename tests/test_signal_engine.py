@@ -64,7 +64,6 @@ def _settings(tmp_path: Path) -> AppSettings:
             bhavcopy_api_key="favCapital",
             http_timeout_sec=30,
             max_retries=5,
-            apply_corporate_actions_adjustment=False,
         ),
         universe=UniverseSettings(
             allowed_series=["EQ"],
@@ -337,47 +336,6 @@ def test_signal_engine_returns_ranked_watchlist_candidates(tmp_path: Path) -> No
         "adv50",
         "vol50",
     ]
-
-
-def test_prepare_frame_uses_adjusted_prices_when_corp_actions_provided(tmp_path: Path) -> None:
-    """When corp_actions is passed, _prepare_frame should adjust prices before computing indicators."""
-    from sepa_scanner.strategy.signal_engine import _prepare_frame
-
-    dates_list = [date(2020, 1, 1) + timedelta(days=i) for i in range(320)]
-    # Split at day 315: pre-split close=200, post-split close=100 (2:1 split, factor=0.5)
-    abc_close = [200.0] * 315 + [100.0] * 5
-    abc_rows = []
-    for i, d in enumerate(dates_list):
-        c = abc_close[i]
-        abc_rows.append({
-            "date": d, "symbol": "ABC", "series": "EQ",
-            "open": c, "high": c * 1.01, "low": c * 0.99,
-            "close": c, "volume": 100000, "turnover": c * 100000,
-        })
-
-    frame = pl.DataFrame(abc_rows)
-    corp_actions = pl.DataFrame({
-        "symbol": ["ABC"],
-        "ex_date": [dates_list[315]],
-        "adjustment_factor": [0.5],
-    })
-
-    settings = _settings(tmp_path)
-    # settings.trend_template.sma_slow = 10, so "sma200" = SMA(close, 10)
-    # Last 10 bars = dates_list[310:320] = 5 pre-split (raw=200) + 5 post-split (raw=100)
-
-    prepared_adj = _prepare_frame(frame, settings, corp_actions=corp_actions)
-    prepared_raw = _prepare_frame(frame, settings)
-
-    last_row_adj = prepared_adj.filter(pl.col("date") == dates_list[-1]).select("sma200").item()
-    last_row_raw = prepared_raw.filter(pl.col("date") == dates_list[-1]).select("sma200").item()
-
-    # With adjustment: all closes become 100 (pre-split 200*0.5=100, post-split 100*1.0=100)
-    # So SMA(10) = 100
-    assert last_row_adj == pytest.approx(100.0, rel=0.02)
-    # Without adjustment: last 10 raw closes = [200,200,200,200,200, 100,100,100,100,100]
-    # SMA(10) = (5*200 + 5*100) / 10 = 150
-    assert last_row_raw == pytest.approx(150.0, rel=0.02)
 
 
 def test_breakout_uses_atr_based_buffer_when_configured(tmp_path: Path) -> None:

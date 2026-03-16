@@ -6,10 +6,6 @@ from datetime import UTC, date, datetime
 
 import polars as pl
 
-from sepa_scanner.data_sources.corporate_actions import (
-    build_adjusted_ohlcv,
-    compute_adjustment_factors,
-)
 from sepa_scanner.data_sources.nse_meta import apply_india_filters
 from sepa_scanner.indicators.atr import add_atr_columns
 from sepa_scanner.indicators.contraction import add_contraction_columns
@@ -119,14 +115,7 @@ def compute_symbol_diagnostics(
     return row.to_dicts()[0]
 
 
-def _prepare_frame(frame: pl.DataFrame, settings: AppSettings, corp_actions: pl.DataFrame | None = None) -> pl.DataFrame:
-    # Apply corporate actions adjustment if provided.
-    # All rolling indicators must be computed on adjusted prices.
-    # raw_close and raw_volume are preserved for signal-day display.
-    if corp_actions is not None and not corp_actions.is_empty():
-        adj_factors = compute_adjustment_factors(frame.lazy(), corp_actions)
-        frame = build_adjusted_ohlcv(frame.lazy(), adj_factors).collect()
-
+def _prepare_frame(frame: pl.DataFrame, settings: AppSettings) -> pl.DataFrame:
     trend = settings.trend_template
     setup = settings.setup_vcp
 
@@ -336,9 +325,8 @@ def scan_for_date(
     _prepared: pl.DataFrame | None = None,
     _lifecycle: pl.DataFrame | None = None,
     _rs_scores: pl.DataFrame | None = None,
-    corp_actions: pl.DataFrame | None = None,
 ) -> ScanResult:
-    prepared = _prepared if _prepared is not None else _prepare_frame(frame, settings, corp_actions=corp_actions)
+    prepared = _prepared if _prepared is not None else _prepare_frame(frame, settings)
 
     # Compute benchmark EMA for scan_date
     bench_ema_row = prepared.filter(
@@ -597,14 +585,13 @@ def scan_batch(
     frame: pl.DataFrame,
     settings: AppSettings,
     scan_dates: list[date],
-    corp_actions: pl.DataFrame | None = None,
 ) -> Iterator[tuple[date, ScanResult | None, str | None]]:
     """Compute indicators once, then yield (scan_date, result, error) per date.
 
     Dramatically faster than calling scan_for_date per date because
     _prepare_frame, lifecycle columns, and RS scores are computed once.
     """
-    prepared = _prepare_frame(frame, settings, corp_actions=corp_actions)
+    prepared = _prepare_frame(frame, settings)
     lifecycle = _add_lifecycle_columns(prepared)
     rs_scores = precompute_rs_scores(
         prepared.select("date", "symbol", "close"),

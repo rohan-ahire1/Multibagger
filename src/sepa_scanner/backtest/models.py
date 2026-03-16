@@ -38,7 +38,7 @@ class BacktestParams:
     pending_days: int = 5
     max_hold_days: int = 90
     target_r: float | None = None
-    exit_mode: ExitMode = ExitMode.V2_TRAIL_10D
+    exit_mode: ExitMode = ExitMode.MINERVINI_PHASED
     trail_activation_r: float = 2.0
     trail_pct: float = 0.20
     dead_money_days: int | None = 15
@@ -113,7 +113,7 @@ class BacktestSummary:
     avg_mae_r: float | None = None
     avg_giveback_pct: float | None = None
     dead_money_exits: int = 0
-    exit_mode: str = ExitMode.V2_TRAIL_10D.value
+    exit_mode: str = ExitMode.MINERVINI_PHASED.value
     breakeven_exits: int = 0
     partial_profit_exits: int = 0
     trail_exits: int = 0
@@ -124,7 +124,7 @@ class BacktestSummary:
     pct_reaching_breakeven: float = 0.0
     pct_reaching_partial: float = 0.0
     pct_reaching_trail: float = 0.0
-    exit_engine: str = "legacy"
+    exit_engine: str = "minervini_phased"
 
 
 @dataclass(slots=True)
