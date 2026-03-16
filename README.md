@@ -1,6 +1,6 @@
-# sepa_scanner_nse
+# multibagger
 
-`sepa_scanner_nse` is a local, alert-only NSE daily scanner for high-probability long swing setups. It ingests adjusted OHLCV from yfinance, stores normalized history locally in Parquet, computes Minervini/SEPA-inspired WATCH and BREAKOUT signals with Polars, persists runs, signals, and ranked watchlist candidates in DuckDB, and serves the data to a local terminal UI.
+`multibagger` is a local, alert-only NSE daily scanner for high-probability long swing setups. It ingests adjusted OHLCV from yfinance, stores normalized history locally in Parquet, computes Minervini/SEPA-inspired WATCH and BREAKOUT signals with Polars, persists runs, signals, and ranked watchlist candidates in DuckDB, and serves the data to a local terminal UI.
 
 ## Stack
 
@@ -16,7 +16,7 @@
 ## Project layout
 
 ```text
-sepa_scanner_nse/
+multibagger/
 ├─ config/
 ├─ data/
 ├─ docs/plans/

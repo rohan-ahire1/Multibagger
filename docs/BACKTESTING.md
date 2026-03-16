@@ -1,6 +1,6 @@
-# SEPA Scanner NSE — Canonical Backtesting Methodology
+# Multibagger — Canonical Backtesting Methodology
 
-> **This is the single source of truth for the SEPA Scanner backtesting methodology.**
+> **This is the single source of truth for the Multibagger backtesting methodology.**
 > Every AI session, every contributor, every code change MUST conform to this document.
 > If the code disagrees with this document, the code is wrong — fix the code.
 > If you need to change the methodology, update THIS document FIRST, then change the code.
@@ -41,7 +41,7 @@
 
 STRATEGY.md Section 15 provides a summary of the backtest model sufficient for understanding signal generation context. This document is the full specification — covering execution modeling, exit mechanics, portfolio simulation, statistical validation, and the complete path from a single-signal backtest to a deployable trading system.
 
-**Scope.** The backtesting framework evaluates BREAKOUT signals produced by the SEPA Scanner. It progresses through four versioned stages:
+**Scope.** The backtesting framework evaluates BREAKOUT signals produced by Multibagger. It progresses through four versioned stages:
 
 1. **Single-signal evaluation** — Does each signal, in isolation, produce a positive R-expectancy?
 2. **Realistic execution modeling** — What happens when we add slippage, transaction costs, gap filters, and circuit breaker handling?
@@ -372,7 +372,7 @@ if low <= active_stop and high >= target_price:
 
 ### 6.1 NSE Delivery Trade Cost Components
 
-All SEPA Scanner trades are delivery trades (hold overnight). The following costs apply:
+All Multibagger trades are delivery trades (hold overnight). The following costs apply:
 
 | Component | Buy Side | Sell Side | Notes |
 |-----------|----------|-----------|-------|
@@ -432,7 +432,7 @@ annual_cost_drag = trades_per_year * avg_round_trip_cost_pct
 
 **Example:** At 75 trades/year and 0.50% average round-trip cost, the annual drag is **37.5 basis points of portfolio value per trade, or 37.5% of capital** turned over at 0.5% per turn. This is a material headwind for high-frequency rebalancing.
 
-For the SEPA Scanner with ~50-100 signals/year, ~60% fill rate, and mid/small-cap concentration:
+For Multibagger with ~50-100 signals/year, ~60% fill rate, and mid/small-cap concentration:
 - Estimated fills: 30-60 trades/year
 - Estimated avg round-trip: 0.50-1.50%
 - **Annual cost drag: 15-90 basis points of portfolio notional per trade cycle**
@@ -728,7 +728,7 @@ The Monte Carlo P95 max drawdown is reported alongside the realized drawdown. If
 
 ### 9.1 Degrees of Freedom
 
-The SEPA Scanner has approximately 25-30 nominal parameters (trend template thresholds, VCP conditions, RS weights, breakout triggers, backtest exit parameters). However, many parameters are correlated — changing `sma50_above_sma200` affects the same stocks as `sma200_rising`.
+Multibagger has approximately 25-30 nominal parameters (trend template thresholds, VCP conditions, RS weights, breakout triggers, backtest exit parameters). However, many parameters are correlated — changing `sma50_above_sma200` affects the same stocks as `sma200_rising`.
 
 **Effective degrees of freedom** are estimated via:
 1. PCA on the parameter sensitivity matrix — retain components explaining 95% of variance

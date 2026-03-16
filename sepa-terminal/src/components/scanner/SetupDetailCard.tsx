@@ -78,7 +78,7 @@ export function SetupDetailCard({
       text: `Volume ${setup.volMult.toFixed(1)}x average — institutional interest`,
     })
   if (setup.signalType === 'BREAKOUT')
-    passItems.push({ text: 'Breaking out of base — SEPA trigger' })
+    passItems.push({ text: 'Breaking out of base — Multibagger trigger' })
   else if (setup.signalType === 'WATCH')
     passItems.push({ text: 'Near pivot — tightening for breakout' })
   if (setup.contractionCount != null && setup.contractionCount >= 2)

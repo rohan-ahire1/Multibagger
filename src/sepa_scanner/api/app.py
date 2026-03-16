@@ -7,7 +7,7 @@ from sepa_scanner.api.routes import ohlcv, scanner, analysis, backtest
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="SEPA Terminal API")
+    app = FastAPI(title="Multibagger API")
 
     app.add_middleware(
         CORSMiddleware,

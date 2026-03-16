@@ -35,7 +35,7 @@ export function TopBar() {
     <div className="h-10 bg-bg-secondary border-b border-border-default px-4 flex items-center justify-between shrink-0">
       <div className="flex items-center gap-2">
         <span className="text-[15px] font-medium text-text-primary">
-          SEPA Terminal
+          Multibagger Terminal
         </span>
         <span className="text-xs bg-green-bg text-green px-1.5 rounded">
           v2

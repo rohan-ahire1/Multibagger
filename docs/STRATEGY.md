@@ -1,6 +1,6 @@
-# SEPA Scanner NSE — Canonical Strategy Reference
+# Multibagger — Canonical Strategy Reference
 
-> **This is the single source of truth for the SEPA Scanner strategy.**
+> **This is the single source of truth for the Multibagger strategy.**
 > Every AI session, every contributor, every code change MUST conform to this document.
 > If the code disagrees with this document, the code is wrong — fix the code.
 > If you need to change the strategy, update THIS document FIRST, then change the code.
@@ -1091,7 +1091,7 @@ CAGR and capital curves are **not shown** unless a portfolio simulation is expli
 
 ## 16. UI Behavior
 
-React + Vite terminal app ("SEPA Terminal") served locally. FastAPI backend wraps the existing Python scanner and backtest engines.
+React + Vite terminal app ("Multibagger Terminal") served locally. FastAPI backend wraps the existing Python scanner and backtest engines.
 
 Only two terminal views are supported in the stabilized product: `Scanner` and `Backtest`. Any older references to analysis, portfolio, or mock market panels are historical only and not part of the supported UI contract.
 
@@ -1518,7 +1518,7 @@ Track every strategy change here. Include date, what changed, why, and who/what 
 | 2026-03-08 | Added VCP contraction sequence detection (Section 8.1) | Detect successive narrowing contractions (T1 > T2 > T3) — the true VCP signature; informational by default, optional hard gate | AI-assisted |
 | 2026-03-09 | Tuned scanner parameters for signal count | min_adv50_inr 250M→50M, max_range10_pct 0.08→0.12, atr_contraction_factor 0.90→0.95, require_market_filter true→false, max_hold_days 20→60, added target_r 3.0 default | AI-assisted |
 | 2026-03-14 | Parameter corrections — Minervini methodology validation | Comprehensive parameter update validated against published works. Summary below. | AI-assisted |
-| 2026-03-14 | Replaced Streamlit UI with React SEPA Terminal (4 workspaces) | Full rewrite: Vite + React + Lightweight Charts v5 + Zustand + TanStack | AI-assisted |
+| 2026-03-14 | Replaced Streamlit UI with React Multibagger Terminal (4 workspaces) | Full rewrite: Vite + React + Lightweight Charts v5 + Zustand + TanStack | AI-assisted |
 | 2026-03-14 | Added FastAPI backend wrapping scanner + backtest engines | REST API layer for terminal frontend | AI-assisted |
 | 2026-03-14 | Added 6 color-coded signal markers on all charts | Visual lifecycle: Watch, Breakout, Entry, Win Exit, Loss Exit, Not Filled | AI-assisted |
 | 2026-03-14 | W4 Backtest Dashboard with full data range (2010-present) | Leverage complete OHLCV history; 1Y/3Y/5Y/10Y/All presets | AI-assisted |

@@ -36,7 +36,7 @@ from sepa_scanner.utils.http import bootstrap_nse_session, build_nse_session
 from sepa_scanner.utils.io import ensure_directory, export_dataframe
 
 
-app = typer.Typer(help="Local, ultrafast NSE SEPA-inspired EOD scanner.")
+app = typer.Typer(help="Local, ultrafast NSE multibagger scanner.")
 LOGGER = logging.getLogger(__name__)
 
 
@@ -307,7 +307,7 @@ def run_scan_command(
 
 
 def run_ui_command(*, config_dir: Path | None, host: str, port: int) -> None:
-    """Launch the SEPA Terminal (Vite + React frontend) via npm."""
+    """Launch the Multibagger Terminal (Vite + React frontend) via npm."""
     project_root = Path(__file__).resolve().parents[2]
     terminal_dir = project_root / "sepa-terminal"
     env = os.environ.copy()
@@ -499,7 +499,7 @@ def ui(
     port: int = typer.Option(5173, help="Port to bind"),
     config_dir: Path | None = typer.Option(None, help="Override config directory"),
 ) -> None:
-    """Launch the SEPA Terminal frontend."""
+    """Launch the Multibagger Terminal frontend."""
     run_ui_command(config_dir=config_dir, host=host, port=port)
 
 
