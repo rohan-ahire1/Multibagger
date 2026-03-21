@@ -19,7 +19,7 @@ def create_app() -> FastAPI:
     app.include_router(ohlcv.router)
     app.include_router(scanner.router)
     app.include_router(analysis.router)
-    app.include_router(backtest.router, prefix="/api")
+    app.include_router(backtest.router)
 
     @app.get("/api/health")
     def health():

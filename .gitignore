@@ -10,6 +10,11 @@
 data/
 mean_reversion_rankings.csv
 
+# Rust & Maturin build artifacts
+rust_core/target/
+rust_core/.venv/
+rust_core/Cargo.lock
+
 sepa-terminal/node_modules/
 sepa-terminal/dist/
 sepa-terminal/.superpowers/

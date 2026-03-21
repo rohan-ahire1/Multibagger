@@ -1,0 +1,18 @@
+[package]
+name = "multibagger_core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "multibagger_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.20", features = ["extension-module"] }
+numpy = "0.20"
+rayon = "1.11"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+duckdb = { version = "1.10500.0", features = ["bundled"] }
+parquet = "58.0.0"

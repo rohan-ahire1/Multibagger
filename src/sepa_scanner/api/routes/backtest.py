@@ -19,7 +19,7 @@ from sepa_scanner.settings import AppSettings
 from sepa_scanner.storage.duckdb_store import DuckDbStore
 from sepa_scanner.storage.parquet_store import ParquetOhlcvStore
 
-router = APIRouter(prefix="/backtest", tags=["backtest"])
+router = APIRouter(prefix="/api/backtest", tags=["backtest"])
 
 
 class BacktestRunRequest(BaseModel):
@@ -27,11 +27,11 @@ class BacktestRunRequest(BaseModel):
     end_date: date
     exit_mode: str = ExitMode.MINERVINI_PHASED.value
     target_r: float | None = None
-    pending_days: int = 5
-    max_hold_days: int = 90
-    trail_activation_r: float = 2.0
+    pending_days: int = 8
+    max_hold_days: int = 150
+    trail_activation_r: float = 1.5
     trail_pct: float = 0.20
-    dead_money_days: int | None = 15
+    dead_money_days: int | None = 20
     exit_engine: str = "minervini_phased"
 
 
@@ -59,6 +59,8 @@ def run_backtest(
 ) -> dict:
     if req.exit_engine == "minervini_phased":
         exit_mode = ExitMode.MINERVINI_PHASED
+    elif req.exit_engine == "advanced_sepa":
+        exit_mode = ExitMode.ADVANCED_SEPA
     else:
         exit_mode = ExitMode(req.exit_mode)
 

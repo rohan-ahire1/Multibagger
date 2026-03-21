@@ -49,9 +49,9 @@ def get_scan_dates(
     conn = store._connect()
     rows = conn.execute(
         """
-        SELECT DISTINCT scan_date
+        SELECT DISTINCT CAST(scan_date AS DATE) as s_date
         FROM runs
-        ORDER BY scan_date DESC
+        ORDER BY s_date DESC
         """
     ).fetchall()
-    return [row[0].isoformat() if isinstance(row[0], (date, datetime)) else str(row[0]) for row in rows]
+    return [row[0].isoformat() for row in rows if row[0] is not None]

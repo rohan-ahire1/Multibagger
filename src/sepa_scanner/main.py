@@ -6,8 +6,11 @@ import logging
 import os
 import subprocess
 import sys
+import time
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.request import urlopen
 from uuid import uuid4
 
 import polars as pl
@@ -164,7 +167,7 @@ def run_update_command(
     days: int,
     target_date: date | None,
     force: bool,
-) -> tuple[date, None]:
+) -> tuple[date, list[str]]:
     settings = resolve_settings(config_dir)
     parquet_store, _ = _stores(settings)
     symbols = _resolve_runtime_symbols(settings, parquet_store)
@@ -177,19 +180,19 @@ def run_update_command(
         start_date = previous_trading_days(end_anchor, days)[0]
         end_date = end_anchor + timedelta(days=1)
 
-    frame, _failed = download_adjusted_history(
+    frame, failed = download_adjusted_history(
         symbols,
         start=start_date,
         end=end_date,
     )
     if not frame.is_empty():
         parquet_store.upsert(frame)
-        return frame["date"].max(), None
+        return frame["date"].max(), failed
 
     latest_existing = parquet_store.latest_date()
     if latest_existing is not None:
-        return latest_existing, None
-    return target_date or start_date, None
+        return latest_existing, failed
+    return target_date or start_date, failed
 
 
 def _resolve_runtime_symbols(
@@ -198,6 +201,16 @@ def _resolve_runtime_symbols(
 ) -> list[str]:
     if settings.manual_universe:
         return sorted(set(settings.manual_universe))
+
+    latest_date = parquet_store.latest_date()
+    if latest_date is not None:
+        latest_symbols = parquet_store.read_frame(
+            start_date=latest_date,
+            end_date=latest_date,
+            columns=["symbol"],
+        )
+        if not latest_symbols.is_empty():
+            return sorted(latest_symbols["symbol"].unique().to_list())
 
     existing = parquet_store.read_frame(columns=["symbol"])
     if not existing.is_empty():
@@ -307,17 +320,92 @@ def run_scan_command(
 
 
 def run_ui_command(*, config_dir: Path | None, host: str, port: int) -> None:
-    """Launch the Multibagger Terminal (Vite + React frontend) via npm."""
+    """Launch the Multibagger Terminal (FastAPI + Vite frontend)."""
     project_root = Path(__file__).resolve().parents[2]
     terminal_dir = project_root / "sepa-terminal"
     env = os.environ.copy()
     env["SEPA_CONFIG_DIR"] = str((config_dir or project_root / "config").resolve())
-    subprocess.run(
-        ["npm", "run", "dev", "--", "--host", host, "--port", str(port)],
-        check=True,
-        cwd=terminal_dir,
-        env=env,
-    )
+    api_host = "127.0.0.1"
+    api_port = 8000
+    api_process: subprocess.Popen[str] | None = None
+
+    try:
+        if not _api_is_healthy(api_host, api_port):
+            api_process = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-m",
+                    "uvicorn",
+                    "sepa_scanner.api.app:app",
+                    "--host",
+                    api_host,
+                    "--port",
+                    str(api_port),
+                ],
+                cwd=project_root,
+                env=env,
+            )
+            _wait_for_api_health(api_process, api_host, api_port)
+
+        subprocess.run(
+            ["npm", "run", "dev", "--", "--host", host, "--port", str(port)],
+            check=True,
+            cwd=terminal_dir,
+            env=env,
+        )
+    finally:
+        if api_process is not None:
+            _stop_background_process(api_process)
+
+
+def _api_is_healthy(host: str, port: int, *, timeout_sec: float = 0.5) -> bool:
+    try:
+        with urlopen(f"http://{host}:{port}/api/health", timeout=timeout_sec) as response:
+            return response.status == 200
+    except (HTTPError, URLError, OSError):
+        return False
+
+
+def _wait_for_api_health(
+    process: subprocess.Popen[str],
+    host: str,
+    port: int,
+    *,
+    timeout_sec: float = 20.0,
+) -> None:
+    deadline = time.monotonic() + timeout_sec
+    while time.monotonic() < deadline:
+        exit_code = process.poll()
+        if exit_code is not None:
+            raise RuntimeError(f"API server exited before becoming healthy (exit code {exit_code})")
+        if _api_is_healthy(host, port):
+            return
+        time.sleep(0.2)
+    raise RuntimeError(f"API server did not become healthy within {timeout_sec:.1f}s")
+
+
+def _stop_background_process(
+    process: subprocess.Popen[str],
+    *,
+    timeout_sec: float = 5.0,
+) -> None:
+    if process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=timeout_sec)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=timeout_sec)
+
+
+def _format_failed_symbols(failed_symbols: list[str], *, preview_limit: int = 10) -> str:
+    unique_symbols = sorted(set(failed_symbols))
+    preview = ", ".join(unique_symbols[:preview_limit])
+    remaining = len(unique_symbols) - preview_limit
+    if remaining > 0:
+        preview = f"{preview}, +{remaining} more"
+    return f"Update failed for {len(unique_symbols)} symbol(s): {preview}"
 
 
 def _trade_frame(report_trades) -> pl.DataFrame:
@@ -336,6 +424,7 @@ def run_backtest_command(
     target_r: float | None,
     symbol: str | None,
     export_csv: bool,
+    use_rust: bool = True,
 ) -> BacktestReport:
     settings = resolve_settings(config_dir)
     parquet_store, duckdb_store = _stores(settings)
@@ -345,6 +434,8 @@ def run_backtest_command(
         max_hold_days=max_hold_days,
         target_r=target_r,
         exit_mode=ExitMode.MINERVINI_PHASED,
+        trail_activation_r=settings.exit_strategy.trail_activation_r,
+        dead_money_days=settings.exit_strategy.dead_money_days,
     )
     signals = get_backtest_signals(
         duckdb_store._connect(),
@@ -369,7 +460,7 @@ def run_backtest_command(
         start_date=start_date,
         end_date=ohlcv_end_date,
     )
-    result = simulate_breakout_backtest(signals, ohlcv, params)
+    result = simulate_breakout_backtest(signals, ohlcv, params, use_rust=use_rust)
     trades = _trade_frame(result.trades)
     summary = summarize_backtest(result.trades, exit_mode=params.exit_mode)
     equity_curve = build_equity_curve(result.trades)
@@ -432,13 +523,16 @@ def update(
     force: bool = typer.Option(False, help="Re-download archives even if cached"),
     config_dir: Path | None = typer.Option(None, help="Override config directory"),
 ) -> None:
-    latest_date, _meta = run_update_command(
+    latest_date, failed_symbols = run_update_command(
         config_dir=config_dir,
         days=days,
         target_date=_parse_iso_date(date_),
         force=force,
     )
     typer.echo(f"latest_date: {latest_date}")
+    if failed_symbols:
+        typer.echo(_format_failed_symbols(failed_symbols))
+        raise typer.Exit(code=1)
 
 
 @app.command("scan")
@@ -468,19 +562,22 @@ def scan_command(
 def run(
     config_dir: Path | None = typer.Option(None, help="Override config directory"),
 ) -> None:
-    latest_date, latest_meta = run_update_command(
+    latest_date, failed_symbols = run_update_command(
         config_dir=config_dir,
         days=5,
         target_date=None,
         force=False,
     )
+    if failed_symbols:
+        typer.echo(_format_failed_symbols(failed_symbols))
+        raise typer.Exit(code=1)
     run_scan_command(
         config_dir=config_dir,
         scan_date=latest_date,
         export_parquet=True,
         export_csv=False,
         no_telegram=False,
-        download_meta=latest_meta,
+        download_meta=None,
     )
 
 
@@ -507,24 +604,29 @@ def ui(
 def backtest_command(
     start: str = typer.Option(..., help="Start date YYYY-MM-DD"),
     end: str = typer.Option(..., help="End date YYYY-MM-DD"),
-    pending_days: int = typer.Option(5, help="Trading days to keep an entry pending"),
-    max_hold_days: int = typer.Option(90, help="Maximum holding period in trading days"),
+    pending_days: int | None = typer.Option(None, help="Trading days to keep an entry pending"),
+    max_hold_days: int | None = typer.Option(None, help="Maximum holding period in trading days"),
     target_r: float | None = typer.Option(None, help="Optional profit target in R multiples (default from config)"),
     symbol: str | None = typer.Option(None, help="Optional symbol filter"),
     export_csv: bool = typer.Option(False, help="Export the trade table as CSV"),
+    use_rust: bool = typer.Option(True, help="Use the high-performance Rust engine"),
     config_dir: Path | None = typer.Option(None, help="Override config directory"),
 ) -> None:
     settings = resolve_settings(config_dir)
     effective_target_r = target_r if target_r is not None else settings.risk.target_r
+    effective_pending_days = pending_days if pending_days is not None else settings.backtest.pending_days
+    effective_max_hold_days = max_hold_days if max_hold_days is not None else settings.backtest.max_hold_days
+
     report = run_backtest_command(
         config_dir=config_dir,
         start_date=_parse_iso_date(start) or date.today(),
         end_date=_parse_iso_date(end) or date.today(),
-        pending_days=pending_days,
-        max_hold_days=max_hold_days,
+        pending_days=effective_pending_days,
+        max_hold_days=effective_max_hold_days,
         target_r=effective_target_r,
         symbol=symbol,
         export_csv=export_csv,
+        use_rust=use_rust,
     )
     if report.summary.total_signals == 0:
         typer.echo("No eligible BREAKOUT signals in range.")

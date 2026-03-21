@@ -15,9 +15,9 @@ function defaultParams(): BacktestParams {
     endDate: DATA_START_DATE,
     exitMode: 'minervini_phased',
     targetR: null,
-    pendingDays: 5,
-    maxHoldDays: 90,
-    trailActivationR: 2.0,
+    pendingDays: 8,
+    maxHoldDays: 150,
+    trailActivationR: 1.5,
     exitEngine: 'minervini_phased',
   }
 }

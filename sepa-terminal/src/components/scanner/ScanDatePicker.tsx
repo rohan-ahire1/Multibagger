@@ -9,7 +9,9 @@ interface ScanDatePickerProps {
 }
 
 function formatDisplayDate(iso: string): string {
+  if (!iso) return 'Select Date'
   const d = new Date(iso + 'T00:00:00')
+  if (isNaN(d.getTime())) return 'Invalid Date'
   const day = d.toLocaleDateString('en-IN', { weekday: 'short' })
   const date = d.toLocaleDateString('en-IN', {
     day: 'numeric',

@@ -1,10 +1,20 @@
 from __future__ import annotations
 
+import json
+import logging
 import os
 from concurrent.futures import ProcessPoolExecutor
-from datetime import date
+from datetime import date, timedelta
 
+import numpy as np
 import polars as pl
+
+try:
+    import multibagger_core
+except ImportError:
+    multibagger_core = None
+
+logger = logging.getLogger(__name__)
 
 from sepa_scanner.backtest.exit_engine import (
     BarData,
@@ -577,6 +587,7 @@ def simulate_breakout_backtest(
     ohlcv_df: pl.DataFrame,
     params: BacktestParams,
     portfolio_manager: PortfolioManager | None = None,
+    use_rust: bool = True,
 ) -> BacktestResult:
     signals = (
         signals_df.filter(pl.col("signal_type") == "BREAKOUT")
@@ -585,6 +596,13 @@ def simulate_breakout_backtest(
     )
     if not signals:
         return BacktestResult(trades=[])
+
+    # Try Rust Engine first if requested and available
+    if use_rust and multibagger_core is not None and portfolio_manager is None:
+        try:
+            return _simulate_with_rust(signals_df, ohlcv_df, params)
+        except Exception as e:
+            logger.warning(f"Rust backtest failed, falling back to Python: {e}")
 
     ohlcv_rows = (
         ohlcv_df.sort(["symbol", "date"])
@@ -704,3 +722,96 @@ def _simulate_with_portfolio(
 
     all_trades.sort(key=lambda t: (t.signal_date, t.symbol))
     return BacktestResult(trades=all_trades)
+
+
+def _simulate_with_rust(
+    signals_df: pl.DataFrame,
+    ohlcv_df: pl.DataFrame,
+    params: BacktestParams,
+) -> BacktestResult:
+    """Helper to prepare data and call the Rust engine."""
+    if multibagger_core is None:
+        raise ImportError("multibagger_core not installed")
+
+    # 1. Sort and prepare contiguous OHLCV data
+    ohlcv_sorted = ohlcv_df.sort(["symbol", "date"])
+
+    all_dates = [d.strftime("%Y-%m-%d") for d in ohlcv_sorted["date"]]
+    opens = ohlcv_sorted["open"].to_numpy().astype(np.float64)
+    highs = ohlcv_sorted["high"].to_numpy().astype(np.float64)
+    lows = ohlcv_sorted["low"].to_numpy().astype(np.float64)
+    closes = ohlcv_sorted["close"].to_numpy().astype(np.float64)
+
+    # 2. Calculate symbol indices
+    symbol_indices = {}
+    current_idx = 0
+    counts = ohlcv_sorted.group_by("symbol", maintain_order=True).len()
+    for row in counts.iter_rows():
+        sym, count = row[0], row[1]
+        symbol_indices[sym] = (current_idx, current_idx + count)
+        current_idx += count
+
+    # 3. Prepare signals JSON
+    rust_signals = []
+    for sig in signals_df.filter(pl.col("signal_type") == "BREAKOUT").to_dicts():
+        sig_copy = {
+            "symbol": str(sig["symbol"]),
+            "signal_date": sig["signal_date"].strftime("%Y-%m-%d"),
+            "entry_ref": float(sig["entry_ref"]),
+            "stop": float(sig["stop"]),
+            "pivot": float(sig["pivot"]) if sig.get("pivot") is not None else None,
+            "rs_rank": float(sig.get("rs_rank", 80.0)),
+        }
+        rust_signals.append(sig_copy)
+
+    # 4. Prepare params JSON
+    params_json = json.dumps(
+        {
+            "pending_days": params.pending_days,
+            "max_hold_days": params.max_hold_days,
+            "target_r": params.target_r,
+            "exit_mode": params.exit_mode.value,
+            "trail_activation_r": params.trail_activation_r,
+            "trail_pct": params.trail_pct,
+            "dead_money_days": params.dead_money_days,
+        }
+    )
+
+    # 5. Execute Rust Engine
+    results_json = multibagger_core.run_bulk_backtest_rust_v2(
+        json.dumps(rust_signals),
+        params_json,
+        all_dates,
+        opens,
+        highs,
+        lows,
+        closes,
+        symbol_indices,
+    )
+
+    rust_trades_raw = json.loads(results_json)
+
+    # 6. Convert back to BacktestTrade objects
+    final_trades = []
+    for rt in rust_trades_raw:
+        final_trades.append(
+            BacktestTrade(
+                symbol=rt["symbol"],
+                signal_date=date.fromisoformat(rt["signal_date"]),
+                status=rt["status"],
+                entry_ref=rt["entry_ref"],
+                stop=rt["stop"],
+                pivot=rt["pivot"],
+                entry_date=date.fromisoformat(rt["entry_date"]) if rt["entry_date"] else None,
+                entry_price=rt["entry_price"],
+                exit_date=date.fromisoformat(rt["exit_date"]) if rt["exit_date"] else None,
+                exit_price=rt["exit_price"],
+                holding_days=rt["holding_days"],
+                return_pct=rt["return_pct"],
+                r_multiple=rt["r_multiple"],
+                mae_price=rt["mae_price"],
+                mfe_price=rt["mfe_price"],
+            )
+        )
+
+    return BacktestResult(trades=final_trades)

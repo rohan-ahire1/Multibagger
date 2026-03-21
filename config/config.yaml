@@ -58,6 +58,10 @@ risk:
   max_stop_pct: 0.10
   target_r: null
 
+backtest:
+  pending_days: 8
+  max_hold_days: 150
+
 alerts:
   max_alerts_per_day: 10
   send_watch_alerts: true
@@ -87,7 +91,7 @@ exit_strategy:
   breakeven_activation_r: 1.0
   partial_profit_r: 2.0
   partial_profit_pct: 0.50
-  trail_activation_r: 2.0
+  trail_activation_r: 1.5
   max_loss_pct: 0.08
   absolute_max_loss_pct: 0.10
   trail_mode: "adaptive"
@@ -100,6 +104,7 @@ exit_strategy:
   largest_day_gain_pct: 0.15
   gap_sell_threshold: 0.10
   time_stop_days: 15
+  dead_money_days: 20
   max_hold_before_tighten: 40
   climax_min_hold_days: 15
   climax_conditions_required: 3

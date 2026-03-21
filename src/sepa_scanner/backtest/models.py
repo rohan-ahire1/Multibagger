@@ -22,6 +22,7 @@ class ExitMode(str, Enum):
     V2_TRAIL_21EMA = "v2_trail_21ema"
     V3_TRAIL_PCT = "v3_trail_pct"
     MINERVINI_PHASED = "minervini_phased"
+    ADVANCED_SEPA = "advanced_sepa"
 
 
 EXIT_MODE_LABELS: dict[ExitMode, str] = {

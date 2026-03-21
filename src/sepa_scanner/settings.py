@@ -87,6 +87,23 @@ class RiskSettings(BaseModel):
     target_r: float | None = None
 
 
+class BacktestSettings(BaseModel):
+    pending_days: int = 5
+    max_hold_days: int = 90
+
+
+class ExitStrategySettings(BaseModel):
+    breakeven_activation_r: float = 1.0
+    partial_profit_r: float = 2.0
+    partial_profit_pct: float = 0.50
+    trail_activation_r: float = 2.0
+    max_loss_pct: float = 0.08
+    absolute_max_loss_pct: float = 0.10
+    trail_mode: str = "adaptive"
+    trail_pct: float = 0.20
+    dead_money_days: int | None = 15
+
+
 class AlertsSettings(BaseModel):
     max_alerts_per_day: int
     send_watch_alerts: bool
@@ -167,6 +184,8 @@ class AppSettings(BaseModel):
     setup_vcp: SetupVcpSettings
     breakout: BreakoutSettings
     risk: RiskSettings
+    backtest: BacktestSettings = Field(default_factory=BacktestSettings)
+    exit_strategy: ExitStrategySettings = Field(default_factory=ExitStrategySettings)
     alerts: AlertsSettings
     watchlist: WatchlistSettings = Field(default_factory=WatchlistSettings)
     market_filter: MarketFilterSettings = Field(default_factory=MarketFilterSettings)
@@ -249,6 +268,8 @@ def load_settings(config_dir: Path | None = None) -> AppSettings:
         setup_vcp=SetupVcpSettings.model_validate(config_values["setup_vcp"]),
         breakout=BreakoutSettings.model_validate(config_values["breakout"]),
         risk=RiskSettings.model_validate(config_values["risk"]),
+        backtest=BacktestSettings.model_validate(config_values.get("backtest", {})),
+        exit_strategy=ExitStrategySettings.model_validate(config_values.get("exit_strategy", {})),
         alerts=AlertsSettings.model_validate(config_values["alerts"]),
         watchlist=WatchlistSettings.model_validate(config_values.get("watchlist", {})),
         market_filter=MarketFilterSettings.model_validate(config_values.get("market_filter", {})),
