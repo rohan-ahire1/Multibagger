@@ -44,6 +44,7 @@ class RelativeStrengthSettings(BaseModel):
     lookbacks: list[int]
     weights: list[float]
     rs_rank_min: float
+    rs_rank_max: float = 100.0 # New: Hard ceiling
     skip_recent_days: int = 0  # skip most recent month to avoid reversal effect
 
     @model_validator(mode="after")
@@ -77,6 +78,7 @@ class BreakoutSettings(BaseModel):
     breakout_buffer_pct: float  # kept as fallback
     breakout_buffer_atr_mult: float | None = None  # when set, overrides breakout_buffer_pct
     breakout_vol_mult: float
+    breakout_vol_max_mult: float = 999.0 # New: Hard ceiling
     max_extension_breakout_pct: float = 0.15
 
 
@@ -84,24 +86,26 @@ class RiskSettings(BaseModel):
     entry_buffer_pct: float
     entry_buffer_atr_mult: float | None = None
     max_stop_pct: float
+    struct_stop_atr_mult: float | None = None  # New: multiplier for ATR-based stop
     target_r: float | None = None
 
 
 class BacktestSettings(BaseModel):
-    pending_days: int = 5
-    max_hold_days: int = 90
+    pending_days: int = 11
+    max_hold_days: int = 132
+    exit_mode: str = "advanced_sepa"
 
 
 class ExitStrategySettings(BaseModel):
     breakeven_activation_r: float = 1.0
     partial_profit_r: float = 2.0
     partial_profit_pct: float = 0.50
-    trail_activation_r: float = 2.0
+    trail_activation_r: float = 1.5
     max_loss_pct: float = 0.08
     absolute_max_loss_pct: float = 0.10
     trail_mode: str = "adaptive"
-    trail_pct: float = 0.20
-    dead_money_days: int | None = 15
+    trail_pct: float = 0.10
+    dead_money_days: int | None = 17
 
 
 class AlertsSettings(BaseModel):
@@ -129,15 +133,18 @@ class MarketFilterSettings(BaseModel):
 
 
 class PortfolioSettings(BaseModel):
-    max_heat_pct: float = 0.10           # max 10% total open risk
-    max_positions: int = 10              # max concurrent positions
-    max_sector_positions: int = 3        # max per sector
-    max_sector_pct: float = 0.40         # max 40% in any one sector
-    drawdown_half_pct: float = 0.10      # halve sizes at -10% from peak
-    drawdown_stop_pct: float = 0.15      # stop new entries at -15%
-    drawdown_close_pct: float = 0.20     # close all at -20%
+    max_heat_pct: float = 0.25           # max 25% total open risk
+    max_positions: int = 20              # max concurrent positions
+    max_sector_positions: int = 10       # max per sector
+    regime_heat_mult_strong: float = 1.0 # New: multiplier for STRONG regimes
+    max_sector_pct: float = 0.60         # max 60% in any one sector
+    drawdown_half_pct: float = 0.15      # halve sizes at -15% from peak
+    drawdown_stop_pct: float = 0.25      # stop new entries at -25%
+    drawdown_close_pct: float = 0.35     # close all at -35%
     initial_capital: float = 1_000_000.0
-    risk_per_trade_pct: float = 0.01     # 1% risk per trade
+    risk_per_trade_pct: float = 0.035    # 3.5% risk per trade
+    regime_gate_enabled: bool = True
+    regime_high_volatility_threshold: float = 0.25  # 20D ann. realized vol on benchmark
 
 
 class IndiaFilterSettings(BaseModel):

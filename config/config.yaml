@@ -21,24 +21,25 @@ trend_template:
   sma_mid: 150
   sma_slow: 200
   lookback_52w: 252
-  sma200_slope_lookback: 66
-  min_above_52w_low_pct: 0.30
-  max_below_52w_high_pct: 0.25
+  sma200_slope_lookback: 20
+  min_above_52w_low_pct: 0.20
+  max_below_52w_high_pct: 0.40
 
 relative_strength:
   lookbacks: [63, 126, 189, 252]
   weights: [0.4, 0.2, 0.2, 0.2]
-  rs_rank_min: 80
+  rs_rank_min: 65
+  rs_rank_max: 89 # New: Hard ceiling
   skip_recent_days: 21
 
 setup_vcp:
   base_lookback: 65
-  max_range10_pct: 0.10
-  max_vol_dryup_ratio: 0.60
+  max_range10_pct: 0.30
+  max_vol_dryup_ratio: 1.0
   atr_period: 14
-  atr_contraction_factor: 0.75
-  max_extension_from_50sma_pct: 0.10
-  base_max_depth_pct: 0.35
+  atr_contraction_factor: 1.0
+  max_extension_from_50sma_pct: 0.20
+  base_max_depth_pct: 0.50
   pre_alert_proximity_pct: 0.03
   contraction_smooth_window: 5
   contraction_min_peak_pct: 0.02
@@ -46,21 +47,24 @@ setup_vcp:
   contraction_standard_count: 3
 
 breakout:
-  require_market_filter: true
+  require_market_filter: false
   breakout_buffer_pct: 0.003
   breakout_buffer_atr_mult: 0.5
   breakout_vol_mult: 1.5
+  breakout_vol_max_mult: 3.0 # New: Hard ceiling
   max_extension_breakout_pct: 0.15
 
 risk:
   entry_buffer_pct: 0.003
   entry_buffer_atr_mult: 0.5
-  max_stop_pct: 0.10
+  max_stop_pct: 0.12
+  struct_stop_atr_mult: 1.6 # Optimized
   target_r: null
 
 backtest:
-  pending_days: 8
-  max_hold_days: 150
+  pending_days: 11
+  max_hold_days: 132
+  exit_mode: advanced_sepa
 
 alerts:
   max_alerts_per_day: 10
@@ -74,28 +78,31 @@ market_filter:
   breadth_weak_pct: 0.40
 
 portfolio:
-  max_heat_pct: 0.10
-  max_positions: 10
-  max_sector_positions: 3
-  max_sector_pct: 0.40
-  drawdown_half_pct: 0.10
-  drawdown_stop_pct: 0.15
-  drawdown_close_pct: 0.20
+  max_heat_pct: 0.40 # Increased from 0.25
+  max_positions: 30 # Increased from 20
+  max_sector_positions: 15 # Increased from 10
+  regime_heat_mult_strong: 1.5 # New: multiplier for STRONG regimes
+  max_sector_pct: 0.60
+  drawdown_half_pct: 0.15
+  drawdown_stop_pct: 0.25
+  drawdown_close_pct: 0.35
   initial_capital: 1000000
-  risk_per_trade_pct: 0.01
+  risk_per_trade_pct: 0.035
+  regime_gate_enabled: true
+  regime_high_volatility_threshold: 0.25
 
 watchlist:
   max_candidates: 300
 
 exit_strategy:
-  breakeven_activation_r: 1.0
-  partial_profit_r: 2.0
+  breakeven_activation_r: 2.1 # Optimized
+  partial_profit_r: 3.0
   partial_profit_pct: 0.50
-  trail_activation_r: 1.5
-  max_loss_pct: 0.08
-  absolute_max_loss_pct: 0.10
+  trail_activation_r: 2.4 # Optimized
+  max_loss_pct: 0.12
+  absolute_max_loss_pct: 0.15
   trail_mode: "adaptive"
-  trail_pct: 0.20
+  trail_pct: 0.14 # Optimized
   trail_pct_bull: 0.25
   trail_pct_bear: 0.15
   extension_limit_200d: 2.0
@@ -104,7 +111,7 @@ exit_strategy:
   largest_day_gain_pct: 0.15
   gap_sell_threshold: 0.10
   time_stop_days: 15
-  dead_money_days: 20
-  max_hold_before_tighten: 40
+  dead_money_days: 17
+  max_hold_before_tighten: 60 # Increased from 40
   climax_min_hold_days: 15
   climax_conditions_required: 3

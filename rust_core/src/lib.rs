@@ -3,13 +3,11 @@ use numpy::PyReadonlyArray1;
 use serde::{Deserialize, Serialize};
 use chrono::NaiveDate;
 use rayon::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use duckdb::Connection;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ExitMode {
-    #[serde(rename = "v1_fixed")]
-    V1Fixed,
     #[serde(rename = "v2_trail_10d")]
     V2Trail10d,
     #[serde(rename = "v2_trail_21ema")]
@@ -36,6 +34,7 @@ pub struct RustBacktestParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RustSignal {
     pub symbol: String,
+    pub sector: String,
     pub signal_date: NaiveDate,
     pub entry_ref: f64,
     pub stop: f64,
@@ -89,6 +88,7 @@ fn run_backtest_from_db_rust(
         let date_str: String = row.get(1)?;
         Ok(RustSignal {
             symbol: row.get(0)?,
+            sector: "UNKNOWN".to_string(),
             signal_date: NaiveDate::parse_from_str(&date_str, "%Y-%m-%d").unwrap(),
             entry_ref: row.get(2)?,
             stop: row.get(3)?,
@@ -261,7 +261,7 @@ fn simulate_single_signal_fast(
             return RustBacktestTrade::close(signal, "target", entry_date, entry_p, bar_date, target_price.unwrap(), holding_days, mae_price, mfe_price, None);
         }
 
-        if params.exit_mode != ExitMode::V1Fixed && risk > 0.0 {
+        if risk > 0.0 {
             if !breakeven_activated && high >= (entry_p + risk) {
                 breakeven_activated = true;
                 active_stop = f64::max(active_stop, entry_p);
@@ -370,10 +370,493 @@ impl RustBacktestTrade {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RustPortfolioSettings {
+    pub initial_capital: f64,
+    pub risk_per_trade_pct: f64,
+    pub max_positions: usize,
+    pub max_sector_positions: usize,
+    pub max_sector_pct: f64,
+    pub max_heat_pct: f64,
+    pub regime_heat_mult_strong: f64,
+    pub drawdown_half_pct: f64,
+    pub drawdown_stop_pct: f64,
+    pub drawdown_close_pct: f64,
+    pub allowed_entry_dates: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct OpenPosition {
+    pub signal: RustSignal,
+    pub sector: String,
+    pub entry_date: NaiveDate,
+    pub entry_price: f64,
+    pub shares: f64,
+    pub position_value: f64,
+    pub active_stop: f64,
+    pub initial_risk: f64,
+    pub target_price: Option<f64>,
+    pub mae_price: f64,
+    pub mfe_price: f64,
+    pub breakeven_activated: bool,
+    pub trail_activated: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct PendingSignal {
+    pub signal: RustSignal,
+    pub entry_ref: f64,
+    pub expiration_date: NaiveDate,
+}
+
+#[derive(Serialize)]
+struct PortfolioResult {
+    trades: Vec<RustBacktestTrade>,
+    initial_capital: f64,
+    final_equity: f64,
+}
+
+fn has_known_sector(sector: &str) -> bool {
+    let normalized = sector.trim().to_ascii_uppercase();
+    !normalized.is_empty() && normalized != "UNKNOWN"
+}
+
+#[pyfunction]
+fn run_portfolio_backtest_rust(
+    signals_json: String,
+    params_json: String,
+    portfolio_json: String,
+    all_dates: Vec<String>,
+    opens: PyReadonlyArray1<f64>,
+    highs: PyReadonlyArray1<f64>,
+    lows: PyReadonlyArray1<f64>,
+    closes: PyReadonlyArray1<f64>,
+    symbol_indices: HashMap<String, (usize, usize)>,
+) -> PyResult<String> {
+    let mut signals: Vec<RustSignal> = serde_json::from_str(&signals_json).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+    let params: RustBacktestParams = serde_json::from_str(&params_json).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+    let pf_settings: RustPortfolioSettings = serde_json::from_str(&portfolio_json).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+
+    signals.sort_by(|a, b| a.signal_date.cmp(&b.signal_date).then_with(|| a.symbol.cmp(&b.symbol)));
+
+    let opens = opens.as_slice()?;
+    let highs = highs.as_slice()?;
+    let lows = lows.as_slice()?;
+    let closes = closes.as_slice()?;
+
+    let parsed_dates: Vec<NaiveDate> = all_dates.iter()
+        .map(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").unwrap())
+        .collect();
+    let allowed_entry_dates: Option<HashSet<NaiveDate>> = pf_settings.allowed_entry_dates.as_ref().map(|dates| {
+        dates
+            .iter()
+            .filter_map(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
+            .collect()
+    });
+
+    let mut signals_by_date: HashMap<NaiveDate, Vec<RustSignal>> = HashMap::new();
+    for sig in signals {
+        signals_by_date.entry(sig.signal_date).or_insert_with(Vec::new).push(sig);
+    }
+
+    let mut unique_dates: Vec<NaiveDate> = parsed_dates.clone();
+    unique_dates.sort();
+    unique_dates.dedup();
+
+    let mut cash = pf_settings.initial_capital;
+    let mut equity_peak = pf_settings.initial_capital;
+    let mut open_positions: Vec<OpenPosition> = Vec::new();
+    let mut sector_position_counts: HashMap<String, usize> = HashMap::new();
+    let mut closed_trades: Vec<RustBacktestTrade> = Vec::new();
+    let mut pending_signals: Vec<PendingSignal> = Vec::new();
+
+    for &today in &unique_dates {
+        let mut i = 0;
+        while i < open_positions.len() {
+            let pos = &mut open_positions[i];
+            
+            let (start, end) = match symbol_indices.get(&pos.signal.symbol) {
+                Some(&indices) => indices,
+                None => { i += 1; continue; }
+            };
+            
+            let sym_dates = &parsed_dates[start..end];
+            
+            if let Some(idx) = sym_dates.iter().position(|&d| d == today) {
+                let open = opens[start + idx];
+                let high = highs[start + idx];
+                let low = lows[start + idx];
+                let close = closes[start + idx];
+                
+                let holding_days = (today - pos.entry_date).num_days() as usize; 
+                
+                pos.mae_price = f64::min(pos.mae_price, low);
+                pos.mfe_price = f64::max(pos.mfe_price, high);
+                
+                let mut exit_price = None;
+                let mut status = "";
+                
+                if open <= pos.active_stop {
+                    exit_price = Some(open);
+                    status = "stopped";
+                } else if let Some(target) = pos.target_price {
+                    if open >= target {
+                        exit_price = Some(open);
+                        status = "target";
+                    } else if high >= target && low <= pos.active_stop {
+                        exit_price = Some(pos.active_stop);
+                        status = "stopped";
+                    } else if low <= pos.active_stop {
+                        exit_price = Some(pos.active_stop);
+                        status = "stopped";
+                    } else if high >= target {
+                        exit_price = Some(target);
+                        status = "target";
+                    }
+                } else if low <= pos.active_stop {
+                    exit_price = Some(pos.active_stop);
+                    status = "stopped";
+                }
+                
+                if exit_price.is_none() && holding_days >= params.max_hold_days {
+                    exit_price = Some(close);
+                    status = "time_stop";
+                }
+                
+                if let Some(ep) = exit_price {
+                    cash += pos.shares * ep;
+                    if has_known_sector(&pos.sector) {
+                        let should_remove = if let Some(count) = sector_position_counts.get_mut(&pos.sector) {
+                            *count = count.saturating_sub(1);
+                            *count == 0
+                        } else {
+                            false
+                        };
+                        if should_remove {
+                            sector_position_counts.remove(&pos.sector);
+                        }
+                    }
+                    closed_trades.push(RustBacktestTrade::close(&pos.signal, status, pos.entry_date, pos.entry_price, today, ep, holding_days, pos.mae_price, pos.mfe_price, None));
+                    open_positions.remove(i);
+                    continue; 
+                }
+                
+                let risk = pos.entry_price - pos.signal.stop;
+                if risk > 0.0 {
+                    if !pos.breakeven_activated && high >= (pos.entry_price + risk) {
+                        pos.breakeven_activated = true;
+                        pos.active_stop = f64::max(pos.active_stop, pos.entry_price);
+                    }
+                    if !pos.trail_activated && high >= (pos.entry_price + (risk * params.trail_activation_r)) {
+                        pos.trail_activated = true;
+                    }
+                    if pos.trail_activated {
+                        if params.exit_mode == ExitMode::AdvancedSepa {
+                            if high >= (pos.entry_price + (risk * 3.0)) {
+                                let lookback = 10;
+                                if idx >= lookback {
+                                    let min_low = lows[start + idx - lookback..start + idx].iter().fold(f64::INFINITY, |a, &b| a.min(b));
+                                    pos.active_stop = f64::max(pos.active_stop, min_low);
+                                }
+                                pos.active_stop = f64::max(pos.active_stop, pos.entry_price + (risk * 2.0));
+                            }
+                        } else if params.exit_mode == ExitMode::V3TrailPct {
+                            let trail_price = pos.mfe_price * (1.0 - params.trail_pct);
+                            pos.active_stop = f64::max(pos.active_stop, trail_price);
+                        }
+                    }
+                }
+                
+                let reached_1r = risk > 0.0 && high >= (pos.entry_price + risk);
+                if reached_1r { pos.breakeven_activated = true; }
+                if let Some(dm_days) = params.dead_money_days {
+                    if !pos.breakeven_activated && holding_days >= dm_days {
+                        cash += pos.shares * close;
+                        if has_known_sector(&pos.sector) {
+                            let should_remove = if let Some(count) = sector_position_counts.get_mut(&pos.sector) {
+                                *count = count.saturating_sub(1);
+                                *count == 0
+                            } else {
+                                false
+                            };
+                            if should_remove {
+                                sector_position_counts.remove(&pos.sector);
+                            }
+                        }
+                        closed_trades.push(RustBacktestTrade::close(&pos.signal, "dead_money", pos.entry_date, pos.entry_price, today, close, holding_days, pos.mae_price, pos.mfe_price, None));
+                        open_positions.remove(i);
+                        continue;
+                    }
+                }
+            }
+            i += 1;
+        }
+
+        let mut pos_value = 0.0;
+        for pos in &open_positions {
+            let (start, end) = *symbol_indices.get(&pos.signal.symbol).unwrap();
+            let sym_dates = &parsed_dates[start..end];
+            if let Some(idx) = sym_dates.iter().position(|&d| d == today) {
+                pos_value += pos.shares * closes[start + idx];
+            } else {
+                pos_value += pos.shares * pos.entry_price;
+            }
+        }
+        let current_equity = cash + pos_value;
+        equity_peak = f64::max(equity_peak, current_equity);
+
+        if let Some(daily_signals) = signals_by_date.get(&today) {
+            for sig in daily_signals {
+                let exp_date = today + chrono::Duration::days(params.pending_days as i64);
+                pending_signals.push(PendingSignal {
+                    signal: sig.clone(),
+                    entry_ref: sig.entry_ref,
+                    expiration_date: exp_date,
+                });
+            }
+        }
+
+        let dd_pct = if equity_peak > 0.0 { (equity_peak - current_equity) / equity_peak } else { 0.0 };
+        let size_mult = if dd_pct >= pf_settings.drawdown_close_pct {
+            0.0
+        } else if dd_pct >= pf_settings.drawdown_stop_pct {
+            0.0
+        } else if dd_pct >= pf_settings.drawdown_half_pct {
+            0.5
+        } else {
+            1.0
+        };
+        let entries_allowed_today = allowed_entry_dates
+            .as_ref()
+            .map_or(true, |dates| dates.contains(&today));
+
+        let mut j = 0;
+        while j < pending_signals.len() {
+            if pending_signals[j].expiration_date < today {
+                let sig = &pending_signals[j].signal;
+                closed_trades.push(RustBacktestTrade::empty(sig, "not_filled"));
+                pending_signals.remove(j);
+                continue;
+            }
+
+            if !entries_allowed_today {
+                j += 1;
+                continue;
+            }
+
+            if size_mult == 0.0 || open_positions.len() >= pf_settings.max_positions {
+                let sig = &pending_signals[j].signal;
+                closed_trades.push(RustBacktestTrade::empty(sig, "skipped_portfolio"));
+                pending_signals.remove(j);
+                continue;
+            }
+
+            if current_equity <= 0.0 {
+                let sig = &pending_signals[j].signal;
+                closed_trades.push(RustBacktestTrade::empty(sig, "skipped_portfolio"));
+                pending_signals.remove(j);
+                continue;
+            }
+
+            let p_sig = &pending_signals[j];
+            let (start, end) = match symbol_indices.get(&p_sig.signal.symbol) {
+                Some(&indices) => indices,
+                None => {
+                    let sig = &pending_signals[j].signal;
+                    closed_trades.push(RustBacktestTrade::empty(sig, "missing_data"));
+                    pending_signals.remove(j);
+                    continue;
+                }
+            };
+            let sym_dates = &parsed_dates[start..end];
+
+            let mut filled = false;
+            if let Some(idx) = sym_dates.iter().position(|&d| d == today) {
+                let open = opens[start + idx];
+                let high = highs[start + idx];
+
+                if open >= p_sig.entry_ref || high >= p_sig.entry_ref {
+                    let fill_price = f64::max(open, p_sig.entry_ref);
+                    
+                    let risk_budget = current_equity * pf_settings.risk_per_trade_pct * size_mult;
+                    let total_heat: f64 = open_positions.iter().map(|pos| pos.initial_risk * pos.shares).sum();
+                    
+                    let is_allowed_date = allowed_entry_dates.as_ref().map_or(true, |set| set.contains(&today));
+                    let current_max_heat = if is_allowed_date {
+                        pf_settings.max_heat_pct * pf_settings.regime_heat_mult_strong
+                    } else {
+                        pf_settings.max_heat_pct
+                    };
+
+                    if ((total_heat + risk_budget) / current_equity) > current_max_heat {
+                        let sig = &pending_signals[j].signal;
+                        closed_trades.push(RustBacktestTrade::empty(sig, "skipped_portfolio"));
+                        pending_signals.remove(j);
+                        continue;
+                    }
+
+                    let risk_per_share = fill_price - p_sig.signal.stop;
+
+                    if risk_per_share > 0.0 {
+                        let shares = risk_budget / risk_per_share;
+                        let cost = shares * fill_price;
+
+                        if has_known_sector(&p_sig.signal.sector) {
+                            let sector_count = sector_position_counts
+                                .get(&p_sig.signal.sector)
+                                .copied()
+                                .unwrap_or(0);
+                            if sector_count >= pf_settings.max_sector_positions {
+                                let sig = &pending_signals[j].signal;
+                                closed_trades.push(RustBacktestTrade::empty(sig, "skipped_portfolio"));
+                                pending_signals.remove(j);
+                                continue;
+                            }
+
+                            let sector_value: f64 = open_positions
+                                .iter()
+                                .filter(|pos| pos.sector == p_sig.signal.sector)
+                                .map(|pos| pos.position_value)
+                                .sum();
+                            if ((sector_value + cost) / current_equity) > pf_settings.max_sector_pct {
+                                let sig = &pending_signals[j].signal;
+                                closed_trades.push(RustBacktestTrade::empty(sig, "skipped_portfolio"));
+                                pending_signals.remove(j);
+                                continue;
+                            }
+                        }
+
+                        if cost <= cash {
+                            cash -= cost;
+                            let target_price = match params.target_r {
+                                Some(r) => Some(fill_price + (risk_per_share * r)),
+                                None => None,
+                            };
+
+                            open_positions.push(OpenPosition {
+                                signal: p_sig.signal.clone(),
+                                sector: p_sig.signal.sector.clone(),
+                                entry_date: today,
+                                entry_price: fill_price,
+                                shares,
+                                position_value: cost,
+                                active_stop: p_sig.signal.stop,
+                                initial_risk: risk_per_share,
+                                target_price,
+                                mae_price: fill_price,
+                                mfe_price: fill_price,
+                                breakeven_activated: false,
+                                trail_activated: false,
+                            });
+                            if has_known_sector(&p_sig.signal.sector) {
+                                *sector_position_counts.entry(p_sig.signal.sector.clone()).or_insert(0) += 1;
+                            }
+                            filled = true;
+                        }
+                    }
+                }
+            }
+
+            if filled {
+                pending_signals.remove(j);
+            } else {
+                j += 1;
+            }
+        }
+    }
+    
+    if let Some(&last_date) = unique_dates.last() {
+        for pos in open_positions {
+            let (start, end) = *symbol_indices.get(&pos.signal.symbol).unwrap();
+            let sym_dates = &parsed_dates[start..end];
+            let mut final_price = pos.entry_price;
+            if let Some(idx) = sym_dates.iter().position(|&d| d == last_date) {
+                final_price = closes[start + idx];
+            }
+            let holding_days = (last_date - pos.entry_date).num_days() as usize;
+            cash += pos.shares * final_price;
+            closed_trades.push(RustBacktestTrade::close(&pos.signal, "open", pos.entry_date, pos.entry_price, last_date, final_price, holding_days, pos.mae_price, pos.mfe_price, None));
+        }
+    }
+
+    let final_result = PortfolioResult {
+        trades: closed_trades,
+        initial_capital: pf_settings.initial_capital,
+        final_equity: cash, // At the very end, all positions were liquidated into cash
+    };
+
+    Ok(serde_json::to_string(&final_result).unwrap())
+}
+
+
+
+/// A massive optimization engine that runs a grid search entirely in parallel Rust.
+#[pyfunction]
+fn run_optimization_grid_rust(
+    signals_json: String,
+    params_grid_json: String, // List of BacktestParams
+    all_dates: Vec<String>,
+    opens: PyReadonlyArray1<f64>,
+    highs: PyReadonlyArray1<f64>,
+    lows: PyReadonlyArray1<f64>,
+    closes: PyReadonlyArray1<f64>,
+    symbol_indices: HashMap<String, (usize, usize)>,
+) -> PyResult<String> {
+    let signals: Vec<RustSignal> = serde_json::from_str(&signals_json).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+    let params_grid: Vec<RustBacktestParams> = serde_json::from_str(&params_grid_json).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+
+    let opens = opens.as_slice()?;
+    let highs = highs.as_slice()?;
+    let lows = lows.as_slice()?;
+    let closes = closes.as_slice()?;
+
+    let parsed_dates: Vec<NaiveDate> = all_dates.iter()
+        .map(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").unwrap())
+        .collect();
+
+    // Prepare internal symbol data pointers
+    let mut sym_data_map = HashMap::new();
+    for (sym, (start, end)) in symbol_indices {
+        sym_data_map.insert(sym, (start, end));
+    }
+
+    // Run the entire grid search in parallel
+    // Outer loop: Parameters, Inner loop: Signals
+    let results: Vec<(usize, f64, f64)> = params_grid.par_iter().enumerate().map(|(p_idx, params)| {
+        let mut total_r = 0.0;
+        let mut count = 0;
+        
+        for signal in &signals {
+            if let Some(&(start, end)) = sym_data_map.get(&signal.symbol) {
+                let trade = simulate_single_signal_fast(
+                    signal, params, 
+                    &parsed_dates[start..end], 
+                    &opens[start..end], 
+                    &highs[start..end], 
+                    &lows[start..end], 
+                    &closes[start..end]
+                );
+                
+                if let Some(r) = trade.r_multiple {
+                    total_r += r;
+                    count += 1;
+                }
+            }
+        }
+        
+        let expectancy = if count > 0 { total_r / (count as f64) } else { 0.0 };
+        (p_idx, expectancy, total_r)
+    }).collect();
+
+    Ok(serde_json::to_string(&results).unwrap())
+}
+
 #[pymodule]
 fn multibagger_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(health_check, m)?)?;
     m.add_function(wrap_pyfunction!(run_backtest_from_db_rust, m)?)?;
     m.add_function(wrap_pyfunction!(run_bulk_backtest_rust_v2, m)?)?;
+    m.add_function(wrap_pyfunction!(run_portfolio_backtest_rust, m)?)?;
+    m.add_function(wrap_pyfunction!(run_optimization_grid_rust, m)?)?;
     Ok(())
 }

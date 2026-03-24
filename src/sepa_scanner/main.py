@@ -19,6 +19,8 @@ import typer
 from sepa_scanner.backtest.engine import simulate_breakout_backtest
 from sepa_scanner.backtest.metrics import build_equity_curve, summarize_backtest
 from sepa_scanner.backtest.models import BacktestParams, BacktestReport, ExitMode
+from sepa_scanner.backtest.portfolio import PortfolioManager
+from sepa_scanner.backtest.regime_gate import compute_regime_gate, gate_lookup
 from sepa_scanner.alerts.console import ConsoleAlertChannel
 from sepa_scanner.alerts.telegram import TelegramAlertChannel
 from sepa_scanner.calendar import (
@@ -49,10 +51,13 @@ def resolve_settings(config_dir: Path | None = None) -> AppSettings:
     return settings
 
 
-def _stores(settings: AppSettings) -> tuple[ParquetOhlcvStore, DuckDbStore]:
+def _stores(settings: AppSettings, *, read_only: bool = False) -> tuple[ParquetOhlcvStore, DuckDbStore]:
     data_dir = ensure_directory(settings.runtime.data_dir)
     parquet_store = ParquetOhlcvStore(root=ensure_directory(data_dir / "yf_adjusted"))
-    duckdb_store = DuckDbStore(db_path=ensure_directory(data_dir / "db") / "sepa.duckdb")
+    duckdb_store = DuckDbStore(
+        db_path=ensure_directory(data_dir / "db") / "sepa.duckdb",
+        read_only=read_only
+    )
     return parquet_store, duckdb_store
 
 
@@ -425,18 +430,49 @@ def run_backtest_command(
     symbol: str | None,
     export_csv: bool,
     use_rust: bool = True,
+    use_portfolio: bool = False,
+    max_positions: int | None = None,
 ) -> BacktestReport:
     settings = resolve_settings(config_dir)
-    parquet_store, duckdb_store = _stores(settings)
-    duckdb_store.initialize()
+    parquet_store, duckdb_store = _stores(settings, read_only=True)
+    # duckdb_store.initialize()  # No need to initialize in read-only mode
     params = BacktestParams(
         pending_days=pending_days,
         max_hold_days=max_hold_days,
         target_r=target_r,
-        exit_mode=ExitMode.MINERVINI_PHASED,
+        exit_mode=ExitMode(settings.backtest.exit_mode),
         trail_activation_r=settings.exit_strategy.trail_activation_r,
+        trail_pct=settings.exit_strategy.trail_pct,
         dead_money_days=settings.exit_strategy.dead_money_days,
     )
+    
+    pm = None
+    entry_gate = None
+    if use_portfolio:
+        actual_max_pos = max_positions if max_positions is not None else settings.portfolio.max_positions
+        pm = PortfolioManager(
+            initial_capital=settings.portfolio.initial_capital,
+            risk_per_trade_pct=settings.portfolio.risk_per_trade_pct,
+            max_positions=actual_max_pos,
+            max_sector_positions=settings.portfolio.max_sector_positions,
+            max_sector_pct=settings.portfolio.max_sector_pct,
+            max_heat_pct=settings.portfolio.max_heat_pct,
+            regime_heat_mult_strong=settings.portfolio.regime_heat_mult_strong,
+            drawdown_half_pct=settings.portfolio.drawdown_half_pct,
+            drawdown_stop_pct=settings.portfolio.drawdown_stop_pct,
+            drawdown_close_pct=settings.portfolio.drawdown_close_pct,
+        )
+        if settings.portfolio.regime_gate_enabled:
+            regime_gate = compute_regime_gate(
+                parquet_store,
+                benchmark_symbol=settings.market.benchmark_symbol,
+                start_date=start_date,
+                end_date=end_date,
+                breadth_weak_pct=settings.market_filter.breadth_weak_pct,
+                high_volatility_threshold=settings.portfolio.regime_high_volatility_threshold,
+            )
+            entry_gate = gate_lookup(regime_gate)
+
     signals = get_backtest_signals(
         duckdb_store._connect(),
         start_date=start_date,
@@ -460,7 +496,14 @@ def run_backtest_command(
         start_date=start_date,
         end_date=ohlcv_end_date,
     )
-    result = simulate_breakout_backtest(signals, ohlcv, params, use_rust=use_rust)
+    result = simulate_breakout_backtest(
+        signals,
+        ohlcv,
+        params,
+        portfolio_manager=pm,
+        use_rust=use_rust,
+        entry_gate=entry_gate,
+    )
     trades = _trade_frame(result.trades)
     summary = summarize_backtest(result.trades, exit_mode=params.exit_mode)
     equity_curve = build_equity_curve(result.trades)
@@ -607,15 +650,18 @@ def backtest_command(
     pending_days: int | None = typer.Option(None, help="Trading days to keep an entry pending"),
     max_hold_days: int | None = typer.Option(None, help="Maximum holding period in trading days"),
     target_r: float | None = typer.Option(None, help="Optional profit target in R multiples (default from config)"),
+    max_positions: int | None = typer.Option(None, help="Max concurrent positions"),
     symbol: str | None = typer.Option(None, help="Optional symbol filter"),
     export_csv: bool = typer.Option(False, help="Export the trade table as CSV"),
     use_rust: bool = typer.Option(True, help="Use the high-performance Rust engine"),
+    portfolio: bool = typer.Option(False, "--portfolio", help="Run with portfolio capital simulation (Money Mode)"),
     config_dir: Path | None = typer.Option(None, help="Override config directory"),
-) -> None:
+    ) -> None:
     settings = resolve_settings(config_dir)
     effective_target_r = target_r if target_r is not None else settings.risk.target_r
     effective_pending_days = pending_days if pending_days is not None else settings.backtest.pending_days
     effective_max_hold_days = max_hold_days if max_hold_days is not None else settings.backtest.max_hold_days
+    effective_max_positions = max_positions if max_positions is not None else settings.portfolio.max_positions
 
     report = run_backtest_command(
         config_dir=config_dir,
@@ -627,6 +673,8 @@ def backtest_command(
         symbol=symbol,
         export_csv=export_csv,
         use_rust=use_rust,
+        use_portfolio=portfolio,
+        max_positions=effective_max_positions,
     )
     if report.summary.total_signals == 0:
         typer.echo("No eligible BREAKOUT signals in range.")

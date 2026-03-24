@@ -369,7 +369,10 @@ def scan_for_date(
             skip_recent_days=settings.relative_strength.skip_recent_days,
         )
     rs_pass_symbols = set(
-        rs_ranks.filter(pl.col("rs_rank") >= settings.relative_strength.rs_rank_min)["symbol"].to_list()
+        rs_ranks.filter(
+            (pl.col("rs_rank") >= settings.relative_strength.rs_rank_min)
+            & (pl.col("rs_rank") <= settings.relative_strength.rs_rank_max)
+        )["symbol"].to_list()
     )
 
     scan_rows = universe_rows.join(rs_ranks, on="symbol", how="left").with_columns(
@@ -463,6 +466,15 @@ def scan_for_date(
 
     scan_rows = scan_rows.with_columns(breakout_buffer_expr, entry_ref_expr)
 
+    # ATR-based structural stop (Optional override)
+    # If struct_stop_atr_mult is configured, struct_stop = entry_ref - ATR * mult
+    struct_atr_mult = settings.risk.struct_stop_atr_mult
+    if struct_atr_mult is not None:
+        scan_rows = scan_rows.with_columns(
+            (pl.col("entry_ref") - pl.col("atr_pct") * pl.col("close") * struct_atr_mult).alias("struct_stop"),
+            (pl.col("entry_ref") - pl.col("atr_pct_prev") * pl.col("prev_close") * struct_atr_mult).alias("struct_stop_prev")
+        )
+
     breakout_mask = (
         pl.col("trend_template_pass")
         & pl.col("rs_pass")
@@ -473,6 +485,7 @@ def scan_for_date(
         )
         & (pl.col("close") >= pl.col("_breakout_level"))
         & (pl.col("volume") >= pl.col("vol50") * settings.breakout.breakout_vol_mult)
+        & (pl.col("volume") <= pl.col("vol50") * settings.breakout.breakout_vol_max_mult)
         & (pl.col("prev_close") < pl.col("_breakout_level"))
         & (pl.col("close") <= pl.col("sma50") * (1.0 + settings.breakout.max_extension_breakout_pct))
     )

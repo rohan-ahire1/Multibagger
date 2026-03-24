@@ -5,6 +5,7 @@ import logging
 import os
 from concurrent.futures import ProcessPoolExecutor
 from datetime import date, timedelta
+from typing import Callable, Mapping
 
 import numpy as np
 import polars as pl
@@ -112,9 +113,10 @@ def _simulate_signal(
     signal: dict[str, object],
     symbol_prices: list[dict[str, object]],
     params: BacktestParams,
+    entry_filter: Callable[[date], bool] | None = None,
 ) -> BacktestTrade:
     if params.exit_mode == ExitMode.MINERVINI_PHASED:
-        return _simulate_signal_phased(signal, symbol_prices, params)
+        return _simulate_signal_phased(signal, symbol_prices, params, entry_filter=entry_filter)
     future_bars = [row for row in symbol_prices if row["date"] > signal["signal_date"]]
     if not future_bars:
         return _empty_trade(signal, "incomplete_data")
@@ -132,6 +134,8 @@ def _simulate_signal(
     entry_price: float | None = None
     entry_date: date | None = None
     for idx, bar in enumerate(pending_bars):
+        if entry_filter is not None and not entry_filter(bar["date"]):
+            continue
         if float(bar["open"]) >= entry_ref:
             entry_index = idx
             entry_price = float(bar["open"])
@@ -311,6 +315,7 @@ def _simulate_signal_phased(
     signal: dict[str, object],
     symbol_prices: list[dict[str, object]],
     params: BacktestParams,
+    entry_filter: Callable[[date], bool] | None = None,
 ) -> BacktestTrade:
     """Simulate a signal using the Minervini multi-phase exit engine."""
     future_bars = [row for row in symbol_prices if row["date"] > signal["signal_date"]]
@@ -331,6 +336,8 @@ def _simulate_signal_phased(
     entry_price: float | None = None
     entry_date: date | None = None
     for idx, bar in enumerate(pending_bars):
+        if entry_filter is not None and not entry_filter(bar["date"]):
+            continue
         if float(bar["open"]) >= entry_ref:
             entry_index = idx
             entry_price = float(bar["open"])
@@ -588,6 +595,7 @@ def simulate_breakout_backtest(
     params: BacktestParams,
     portfolio_manager: PortfolioManager | None = None,
     use_rust: bool = True,
+    entry_gate: Mapping[date, bool] | None = None,
 ) -> BacktestResult:
     signals = (
         signals_df.filter(pl.col("signal_type") == "BREAKOUT")
@@ -597,16 +605,15 @@ def simulate_breakout_backtest(
     if not signals:
         return BacktestResult(trades=[])
 
-    # Try Rust Engine first if requested and available
-    if use_rust and multibagger_core is not None and portfolio_manager is None:
+    if use_rust and multibagger_core is not None:
         try:
-            return _simulate_with_rust(signals_df, ohlcv_df, params)
+            return _simulate_with_rust(signals_df, ohlcv_df, params, portfolio_manager, entry_gate=entry_gate)
         except Exception as e:
             logger.warning(f"Rust backtest failed, falling back to Python: {e}")
 
     ohlcv_rows = (
         ohlcv_df.sort(["symbol", "date"])
-        .select("date", "symbol", "open", "high", "low", "close")
+        .select("date", "symbol", "open", "high", "low", "close", "volume")
         .to_dicts()
     )
     prices_by_symbol: dict[str, list[dict[str, object]]] = {}
@@ -620,7 +627,7 @@ def simulate_breakout_backtest(
     # --- Portfolio-constrained mode: sequential execution ---
     if portfolio_manager is not None:
         return _simulate_with_portfolio(
-            signals, prices_by_symbol, signals_by_symbol, params, portfolio_manager,
+            signals, prices_by_symbol, signals_by_symbol, params, portfolio_manager, entry_gate=entry_gate,
         )
 
     # --- Standard mode: per-symbol parallelism ---
@@ -654,6 +661,7 @@ def _simulate_with_portfolio(
     signals_by_symbol: dict[str, list[dict[str, object]]],
     params: BacktestParams,
     pm: PortfolioManager,
+    entry_gate: Mapping[date, bool] | None = None,
 ) -> BacktestResult:
     """Run backtest sequentially with portfolio-level risk controls.
 
@@ -672,11 +680,20 @@ def _simulate_with_portfolio(
 
     # Deferred closes: (exit_date, symbol) pairs to close when signal_date >= exit_date
     pending_closes: list[tuple[date, str]] = []
+    entry_filter = (lambda entry_date: bool(entry_gate.get(entry_date, False))) if entry_gate is not None else None
 
-    for signal in signals:
+    # Create a mutable list of signals to allow injection of recovery trades
+    signals_queue = list(signals)
+    i = 0
+    while i < len(signals_queue):
+        signal = signals_queue[i]
+        i += 1
+        
         sig_date = signal["signal_date"]
         sym = str(signal["symbol"])
         symbol_prices = prices_by_symbol.get(sym, [])
+        
+        # ... (rest of existing loop logic for release positions and overlap)
 
         # Release positions whose exit_date <= current signal date
         still_pending: list[tuple[date, str]] = []
@@ -694,31 +711,54 @@ def _simulate_with_portfolio(
 
         # Sector defaults to "UNKNOWN" when not provided on the signal
         sector = str(signal.get("sector", "UNKNOWN"))
+        base_depth = signal.get("range10") # Use range10 as base_depth proxy
 
-        # Portfolio capacity check
-        if not pm.can_open_trade(sector=sector):
-            all_trades.append(_empty_trade(signal, "skipped_portfolio"))
+        trade = _simulate_signal(signal, symbol_prices, params, entry_filter=entry_filter)
+        if trade.entry_date is None:
+            all_trades.append(trade)
             continue
 
-        trade = _simulate_signal(signal, symbol_prices, params)
+        risk_per_share = _risk_per_share(trade.entry_price, trade.stop) if trade.entry_price else None
+        if risk_per_share and risk_per_share > 0 and trade.entry_price is not None:
+            position_value = pm.preview_position_value(risk_per_share, trade.entry_price, base_depth=base_depth)
+            if not pm.can_open_trade(sector=sector, position_value=position_value, base_depth=base_depth):
+                all_trades.append(_empty_trade(signal, "skipped_portfolio"))
+                continue
+            pm.open_trade(
+                symbol=sym,
+                sector=sector,
+                risk_per_share=risk_per_share,
+                entry_price=trade.entry_price,
+                base_depth=base_depth,
+            )
+
         all_trades.append(trade)
 
-        if trade.entry_date is not None:
-            # Register the position with the portfolio manager
-            risk_per_share = _risk_per_share(trade.entry_price, trade.stop) if trade.entry_price else None
-            if risk_per_share and risk_per_share > 0:
-                pm.open_trade(
-                    symbol=sym, sector=sector,
-                    risk_per_share=risk_per_share, entry_price=trade.entry_price,
-                )
+        # SQUAT RECOVERY: If stopped out, check for pivot reclaim within 10 days
+        if trade.status == "stopped" and trade.exit_date:
+            pivot = signal.get("pivot")
+            vol50 = signal.get("vol50")
+            if pivot and vol50:
+                recovery_bars = [b for b in symbol_prices if b["date"] > trade.exit_date][:10]
+                for bar in recovery_bars:
+                    if bar["close"] >= pivot and bar["volume"] >= vol50 * 1.5:
+                        # Re-trigger a breakout signal on this date
+                        recovery_sig = signal.copy()
+                        recovery_sig["signal_date"] = bar["date"]
+                        recovery_sig["signal_type"] = "BUY_RECOVERY"
+                        # Insert into the queue maintaining date order if possible, 
+                        # but simple append + re-sort or immediate processing also works
+                        signals_queue.append(recovery_sig)
+                        signals_queue.sort(key=lambda s: s["signal_date"])
+                        break
 
-            # Track overlap
-            if trade.exit_date is not None:
-                active_until[sym] = trade.exit_date
-                # Defer position close until we reach a signal on or after the exit date
-                pending_closes.append((trade.exit_date, sym))
-            elif symbol_prices:
-                active_until[sym] = symbol_prices[-1]["date"]
+        # Track overlap
+        if trade.exit_date is not None:
+            active_until[sym] = trade.exit_date
+            # Defer position close until we reach a signal on or after the exit date
+            pending_closes.append((trade.exit_date, sym))
+        elif symbol_prices:
+            active_until[sym] = symbol_prices[-1]["date"]
 
     all_trades.sort(key=lambda t: (t.signal_date, t.symbol))
     return BacktestResult(trades=all_trades)
@@ -728,6 +768,8 @@ def _simulate_with_rust(
     signals_df: pl.DataFrame,
     ohlcv_df: pl.DataFrame,
     params: BacktestParams,
+    pm: PortfolioManager | None = None,
+    entry_gate: Mapping[date, bool] | None = None,
 ) -> BacktestResult:
     """Helper to prepare data and call the Rust engine."""
     if multibagger_core is None:
@@ -752,8 +794,16 @@ def _simulate_with_rust(
         current_idx += count
 
     # 3. Prepare signals JSON
+    breakout_signals = signals_df.filter(pl.col("signal_type") == "BREAKOUT")
+    if "sector" in breakout_signals.columns:
+        breakout_signals = breakout_signals.with_columns(
+            pl.col("sector").cast(pl.String).fill_null("UNKNOWN").alias("sector")
+        )
+    else:
+        breakout_signals = breakout_signals.with_columns(pl.lit("UNKNOWN").alias("sector"))
+
     rust_signals = []
-    for sig in signals_df.filter(pl.col("signal_type") == "BREAKOUT").to_dicts():
+    for sig in breakout_signals.to_dicts():
         sig_copy = {
             "symbol": str(sig["symbol"]),
             "signal_date": sig["signal_date"].strftime("%Y-%m-%d"),
@@ -761,6 +811,7 @@ def _simulate_with_rust(
             "stop": float(sig["stop"]),
             "pivot": float(sig["pivot"]) if sig.get("pivot") is not None else None,
             "rs_rank": float(sig.get("rs_rank", 80.0)),
+            "sector": str(sig.get("sector", "UNKNOWN")),
         }
         rust_signals.append(sig_copy)
 
@@ -778,18 +829,65 @@ def _simulate_with_rust(
     )
 
     # 5. Execute Rust Engine
-    results_json = multibagger_core.run_bulk_backtest_rust_v2(
-        json.dumps(rust_signals),
-        params_json,
-        all_dates,
-        opens,
-        highs,
-        lows,
-        closes,
-        symbol_indices,
-    )
+    if pm is not None:
+        allowed_entry_dates = None
+        if entry_gate is not None:
+            allowed_entry_dates = [
+                gate_date.isoformat()
+                for gate_date, allowed in sorted(entry_gate.items())
+                if allowed
+            ]
+        portfolio_json = json.dumps({
+            "initial_capital": pm.initial_capital,
+            "risk_per_trade_pct": pm.risk_per_trade_pct,
+            "max_positions": pm.max_positions,
+            "max_sector_positions": pm.max_sector_positions,
+            "max_sector_pct": pm.max_sector_pct,
+            "max_heat_pct": pm.max_heat_pct,
+            "regime_heat_mult_strong": pm.regime_heat_mult_strong,
+            "drawdown_half_pct": pm.drawdown_half_pct,
+            "drawdown_stop_pct": pm.drawdown_stop_pct,
+            "drawdown_close_pct": pm.drawdown_close_pct,
+            "allowed_entry_dates": allowed_entry_dates,
+        })
+        results_json = multibagger_core.run_portfolio_backtest_rust(
+            json.dumps(rust_signals),
+            params_json,
+            portfolio_json,
+            all_dates,
+            opens,
+            highs,
+            lows,
+            closes,
+            symbol_indices,
+        )
+    else:
+        results_json = multibagger_core.run_bulk_backtest_rust_v2(
+            json.dumps(rust_signals),
+            params_json,
+            all_dates,
+            opens,
+            highs,
+            lows,
+            closes,
+            symbol_indices,
+        )
 
-    rust_trades_raw = json.loads(results_json)
+    rust_trades_raw = []
+    
+    if pm is not None:
+        rust_dict = json.loads(results_json)
+        rust_trades_raw = rust_dict["trades"]
+        initial_cap = rust_dict["initial_capital"]
+        final_eq = rust_dict["final_equity"]
+        print("\n" + "="*50)
+        print("💰 PORTFOLIO SIMULATION RESULTS")
+        print(f" -> Initial Capital: ₹{initial_cap:,.2f}")
+        print(f" -> Final Equity:    ₹{final_eq:,.2f}")
+        print(f" -> Total Return:    {((final_eq - initial_cap) / initial_cap) * 100:.2f}%")
+        print("="*50 + "\n")
+    else:
+        rust_trades_raw = json.loads(results_json)
 
     # 6. Convert back to BacktestTrade objects
     final_trades = []
