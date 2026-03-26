@@ -16,6 +16,8 @@ from sepa_scanner.backtest.signal_scorecard import compute_scorecard
 from sepa_scanner.backtest.models import BacktestParams, ExitMode
 from sepa_scanner.backtest.queries import get_backtest_ohlcv, get_backtest_signals
 from sepa_scanner.settings import AppSettings
+from sepa_scanner.backtest.portfolio import PortfolioManager
+from sepa_scanner.backtest.regime_gate import compute_regime_gate, gate_lookup
 from sepa_scanner.storage.duckdb_store import DuckDbStore
 from sepa_scanner.storage.parquet_store import ParquetOhlcvStore
 
@@ -33,6 +35,7 @@ class BacktestRunRequest(BaseModel):
     trail_pct: float = 0.20
     dead_money_days: int | None = 20
     exit_engine: str = "minervini_phased"
+    use_portfolio: bool = True
 
 
 def _cache_path(settings: AppSettings) -> Path:
@@ -73,6 +76,32 @@ def run_backtest(
         trail_pct=req.trail_pct,
         dead_money_days=req.dead_money_days,
     )
+    
+    pm = None
+    entry_gate = None
+    if req.use_portfolio:
+        pm = PortfolioManager(
+            initial_capital=settings.portfolio.initial_capital,
+            risk_per_trade_pct=settings.portfolio.risk_per_trade_pct,
+            max_positions=settings.portfolio.max_positions,
+            max_sector_positions=settings.portfolio.max_sector_positions,
+            max_sector_pct=settings.portfolio.max_sector_pct,
+            max_heat_pct=settings.portfolio.max_heat_pct,
+            drawdown_half_pct=settings.portfolio.drawdown_half_pct,
+            drawdown_stop_pct=settings.portfolio.drawdown_stop_pct,
+            drawdown_close_pct=settings.portfolio.drawdown_close_pct,
+        )
+        if settings.portfolio.regime_gate_enabled:
+            regime_gate = compute_regime_gate(
+                parquet,
+                benchmark_symbol=settings.market.benchmark_symbol,
+                start_date=req.start_date,
+                end_date=req.end_date,
+                breadth_weak_pct=settings.market_filter.breadth_weak_pct,
+                high_volatility_threshold=settings.portfolio.regime_high_volatility_threshold,
+            )
+            entry_gate = gate_lookup(regime_gate)
+
     store.initialize()
     conn = store._connect()
     signals_df = get_backtest_signals(conn, req.start_date, req.end_date)
@@ -83,7 +112,8 @@ def run_backtest(
     extended_end = req.end_date + timedelta(days=int(req.max_hold_days * 1.5))
     ohlcv_df = get_backtest_ohlcv(parquet, symbols, req.start_date, extended_end)
 
-    result = simulate_breakout_backtest(signals_df, ohlcv_df, params)
+    # UI currently runs Python engine since it passes custom exit parameters that Rust might not catch dynamically yet.
+    result = simulate_breakout_backtest(signals_df, ohlcv_df, params, portfolio_manager=pm, entry_gate=entry_gate, use_rust=False)
     signal_analysis = analyze_signal_quality(
         signals_df, ohlcv_df, pending_days=req.pending_days
     )

@@ -60,10 +60,13 @@ const columns = [
       <span className="tabular-nums text-zinc-400">{formatDate(info.getValue())}</span>
     ),
   }),
-  columnHelper.accessor('returnPct', {
+  columnHelper.accessor((row) => row.returnPct ?? undefined, {
+    id: 'returnPct',
     header: 'Return %',
     size: 78,
     meta: { align: 'right' },
+    sortUndefined: 'last',
+    sortingFn: 'basic',
     cell: (info) => {
       const val = info.getValue()
       if (val == null) return <span className="text-zinc-500">—</span>
@@ -71,10 +74,13 @@ const columns = [
       return <span className={`tabular-nums font-mono font-semibold ${color}`}>{formatPct(val)}</span>
     },
   }),
-  columnHelper.accessor('rMultiple', {
+  columnHelper.accessor((row) => row.rMultiple ?? undefined, {
+    id: 'rMultiple',
     header: 'R-Multiple',
     size: 82,
     meta: { align: 'right' },
+    sortUndefined: 'last',
+    sortingFn: 'basic',
     cell: (info) => {
       const val = info.getValue()
       if (val == null) return <span className="text-zinc-500">—</span>
@@ -82,10 +88,13 @@ const columns = [
       return <span className={`tabular-nums font-mono font-semibold ${color}`}>{formatR(val)}</span>
     },
   }),
-  columnHelper.accessor('holdingDays', {
+  columnHelper.accessor((row) => row.holdingDays ?? undefined, {
+    id: 'holdingDays',
     header: 'Days',
     size: 52,
     meta: { align: 'right' },
+    sortUndefined: 'last',
+    sortingFn: 'basic',
     cell: (info) => {
       const val = info.getValue()
       return <span className="tabular-nums text-zinc-300">{val ?? '—'}</span>
@@ -116,10 +125,13 @@ const columns = [
       return <span className="text-[11px] font-mono text-zinc-400">{labels[val] ?? val}</span>
     },
   }),
-  columnHelper.accessor('entryPrice', {
+  columnHelper.accessor((row) => row.entryPrice ?? undefined, {
+    id: 'entryPrice',
     header: 'Entry',
     size: 70,
     meta: { align: 'right' },
+    sortUndefined: 'last',
+    sortingFn: 'basic',
     cell: (info) => {
       const val = info.getValue()
       return (
@@ -129,10 +141,13 @@ const columns = [
       )
     },
   }),
-  columnHelper.accessor('exitPrice', {
+  columnHelper.accessor((row) => row.exitPrice ?? undefined, {
+    id: 'exitPrice',
     header: 'Exit',
     size: 70,
     meta: { align: 'right' },
+    sortUndefined: 'last',
+    sortingFn: 'basic',
     cell: (info) => {
       const val = info.getValue()
       return (
@@ -195,7 +210,7 @@ export function TradeList({ trades }: TradeListProps) {
                     style={{ width: header.getSize() }}
                     onClick={header.column.getToggleSortingHandler()}
                   >
-                    <span className="flex items-center gap-1 justify-start">
+                    <span className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : 'justify-start'}`}>
                       {align === 'right' && (
                         <span className="text-[9px] text-zinc-600">
                           {header.column.getIsSorted() === 'asc'
@@ -238,7 +253,7 @@ export function TradeList({ trades }: TradeListProps) {
               : (isSelected ? 'bg-zinc-800' : 'hover:bg-zinc-900')
             return (
               <tr
-                key={`${trade.symbol}-${trade.signalDate}`}
+                key={row.id}
                 onClick={() => selectTrade({ symbol: trade.symbol, signalDate: trade.signalDate })}
                 className={`cursor-pointer text-xs transition-colors ${tone}`}
                 style={{ height: 34 }}
