@@ -88,10 +88,10 @@ portfolio:
   drawdown_stop_pct: 0.22
   drawdown_close_pct: 0.32
   initial_capital: 1000000
-  risk_per_trade_pct: 0.0425
+  risk_per_trade_pct: 0.04
   regime_gate_enabled: true
   regime_high_volatility_threshold: 0.20
-  regime_cooldown_days: 4
+  regime_cooldown_days: 5
 
 watchlist:
   max_candidates: 300
