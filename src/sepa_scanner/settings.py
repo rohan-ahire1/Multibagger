@@ -115,6 +115,7 @@ class ExitStrategySettings(BaseModel):
     dead_money_extend_days: int = 0
     dead_money_min_open_r: float = 0.0
     dead_money_min_mfe_r: float = 0.75
+    dead_money_extend_to_breakeven: bool = False
     time_stop_days: int | None = 15
     max_hold_before_tighten: int = 40
 

@@ -46,6 +46,7 @@ class BacktestParams:
     dead_money_extend_days: int = 0
     dead_money_min_open_r: float = 0.0
     dead_money_min_mfe_r: float = 0.75
+    dead_money_extend_to_breakeven: bool = False
 
     def __post_init__(self) -> None:
         if self.pending_days <= 0:

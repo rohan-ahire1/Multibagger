@@ -251,6 +251,9 @@ def _simulate_signal(
             if can_extend_dead_money:
                 dead_money_deadline += params.dead_money_extend_days
                 dead_money_extended = True
+                if params.dead_money_extend_to_breakeven:
+                    active_stop = max(active_stop, entry_price)
+                    breakeven_activated = True
             else:
                 return _close_trade(
                     trade, status="dead_money", exit_date=bar["date"],
@@ -844,6 +847,7 @@ def _simulate_with_rust(
             "dead_money_extend_days": params.dead_money_extend_days,
             "dead_money_min_open_r": params.dead_money_min_open_r,
             "dead_money_min_mfe_r": params.dead_money_min_mfe_r,
+            "dead_money_extend_to_breakeven": params.dead_money_extend_to_breakeven,
         }
     )
 

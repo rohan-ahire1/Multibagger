@@ -175,6 +175,7 @@ def resolve_exit_config(settings: Any) -> dict[str, Any]:
         "dead_money_extend_days": settings.exit_strategy.dead_money_extend_days,
         "dead_money_min_open_r": settings.exit_strategy.dead_money_min_open_r,
         "dead_money_min_mfe_r": settings.exit_strategy.dead_money_min_mfe_r,
+        "dead_money_extend_to_breakeven": settings.exit_strategy.dead_money_extend_to_breakeven,
         "time_stop_days": settings.exit_strategy.time_stop_days,
         "max_hold_before_tighten": settings.exit_strategy.max_hold_before_tighten,
     }
@@ -201,6 +202,7 @@ def load_inputs(start_date: date, end_date: date) -> tuple[dict[str, Any], pl.Da
         dead_money_extend_days=settings.exit_strategy.dead_money_extend_days,
         dead_money_min_open_r=settings.exit_strategy.dead_money_min_open_r,
         dead_money_min_mfe_r=settings.exit_strategy.dead_money_min_mfe_r,
+        dead_money_extend_to_breakeven=settings.exit_strategy.dead_money_extend_to_breakeven,
     )
 
     portfolio = {
@@ -301,6 +303,7 @@ def rust_portfolio_result(
             "dead_money_extend_days": params.dead_money_extend_days,
             "dead_money_min_open_r": params.dead_money_min_open_r,
             "dead_money_min_mfe_r": params.dead_money_min_mfe_r,
+            "dead_money_extend_to_breakeven": params.dead_money_extend_to_breakeven,
         }
     )
 
@@ -478,6 +481,9 @@ def simulate_portfolio_python(
                     if can_extend_dead_money:
                         pos.dead_money_deadline_days += params.dead_money_extend_days
                         pos.dead_money_extended = True
+                        if params.dead_money_extend_to_breakeven:
+                            pos.active_stop = max(pos.active_stop, pos.entry_price)
+                            pos.breakeven_activated = True
                     else:
                         exit_price = close_price
                         status = "dead_money"
