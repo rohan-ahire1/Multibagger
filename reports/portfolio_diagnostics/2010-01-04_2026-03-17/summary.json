@@ -5,17 +5,17 @@
   },
   "verification": {
     "rust_final_equity": null,
-    "python_final_equity": 12754230.005531866,
+    "python_final_equity": 12728094.821486015,
     "rust_trade_rows": null,
     "python_trade_rows": 737
   },
   "strategy": {
     "start_value": 1000000.0,
-    "end_value": 12754230.005531866,
-    "cagr": 0.16998501822953838,
-    "max_drawdown_pct": -0.2305218511653916,
-    "calmar": 0.7373922141011262,
-    "total_return_pct": 11.754230005531866,
+    "end_value": 12728094.821486015,
+    "cagr": 0.16983703616862633,
+    "max_drawdown_pct": -0.22997329976050163,
+    "calmar": 0.7385076282572703,
+    "total_return_pct": 11.728094821486016,
     "filled_trades": 148,
     "total_signals": 737
   },
@@ -27,7 +27,7 @@
     "calmar": 0.30464522269042993
   },
   "rolling_3y": {
-    "strategy_latest": 0.2864009836685564,
+    "strategy_latest": 0.28554152775811437,
     "benchmark_latest": 0.1394696000034461,
     "strategy_median": 0.19004240120392735,
     "benchmark_median": 0.14631376183973532,
@@ -38,55 +38,55 @@
     "strategy_beat_rate": 0.7096177558569667
   },
   "contribution": {
-    "total_pnl": 11754230.005531866,
+    "total_pnl": 11728094.821486015,
     "top10_trade_pnl": 13223774.005731069,
-    "top10_trade_share": 1.1250225663023095,
+    "top10_trade_share": 1.1275295951312527,
     "pnl_2023": 7578120.431006482,
-    "pnl_2023_share": 0.6447143222006042,
-    "final_equity_ex_2023": 5648295.522096095,
-    "cagr_ex_2023": 0.11267178822686974
+    "pnl_2023_share": 0.6461510199528121,
+    "final_equity_ex_2023": 5636721.382147913,
+    "cagr_ex_2023": 0.11253105525869067
   },
   "regime": {
     "daily": {
       "trending_market": {
         "active_days": 2245,
         "inactive_days": 1537,
-        "active_pnl": 9163602.337453397,
+        "active_pnl": 9137467.153407546,
         "inactive_pnl": 2590627.668078469,
-        "active_avg_daily_return": 0.0010973646301818346,
+        "active_avg_daily_return": 0.0010964363397886333,
         "inactive_avg_daily_return": 0.00020528174332780846
       },
       "weak_breadth": {
         "active_days": 1326,
         "inactive_days": 2475,
         "active_pnl": -283370.7459337546,
-        "inactive_pnl": 12037600.751465622,
+        "inactive_pnl": 12011465.567419771,
         "active_avg_daily_return": -0.00011851642073778412,
-        "inactive_avg_daily_return": 0.001186365417434894
+        "inactive_avg_daily_return": 0.001185523392411566
       },
       "high_vol_market": {
         "active_days": 546,
         "inactive_days": 3434,
         "active_pnl": -1446323.847308388,
-        "inactive_pnl": 13200553.852840254,
+        "inactive_pnl": 13174418.668794403,
         "active_avg_daily_return": -0.00020631848688573237,
-        "inactive_avg_daily_return": 0.0008420942131894789
+        "inactive_avg_daily_return": 0.0008414873372626482
       },
       "sector_concentration": {
-        "active_days": 1853,
-        "inactive_days": 2151,
-        "active_pnl": 13515395.387716578,
-        "inactive_pnl": -1761165.3821847134,
-        "active_avg_daily_return": 0.0016099223997327328,
-        "inactive_avg_daily_return": -9.487892722068474e-05
+        "active_days": 1846,
+        "inactive_days": 2158,
+        "active_pnl": 13968509.754647085,
+        "inactive_pnl": -2240414.933161068,
+        "active_avg_daily_return": 0.0016343912338701568,
+        "inactive_avg_daily_return": -0.00011124587368117947
       }
     },
     "trade_entries": {
       "trending_market": {
         "trade_count": 125,
         "win_rate": 0.472,
-        "avg_r": 0.5364392669923149,
-        "total_pnl": 8375499.611463414
+        "avg_r": 0.5356637872364767,
+        "total_pnl": 8349364.427417561
       },
       "weak_breadth": {
         "trade_count": 34,
@@ -103,8 +103,8 @@
     },
     "sweet_spot": {
       "days": 1810,
-      "pnl": 10554848.644840533,
-      "avg_daily_return": 0.0014103250692277963
+      "pnl": 10528713.460794682,
+      "avg_daily_return": 0.0014091736814196543
     },
     "hostile": {
       "days": 2002,

@@ -81,12 +81,12 @@ market_filter:
 portfolio:
   max_heat_pct: 0.25
   max_positions: 20
-  max_sector_positions: 15 # Increased from 10
+  max_sector_positions: 20
   regime_heat_mult_strong: 1.5 # New: multiplier for STRONG regimes
-  max_sector_pct: 0.60
+  max_sector_pct: 1.00
   drawdown_half_pct: 0.12
   drawdown_stop_pct: 0.22
-  drawdown_close_pct: 0.32
+  drawdown_close_pct: 0.22
   initial_capital: 1000000
   risk_per_trade_pct: 0.04
   regime_gate_enabled: true
