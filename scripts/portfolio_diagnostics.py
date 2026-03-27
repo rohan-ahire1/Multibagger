@@ -559,6 +559,7 @@ def simulate_portfolio_python(
         invested_value = 0.0
         marked_sector_values: dict[str, float] = defaultdict(float)
         open_sector_costs: dict[str, float] = defaultdict(float)
+        open_sector_counts: dict[str, int] = defaultdict(int)
         for pos in open_positions:
             sym_prices = symbol_data[pos.symbol]
             idx = sym_prices["date_to_idx"].get(today)
@@ -567,9 +568,49 @@ def simulate_portfolio_python(
             sector = analysis_sector_map.get(pos.symbol, "UNKNOWN")
             marked_sector_values[sector] += marked_value
             open_sector_costs[sector] += pos.cost_basis
+            open_sector_counts[sector] += 1
 
         current_equity = cash + invested_value
         equity_peak = max(equity_peak, current_equity)
+
+        dd_pct = ((equity_peak - current_equity) / equity_peak) if equity_peak > 0.0 else 0.0
+        if dd_pct >= portfolio["drawdown_close_pct"] and open_positions:
+            forced_closes: list[OpenPosition] = list(open_positions)
+            open_positions.clear()
+            for pos in forced_closes:
+                sym_prices = symbol_data[pos.symbol]
+                idx = sym_prices["date_to_idx"].get(today)
+                close_price = sym_prices["closes"][idx] if idx is not None else pos.entry_price
+                holding_days = (today - pos.entry_date).days
+                cash += pos.shares * close_price
+                closed_trades.append(
+                    close_trade_dict(
+                        symbol=pos.symbol,
+                        signal_date=pos.signal_date,
+                        status="drawdown_close",
+                        entry_ref=pos.entry_ref,
+                        stop=pos.stop,
+                        pivot=pos.pivot,
+                        entry_date=pos.entry_date,
+                        entry_price=pos.entry_price,
+                        exit_date=today,
+                        exit_price=close_price,
+                        holding_days=holding_days,
+                        mae_price=pos.mae_price,
+                        mfe_price=pos.mfe_price,
+                        shares=pos.shares,
+                        sector=analysis_sector_map.get(pos.symbol, "UNKNOWN"),
+                        original_shares=pos.original_shares,
+                        realized_pnl=pos.realized_pnl,
+                    )
+                )
+
+            invested_value = 0.0
+            marked_sector_values = defaultdict(float)
+            open_sector_costs = defaultdict(float)
+            open_sector_counts = defaultdict(int)
+            current_equity = cash
+            dd_pct = ((equity_peak - current_equity) / equity_peak) if equity_peak > 0.0 else 0.0
 
         if today in signals_by_date:
             for sig in signals_by_date[today]:
@@ -585,7 +626,6 @@ def simulate_portfolio_python(
                     )
                 )
 
-        dd_pct = ((equity_peak - current_equity) / equity_peak) if equity_peak > 0.0 else 0.0
         if dd_pct >= portfolio["drawdown_close_pct"]:
             size_mult = 0.0
         elif dd_pct >= portfolio["drawdown_stop_pct"]:
@@ -641,10 +681,20 @@ def simulate_portfolio_python(
                 add_cost = add_shares * add_fill_price
                 if add_cost > cash:
                     continue
+                sector = analysis_sector_map.get(pos.symbol, "UNKNOWN")
+                max_sector_pct = float(portfolio.get("max_sector_pct", 1.0) or 1.0)
+                if (
+                    current_equity > 0.0
+                    and max_sector_pct < 1.0
+                    and ((marked_sector_values.get(sector, 0.0) + add_cost) / current_equity) > max_sector_pct
+                ):
+                    continue
 
                 cash -= add_cost
                 invested_value += add_shares * close_price
                 current_equity = cash + invested_value
+                marked_sector_values[sector] += add_cost
+                open_sector_costs[sector] += add_cost
                 pos.shares += add_shares
                 pos.original_shares += add_shares
                 pos.cost_basis += add_cost
@@ -726,6 +776,37 @@ def simulate_portfolio_python(
                     if risk_per_share > 0.0:
                         shares = risk_budget / risk_per_share
                         cost = shares * fill_price
+                        sector = analysis_sector_map.get(pending.symbol, "UNKNOWN")
+                        max_sector_positions = int(portfolio.get("max_sector_positions", 0) or 0)
+                        if max_sector_positions > 0 and open_sector_counts.get(sector, 0) >= max_sector_positions:
+                            closed_trades.append(
+                                empty_trade_dict(
+                                    symbol=pending.symbol,
+                                    signal_date=pending.signal_date,
+                                    status="skipped_portfolio",
+                                    entry_ref=pending.entry_ref,
+                                    stop=pending.stop,
+                                )
+                            )
+                            pending_signals.pop(j)
+                            continue
+                        max_sector_pct = float(portfolio.get("max_sector_pct", 1.0) or 1.0)
+                        if (
+                            current_equity > 0.0
+                            and max_sector_pct < 1.0
+                            and ((marked_sector_values.get(sector, 0.0) + cost) / current_equity) > max_sector_pct
+                        ):
+                            closed_trades.append(
+                                empty_trade_dict(
+                                    symbol=pending.symbol,
+                                    signal_date=pending.signal_date,
+                                    status="skipped_portfolio",
+                                    entry_ref=pending.entry_ref,
+                                    stop=pending.stop,
+                                )
+                            )
+                            pending_signals.pop(j)
+                            continue
                         if cost <= cash:
                             cash -= cost
                             target_price = None
@@ -766,6 +847,9 @@ def simulate_portfolio_python(
                                     ),
                                 )
                             )
+                            marked_sector_values[sector] += cost
+                            open_sector_costs[sector] += cost
+                            open_sector_counts[sector] += 1
                             filled = True
 
             if filled:
