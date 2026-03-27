@@ -8,7 +8,8 @@ import polars as pl
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scripts.portfolio_diagnostics import filter_signals
+from scripts.portfolio_diagnostics import filter_signals, simulate_portfolio_python
+from sepa_scanner.backtest.models import BacktestParams, ExitMode
 from sepa_scanner.backtest.signal_scorecard import compute_scorecard
 
 
@@ -122,6 +123,136 @@ def test_offense_v2_score_threshold_filters_using_diagnostics() -> None:
     )
 
     assert ranked["symbol"].to_list() == ["ALPHA"]
+
+
+def test_offense_v2_size_tilt_assigns_larger_multiplier_to_better_setups() -> None:
+    signals = pl.DataFrame(
+        {
+            "signal_date": [date(2026, 3, 1), date(2026, 3, 1)],
+            "symbol": ["ALPHA", "BETA"],
+            "signal_type": ["BREAKOUT", "BREAKOUT"],
+            "close": [100.0, 100.0],
+            "pivot": [100.0, 100.0],
+            "near_pivot": [0.005, 0.025],
+            "volume": [1_000_000, 1_000_000],
+            "vol50": [400_000.0, 400_000.0],
+            "vol_mult": [2.3, 1.3],
+            "rs_rank": [91.0, 84.0],
+            "range10": [0.06, 0.10],
+            "voldry": [0.40, 0.62],
+            "atr_pct": [0.03, 0.05],
+            "adv50": [1_000_000_000.0, 500_000_000.0],
+            "entry_ref": [100.0, 100.0],
+            "stop": [95.0, 95.0],
+            "r_per_share": [5.0, 5.0],
+            "created_at": [None, None],
+        }
+    )
+    diagnostics = pl.DataFrame(
+        {
+            "diag_date": [date(2026, 3, 1), date(2026, 3, 1)],
+            "symbol": ["ALPHA", "BETA"],
+            "tt_pass": [True, True],
+            "rs_pass": [True, True],
+            "setup_pass": [True, True],
+            "vcp1_range10_ok": [True, False],
+            "vcp2_voldry_ok": [True, False],
+            "vcp3_atr_trend_ok": [True, True],
+            "vcp4_atr_contract_ok": [True, False],
+            "vcp5_extension_ok": [True, False],
+            "vcp6_base_depth_ok": [True, True],
+            "contraction_count": [2, 1],
+            "contraction_quality": [0.85, 0.20],
+            "setup_active_streak": [6, 1],
+            "pivot_age_days": [1, 10],
+            "watch_fail_mask": [0, 4],
+            "breakout_fail_mask": [0, 16],
+        }
+    )
+
+    ranked = filter_signals(
+        signals,
+        diagnostics=diagnostics,
+        ranking_mode="offense_v2",
+        quality_overrides={
+            "size_tilt_mode": "offense_v2",
+            "size_tilt_score_min": 5.5,
+            "size_tilt_score_max": 8.0,
+            "size_tilt_min_mult": 0.6,
+            "size_tilt_max_mult": 1.4,
+        },
+    )
+
+    assert "signal_size_mult" in ranked.columns
+    mults = {row["symbol"]: row["signal_size_mult"] for row in ranked.to_dicts()}
+    assert mults["ALPHA"] > mults["BETA"]
+    assert 0.6 <= mults["BETA"] <= 1.4
+    assert 0.6 <= mults["ALPHA"] <= 1.4
+
+
+def test_simulate_portfolio_python_uses_signal_size_multiplier_for_position_sizing() -> None:
+    signals = pl.DataFrame(
+        {
+            "signal_date": [date(2026, 3, 1), date(2026, 3, 1)],
+            "symbol": ["ALPHA", "BETA"],
+            "entry_ref": [100.0, 100.0],
+            "stop": [95.0, 95.0],
+            "pivot": [100.0, 100.0],
+            "rs_rank": [90.0, 90.0],
+            "signal_size_mult": [1.4, 0.6],
+        }
+    )
+    ohlcv = pl.DataFrame(
+        {
+            "date": [
+                date(2026, 3, 1),
+                date(2026, 3, 2),
+                date(2026, 3, 1),
+                date(2026, 3, 2),
+            ],
+            "symbol": ["ALPHA", "ALPHA", "BETA", "BETA"],
+            "open": [100.0, 100.0, 100.0, 100.0],
+            "high": [101.0, 102.0, 101.0, 102.0],
+            "low": [99.0, 99.0, 99.0, 99.0],
+            "close": [100.0, 101.0, 100.0, 101.0],
+            "volume": [1_000_000, 1_000_000, 1_000_000, 1_000_000],
+        }
+    )
+    params = BacktestParams(
+        pending_days=1,
+        max_hold_days=1,
+        target_r=None,
+        exit_mode=ExitMode("v3_trail_pct"),
+        trail_activation_r=10.0,
+        trail_pct=0.25,
+        dead_money_days=None,
+    )
+    portfolio = {
+        "initial_capital": 100_000.0,
+        "risk_per_trade_pct": 0.02,
+        "max_positions": 5,
+        "max_sector_positions": 0,
+        "max_sector_pct": 1.0,
+        "max_heat_pct": 1.0,
+        "drawdown_half_pct": 0.50,
+        "drawdown_stop_pct": 0.75,
+        "drawdown_close_pct": 0.90,
+    }
+
+    result = simulate_portfolio_python(
+        signals,
+        ohlcv,
+        params,
+        portfolio,
+        {"ALPHA": "TECH", "BETA": "TECH"},
+    )
+
+    trades = {
+        row["symbol"]: row
+        for row in result["trades"].filter(pl.col("entry_date").is_not_null()).to_dicts()
+    }
+    assert trades["ALPHA"]["shares"] > trades["BETA"]["shares"]
+    assert round(trades["ALPHA"]["shares"] / trades["BETA"]["shares"], 3) == round(1.4 / 0.6, 3)
 
 
 def test_scorecard_reports_multi_r_outcomes_and_quality_sections() -> None:

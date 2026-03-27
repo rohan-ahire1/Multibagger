@@ -23,7 +23,7 @@ from sepa_scanner.backtest.queries import (
 )
 from sepa_scanner.settings import load_settings
 from sepa_scanner.storage.parquet_store import ParquetOhlcvStore
-from sepa_scanner.strategy.ranking import add_signal_score, select_top_signals_by_day
+from sepa_scanner.strategy.ranking import add_signal_score, add_signal_size_multiplier, select_top_signals_by_day
 
 try:
     import multibagger_core
@@ -85,6 +85,7 @@ class PendingSignal:
     stop: float
     pivot: float | None
     rs_rank: float | None
+    size_mult: float
     expiration_date: date
 
 
@@ -112,6 +113,7 @@ class OpenPosition:
     realized_pnl: float
     original_shares: float
     cost_basis: float
+    signal_size_mult: float
     dead_money_deadline_days: int | None
     dead_money_extended: bool
     pyramid_adds_taken: int
@@ -640,6 +642,7 @@ def simulate_portfolio_python(
                         stop=sig["stop"],
                         pivot=sig["pivot"],
                         rs_rank=sig["rs_rank"],
+                        size_mult=float(sig.get("signal_size_mult", 1.0) or 1.0),
                         expiration_date=today + timedelta(days=params.pending_days),
                     )
                 )
@@ -689,8 +692,11 @@ def simulate_portfolio_python(
                     * portfolio["risk_per_trade_pct"]
                     * size_mult
                     * day_entry_size_mult
+                    * pos.signal_size_mult
                     * float(portfolio.get("pyramid_risk_frac", 0.50))
                 )
+                if add_risk_budget <= 0.0:
+                    continue
                 total_heat = sum(p.initial_risk * p.shares for p in open_positions)
                 if ((total_heat + add_risk_budget) / current_equity) > portfolio["max_heat_pct"]:
                     continue
@@ -774,7 +780,25 @@ def simulate_portfolio_python(
 
                 if open_price >= pending.entry_ref or high_price >= pending.entry_ref:
                     fill_price = max(open_price, pending.entry_ref)
-                    risk_budget = current_equity * portfolio["risk_per_trade_pct"] * size_mult * day_entry_size_mult
+                    risk_budget = (
+                        current_equity
+                        * portfolio["risk_per_trade_pct"]
+                        * size_mult
+                        * day_entry_size_mult
+                        * max(0.0, pending.size_mult)
+                    )
+                    if risk_budget <= 0.0:
+                        closed_trades.append(
+                            empty_trade_dict(
+                                symbol=pending.symbol,
+                                signal_date=pending.signal_date,
+                                status="skipped_portfolio",
+                                entry_ref=pending.entry_ref,
+                                stop=pending.stop,
+                            )
+                        )
+                        pending_signals.pop(j)
+                        continue
                     total_heat = sum(pos.initial_risk * pos.shares for pos in open_positions)
 
                     if ((total_heat + risk_budget) / current_equity) > portfolio["max_heat_pct"]:
@@ -855,6 +879,7 @@ def simulate_portfolio_python(
                                     realized_pnl=0.0,
                                     original_shares=shares,
                                     cost_basis=cost,
+                                    signal_size_mult=max(0.0, pending.size_mult),
                                     dead_money_deadline_days=params.dead_money_days,
                                     dead_money_extended=False,
                                     pyramid_adds_taken=0,
@@ -945,6 +970,7 @@ def build_signal_rows(signals: pl.DataFrame) -> list[dict[str, Any]]:
                 "stop": float(row["stop"]),
                 "pivot": float(row["pivot"]) if row.get("pivot") is not None else None,
                 "rs_rank": float(row["rs_rank"]) if row.get("rs_rank") is not None else None,
+                "signal_size_mult": float(row.get("signal_size_mult", 1.0) or 1.0),
             }
         )
     return rows
@@ -1193,6 +1219,11 @@ def resolve_signal_quality_overrides(settings: Any) -> dict[str, Any]:
         "pivot_age_days_max": settings.backtest.signal_quality_pivot_age_max,
         "offense_score_min": settings.backtest.signal_quality_offense_score_min,
         "offense_score_max": settings.backtest.signal_quality_offense_score_max,
+        "size_tilt_mode": settings.backtest.signal_quality_size_tilt_mode,
+        "size_tilt_score_min": settings.backtest.signal_quality_size_tilt_score_min,
+        "size_tilt_score_max": settings.backtest.signal_quality_size_tilt_score_max,
+        "size_tilt_min_mult": settings.backtest.signal_quality_size_tilt_min_mult,
+        "size_tilt_max_mult": settings.backtest.signal_quality_size_tilt_max_mult,
     }
 
 
@@ -1283,6 +1314,34 @@ def attach_signal_quality_features(
     )
 
 
+def apply_signal_size_tilt(
+    signals: pl.DataFrame,
+    diagnostics: pl.DataFrame | None,
+    *,
+    tilt_mode: str = "off",
+    score_min: float = 5.5,
+    score_max: float = 8.0,
+    min_mult: float = 0.60,
+    max_mult: float = 1.40,
+) -> pl.DataFrame:
+    if signals.is_empty() or tilt_mode in {"off", "none", ""}:
+        return signals
+
+    merged = attach_signal_quality_features(signals, diagnostics)
+    if merged.is_empty():
+        return signals.with_columns(pl.lit(1.0).alias("signal_size_mult"))
+
+    return add_signal_size_multiplier(
+        merged,
+        tilt_mode=tilt_mode,
+        score_min=float(score_min),
+        score_max=float(score_max),
+        min_mult=float(min_mult),
+        max_mult=float(max_mult),
+        mult_column="signal_size_mult",
+    )
+
+
 def filter_signals(
     signals: pl.DataFrame,
     *,
@@ -1298,6 +1357,13 @@ def filter_signals(
         quality_profile=quality_profile,
         overrides=quality_overrides,
     )
+    size_tilt_config = {
+        "tilt_mode": quality_filters.pop("size_tilt_mode", "off"),
+        "score_min": quality_filters.pop("size_tilt_score_min", 5.5),
+        "score_max": quality_filters.pop("size_tilt_score_max", 8.0),
+        "min_mult": quality_filters.pop("size_tilt_min_mult", 0.60),
+        "max_mult": quality_filters.pop("size_tilt_max_mult", 1.40),
+    }
     if rs_rank_min is None:
         rs_rank_min = quality_filters.pop("rs_rank_min", None)
     else:
@@ -1324,7 +1390,11 @@ def filter_signals(
         max_signals_per_day=max_signals_per_day,
         ranking_mode=ranking_mode,
     )
-    return ranked.select(signals.columns)
+    ranked = apply_signal_size_tilt(ranked, diagnostics, **size_tilt_config)
+    selected_columns = list(signals.columns)
+    if "signal_size_mult" in ranked.columns:
+        selected_columns.append("signal_size_mult")
+    return ranked.select(selected_columns)
 
 
 def build_entry_controls(

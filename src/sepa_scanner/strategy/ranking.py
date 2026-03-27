@@ -136,6 +136,32 @@ def add_signal_score(
     return frame
 
 
+def add_signal_size_multiplier(
+    frame: pl.DataFrame,
+    *,
+    tilt_mode: str,
+    score_min: float,
+    score_max: float,
+    min_mult: float,
+    max_mult: float,
+    mult_column: str = "signal_size_mult",
+) -> pl.DataFrame:
+    if frame.is_empty() or tilt_mode in {"off", "none", ""}:
+        return frame
+    if tilt_mode != "offense_v2":
+        raise ValueError(f"Unsupported signal size tilt mode: {tilt_mode}")
+    if score_max <= score_min:
+        raise ValueError("signal size tilt score_max must be greater than score_min")
+    if min_mult < 0.0 or max_mult < 0.0:
+        raise ValueError("signal size tilt multipliers must be non-negative")
+
+    ranked = add_signal_score(frame, ranking_mode="offense_v2", score_column="_offense_v2_score")
+    scaled = _clamp01((pl.col("_offense_v2_score") - float(score_min)) / float(score_max - score_min))
+    return ranked.with_columns(
+        (pl.lit(float(min_mult)) + (scaled * float(max_mult - min_mult))).alias(mult_column)
+    ).drop("_offense_v2_score", strict=False)
+
+
 def _sort_for_mode(frame: pl.DataFrame, ranking_mode: str, primary_group_col: str) -> pl.DataFrame:
     if ranking_mode == "championship":
         return add_signal_score(frame, ranking_mode=ranking_mode).sort(

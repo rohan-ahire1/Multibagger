@@ -109,6 +109,11 @@ class BacktestSettings(BaseModel):
     signal_quality_pivot_age_max: int | None = None
     signal_quality_offense_score_min: float | None = None
     signal_quality_offense_score_max: float | None = None
+    signal_quality_size_tilt_mode: str = "off"
+    signal_quality_size_tilt_score_min: float = 5.5
+    signal_quality_size_tilt_score_max: float = 8.0
+    signal_quality_size_tilt_min_mult: float = 0.60
+    signal_quality_size_tilt_max_mult: float = 1.40
     use_extended_exit_model: bool = False
     use_regime_entry_controls: bool = False
 
