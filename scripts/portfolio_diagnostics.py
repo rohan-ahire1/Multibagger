@@ -68,6 +68,8 @@ class OpenPosition:
     cost_basis: float
     dead_money_deadline_days: int | None
     dead_money_extended: bool
+    pyramid_adds_taken: int
+    next_pyramid_r: float | None
 
 
 def parse_args() -> argparse.Namespace:
@@ -221,6 +223,10 @@ def load_inputs(start_date: date, end_date: date) -> tuple[dict[str, Any], pl.Da
         "regime_cooldown_days": settings.portfolio.regime_cooldown_days,
         "breadth_soft_floor_pct": settings.portfolio.breadth_soft_floor_pct,
         "breadth_soft_size_mult": settings.portfolio.breadth_soft_size_mult,
+        "pyramid_max_adds": settings.portfolio.pyramid_max_adds,
+        "pyramid_trigger_r": settings.portfolio.pyramid_trigger_r,
+        "pyramid_add_interval_r": settings.portfolio.pyramid_add_interval_r,
+        "pyramid_risk_frac": settings.portfolio.pyramid_risk_frac,
     }
 
     return {
@@ -560,6 +566,60 @@ def simulate_portfolio_python(
         day_entries_allowed = bool(entry_gate.get(today, True)) if entry_gate else True
         day_entry_size_mult = float(entry_size_mult.get(today, 1.0)) if entry_size_mult else 1.0
 
+        pyramid_max_adds = int(portfolio.get("pyramid_max_adds", 0) or 0)
+        if pyramid_max_adds > 0 and day_entries_allowed and size_mult > 0.0 and current_equity > 0.0:
+            for pos in open_positions:
+                if (
+                    pos.next_pyramid_r is None
+                    or pos.pyramid_adds_taken >= pyramid_max_adds
+                    or pos.active_stop < pos.entry_price
+                ):
+                    continue
+
+                sym_prices = symbol_data.get(pos.symbol)
+                if sym_prices is None:
+                    continue
+                idx = sym_prices["date_to_idx"].get(today)
+                if idx is None:
+                    continue
+
+                open_price = sym_prices["opens"][idx]
+                high_price = sym_prices["highs"][idx]
+                close_price = sym_prices["closes"][idx]
+                add_trigger_price = pos.entry_price + (pos.initial_risk * pos.next_pyramid_r)
+                if high_price < add_trigger_price:
+                    continue
+
+                add_fill_price = max(open_price, add_trigger_price)
+                add_risk_per_share = add_fill_price - pos.active_stop
+                if add_risk_per_share <= 0.0:
+                    continue
+
+                add_risk_budget = (
+                    current_equity
+                    * portfolio["risk_per_trade_pct"]
+                    * size_mult
+                    * day_entry_size_mult
+                    * float(portfolio.get("pyramid_risk_frac", 0.50))
+                )
+                total_heat = sum(p.initial_risk * p.shares for p in open_positions)
+                if ((total_heat + add_risk_budget) / current_equity) > portfolio["max_heat_pct"]:
+                    continue
+
+                add_shares = add_risk_budget / add_risk_per_share
+                add_cost = add_shares * add_fill_price
+                if add_cost > cash:
+                    continue
+
+                cash -= add_cost
+                invested_value += add_shares * close_price
+                current_equity = cash + invested_value
+                pos.shares += add_shares
+                pos.original_shares += add_shares
+                pos.cost_basis += add_cost
+                pos.pyramid_adds_taken += 1
+                pos.next_pyramid_r += float(portfolio.get("pyramid_add_interval_r", 0.5))
+
         j = 0
         while j < len(pending_signals):
             pending = pending_signals[j]
@@ -667,6 +727,12 @@ def simulate_portfolio_python(
                                     cost_basis=cost,
                                     dead_money_deadline_days=params.dead_money_days,
                                     dead_money_extended=False,
+                                    pyramid_adds_taken=0,
+                                    next_pyramid_r=(
+                                        float(portfolio.get("pyramid_trigger_r", 1.0))
+                                        if int(portfolio.get("pyramid_max_adds", 0) or 0) > 0
+                                        else None
+                                    ),
                                 )
                             )
                             filled = True

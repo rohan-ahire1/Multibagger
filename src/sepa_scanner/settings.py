@@ -163,6 +163,10 @@ class PortfolioSettings(BaseModel):
     regime_cooldown_days: int = 0
     breadth_soft_floor_pct: float | None = None
     breadth_soft_size_mult: float = 0.50
+    pyramid_max_adds: int = 0
+    pyramid_trigger_r: float = 1.0
+    pyramid_add_interval_r: float = 0.5
+    pyramid_risk_frac: float = 0.50
 
 
 class IndiaFilterSettings(BaseModel):
