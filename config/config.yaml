@@ -79,8 +79,8 @@ market_filter:
   breadth_weak_pct: 0.40
 
 portfolio:
-  max_heat_pct: 0.40 # Increased from 0.25
-  max_positions: 30 # Increased from 20
+  max_heat_pct: 0.35 # Tightened after local regime sweep
+  max_positions: 20
   max_sector_positions: 15 # Increased from 10
   regime_heat_mult_strong: 1.5 # New: multiplier for STRONG regimes
   max_sector_pct: 0.60
@@ -88,9 +88,9 @@ portfolio:
   drawdown_stop_pct: 0.25
   drawdown_close_pct: 0.35
   initial_capital: 1000000
-  risk_per_trade_pct: 0.04
+  risk_per_trade_pct: 0.045
   regime_gate_enabled: true
-  regime_high_volatility_threshold: 0.18
+  regime_high_volatility_threshold: 0.19
   regime_cooldown_days: 5
 
 watchlist:
