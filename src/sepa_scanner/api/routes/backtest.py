@@ -34,6 +34,9 @@ class BacktestRunRequest(BaseModel):
     trail_activation_r: float = 1.5
     trail_pct: float = 0.20
     dead_money_days: int | None = 20
+    dead_money_extend_days: int = 0
+    dead_money_min_open_r: float = 0.0
+    dead_money_min_mfe_r: float = 0.75
     exit_engine: str = "minervini_phased"
     use_portfolio: bool = True
 
@@ -75,6 +78,9 @@ def run_backtest(
         trail_activation_r=req.trail_activation_r,
         trail_pct=req.trail_pct,
         dead_money_days=req.dead_money_days,
+        dead_money_extend_days=req.dead_money_extend_days,
+        dead_money_min_open_r=req.dead_money_min_open_r,
+        dead_money_min_mfe_r=req.dead_money_min_mfe_r,
     )
     
     pm = None
@@ -140,6 +146,9 @@ def run_backtest(
             "trail_activation_r": req.trail_activation_r,
             "trail_pct": req.trail_pct,
             "dead_money_days": req.dead_money_days,
+            "dead_money_extend_days": req.dead_money_extend_days,
+            "dead_money_min_open_r": req.dead_money_min_open_r,
+            "dead_money_min_mfe_r": req.dead_money_min_mfe_r,
             "exit_engine": (
                 "minervini_phased"
                 if exit_mode == ExitMode.MINERVINI_PHASED

@@ -65,6 +65,8 @@ class OpenPosition:
     realized_pnl: float
     original_shares: float
     cost_basis: float
+    dead_money_deadline_days: int | None
+    dead_money_extended: bool
 
 
 def parse_args() -> argparse.Namespace:
@@ -170,6 +172,9 @@ def resolve_exit_config(settings: Any) -> dict[str, Any]:
         "trail_pct_bull": settings.exit_strategy.trail_pct_bull,
         "trail_pct_bear": settings.exit_strategy.trail_pct_bear,
         "dead_money_days": settings.exit_strategy.dead_money_days,
+        "dead_money_extend_days": settings.exit_strategy.dead_money_extend_days,
+        "dead_money_min_open_r": settings.exit_strategy.dead_money_min_open_r,
+        "dead_money_min_mfe_r": settings.exit_strategy.dead_money_min_mfe_r,
         "time_stop_days": settings.exit_strategy.time_stop_days,
         "max_hold_before_tighten": settings.exit_strategy.max_hold_before_tighten,
     }
@@ -193,6 +198,9 @@ def load_inputs(start_date: date, end_date: date) -> tuple[dict[str, Any], pl.Da
         trail_activation_r=settings.exit_strategy.trail_activation_r,
         trail_pct=settings.exit_strategy.trail_pct,
         dead_money_days=settings.exit_strategy.dead_money_days,
+        dead_money_extend_days=settings.exit_strategy.dead_money_extend_days,
+        dead_money_min_open_r=settings.exit_strategy.dead_money_min_open_r,
+        dead_money_min_mfe_r=settings.exit_strategy.dead_money_min_mfe_r,
     )
 
     portfolio = {
@@ -290,6 +298,9 @@ def rust_portfolio_result(
             "trail_activation_r": params.trail_activation_r,
             "trail_pct": params.trail_pct,
             "dead_money_days": params.dead_money_days,
+            "dead_money_extend_days": params.dead_money_extend_days,
+            "dead_money_min_open_r": params.dead_money_min_open_r,
+            "dead_money_min_mfe_r": params.dead_money_min_mfe_r,
         }
     )
 
@@ -447,9 +458,29 @@ def simulate_portfolio_python(
                 if exit_price is None and exit_cfg["time_stop_days"] is not None and not pos.breakeven_activated and holding_days >= int(exit_cfg["time_stop_days"]):
                     exit_price = close_price
                     status = "time_stop"
-                if exit_price is None and params.dead_money_days is not None and not pos.breakeven_activated and not reached_1r and holding_days >= params.dead_money_days:
-                    exit_price = close_price
-                    status = "dead_money"
+                if (
+                    exit_price is None
+                    and pos.dead_money_deadline_days is not None
+                    and not pos.breakeven_activated
+                    and not reached_1r
+                    and holding_days >= pos.dead_money_deadline_days
+                ):
+                    open_r = ((close_price - pos.entry_price) / risk) if risk > 0.0 else None
+                    mfe_r = ((pos.mfe_price - pos.entry_price) / risk) if risk > 0.0 else None
+                    can_extend_dead_money = (
+                        not pos.dead_money_extended
+                        and params.dead_money_extend_days > 0
+                        and open_r is not None
+                        and mfe_r is not None
+                        and open_r >= params.dead_money_min_open_r
+                        and mfe_r >= params.dead_money_min_mfe_r
+                    )
+                    if can_extend_dead_money:
+                        pos.dead_money_deadline_days += params.dead_money_extend_days
+                        pos.dead_money_extended = True
+                    else:
+                        exit_price = close_price
+                        status = "dead_money"
                 if exit_price is None and holding_days >= params.max_hold_days:
                     exit_price = close_price
                     status = "time_stop"
@@ -627,6 +658,8 @@ def simulate_portfolio_python(
                                     realized_pnl=0.0,
                                     original_shares=shares,
                                     cost_basis=cost,
+                                    dead_money_deadline_days=params.dead_money_days,
+                                    dead_money_extended=False,
                                 )
                             )
                             filled = True

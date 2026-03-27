@@ -43,6 +43,9 @@ class BacktestParams:
     trail_activation_r: float = 2.0
     trail_pct: float = 0.20
     dead_money_days: int | None = 15
+    dead_money_extend_days: int = 0
+    dead_money_min_open_r: float = 0.0
+    dead_money_min_mfe_r: float = 0.75
 
     def __post_init__(self) -> None:
         if self.pending_days <= 0:
@@ -57,6 +60,10 @@ class BacktestParams:
             raise ValueError("trail_pct must be between 0 and 1 (exclusive)")
         if self.dead_money_days is not None and self.dead_money_days <= 0:
             raise ValueError("dead_money_days must be positive when provided")
+        if self.dead_money_extend_days < 0:
+            raise ValueError("dead_money_extend_days must be non-negative")
+        if self.dead_money_min_mfe_r < 0:
+            raise ValueError("dead_money_min_mfe_r must be non-negative")
 
 
 @dataclass(slots=True)

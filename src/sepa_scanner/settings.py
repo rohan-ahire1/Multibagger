@@ -112,6 +112,9 @@ class ExitStrategySettings(BaseModel):
     trail_pct_bull: float = 0.25
     trail_pct_bear: float = 0.15
     dead_money_days: int | None = 17
+    dead_money_extend_days: int = 0
+    dead_money_min_open_r: float = 0.0
+    dead_money_min_mfe_r: float = 0.75
     time_stop_days: int | None = 15
     max_hold_before_tighten: int = 40
 

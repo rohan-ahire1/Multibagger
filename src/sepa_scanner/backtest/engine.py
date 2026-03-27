@@ -174,6 +174,8 @@ def _simulate_signal(
     ema21: float | None = None
     mae_price = entry_price
     mfe_price = entry_price
+    dead_money_deadline = params.dead_money_days
+    dead_money_extended = False
 
     for offset, bar in enumerate(exit_bars):
         open_price = float(bar["open"])
@@ -231,16 +233,30 @@ def _simulate_signal(
         # Check both the flag AND whether this bar's high would reach +1R
         reached_1r_this_bar = risk and high_price >= entry_price + risk * 1.0
         if (
-            params.dead_money_days is not None
+            dead_money_deadline is not None
             and not breakeven_activated
             and not reached_1r_this_bar
-            and holding_days >= params.dead_money_days
+            and holding_days >= dead_money_deadline
         ):
-            return _close_trade(
-                trade, status="dead_money", exit_date=bar["date"],
-                exit_price=close_price, holding_days=holding_days,
-                mae_price=mae_price, mfe_price=mfe_price,
+            open_r = ((close_price - entry_price) / risk) if risk else None
+            mfe_r = ((mfe_price - entry_price) / risk) if risk else None
+            can_extend_dead_money = (
+                not dead_money_extended
+                and params.dead_money_extend_days > 0
+                and open_r is not None
+                and mfe_r is not None
+                and open_r >= params.dead_money_min_open_r
+                and mfe_r >= params.dead_money_min_mfe_r
             )
+            if can_extend_dead_money:
+                dead_money_deadline += params.dead_money_extend_days
+                dead_money_extended = True
+            else:
+                return _close_trade(
+                    trade, status="dead_money", exit_date=bar["date"],
+                    exit_price=close_price, holding_days=holding_days,
+                    mae_price=mae_price, mfe_price=mfe_price,
+                )
 
         # --- Trailing stop update + same-bar trigger check ---
         if params.exit_mode != ExitMode.V1_FIXED and risk:
@@ -825,6 +841,9 @@ def _simulate_with_rust(
             "trail_activation_r": params.trail_activation_r,
             "trail_pct": params.trail_pct,
             "dead_money_days": params.dead_money_days,
+            "dead_money_extend_days": params.dead_money_extend_days,
+            "dead_money_min_open_r": params.dead_money_min_open_r,
+            "dead_money_min_mfe_r": params.dead_money_min_mfe_r,
         }
     )
 
