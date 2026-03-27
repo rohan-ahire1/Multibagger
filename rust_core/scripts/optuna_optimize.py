@@ -106,10 +106,22 @@ def _resolve_study_name(start_date: date, end_date: date, thresholds: ObjectiveT
     return f"robust_br{beat_label}_{start_date.isoformat()}_{end_date.isoformat()}"
 
 
+def _decode_soft_floor(value: Any) -> float | None:
+    return None if value in (None, "off") else float(value)
+
+
 def _build_trial_params(
     settings: Any,
     trial: optuna.Trial,
 ) -> tuple[BacktestParams, dict[str, Any], dict[str, Any] | None, dict[str, Any], dict[str, Any]]:
+    breadth_soft_floor_choice = trial.suggest_categorical(
+        "breadth_soft_floor_pct",
+        ["off", "0.45", "0.50", "0.55"],
+    )
+    breadth_soft_floor_pct = _decode_soft_floor(breadth_soft_floor_choice)
+    breadth_soft_size_mult = 1.0
+    if breadth_soft_floor_pct is not None:
+        breadth_soft_size_mult = trial.suggest_float("breadth_soft_size_mult", 0.25, 0.75, step=0.25)
     use_extended_exit_model = trial.suggest_categorical("use_extended_exit_model", [False, True])
     use_regime_entry_controls = trial.suggest_categorical("use_regime_entry_controls", [False, True])
     use_rs_filter = trial.suggest_categorical("use_rs_filter", [False, True])
@@ -133,10 +145,10 @@ def _build_trial_params(
         "drawdown_stop_pct": trial.suggest_float("drawdown_stop_pct", 0.15, 0.30, step=0.02),
         "drawdown_close_pct": trial.suggest_float("drawdown_close_pct", 0.25, 0.40, step=0.02),
         "regime_gate_enabled": settings.portfolio.regime_gate_enabled,
-        "regime_high_volatility_threshold": settings.portfolio.regime_high_volatility_threshold,
-        "regime_cooldown_days": settings.portfolio.regime_cooldown_days,
-        "breadth_soft_floor_pct": settings.portfolio.breadth_soft_floor_pct,
-        "breadth_soft_size_mult": settings.portfolio.breadth_soft_size_mult,
+        "regime_high_volatility_threshold": trial.suggest_float("regime_high_volatility_threshold", 0.18, 0.25, step=0.01),
+        "regime_cooldown_days": trial.suggest_int("regime_cooldown_days", 0, 10),
+        "breadth_soft_floor_pct": breadth_soft_floor_pct,
+        "breadth_soft_size_mult": breadth_soft_size_mult,
     }
     exit_config = None
     if use_extended_exit_model:
@@ -262,7 +274,11 @@ def _evaluate_current_defaults(
     entry_gate: dict[date, bool] = {}
     entry_size_mult: dict[date, float] = {}
     if settings.backtest.use_regime_entry_controls:
-        entry_gate, entry_size_mult = build_entry_controls(settings, regime_inputs)
+        entry_gate, entry_size_mult = build_entry_controls(
+            settings,
+            regime_inputs,
+            portfolio_overrides=portfolio,
+        )
     result = simulate_portfolio_python(
         filtered_signals,
         ohlcv_df,
@@ -296,10 +312,15 @@ def _evaluate_current_defaults(
         "drawdown_half_pct": portfolio["drawdown_half_pct"],
         "drawdown_stop_pct": portfolio["drawdown_stop_pct"],
         "drawdown_close_pct": portfolio["drawdown_close_pct"],
+        "regime_high_volatility_threshold": portfolio["regime_high_volatility_threshold"],
+        "regime_cooldown_days": portfolio["regime_cooldown_days"],
         "use_extended_exit_model": settings.backtest.use_extended_exit_model,
         "use_regime_entry_controls": settings.backtest.use_regime_entry_controls,
         "use_rs_filter": signal_filters["rs_rank_min"] is not None,
     }
+    if portfolio["breadth_soft_floor_pct"] is not None:
+        param_dump["breadth_soft_floor_pct"] = portfolio["breadth_soft_floor_pct"]
+        param_dump["breadth_soft_size_mult"] = portfolio["breadth_soft_size_mult"]
     if settings.backtest.use_extended_exit_model:
         param_dump.update(
             {
@@ -395,7 +416,11 @@ def run_optuna_optimization() -> None:
         entry_gate: dict[date, bool] = {}
         entry_size_mult: dict[date, float] = {}
         if runtime_options["use_regime_entry_controls"]:
-            entry_gate, entry_size_mult = build_entry_controls(settings, regime_inputs)
+            entry_gate, entry_size_mult = build_entry_controls(
+                settings,
+                regime_inputs,
+                portfolio_overrides=portfolio,
+            )
         started = time.perf_counter()
         result = simulate_portfolio_python(
             filtered_signals,
@@ -477,10 +502,14 @@ def run_optuna_optimization() -> None:
         "drawdown_stop_pct": float(best_params["drawdown_stop_pct"]),
         "drawdown_close_pct": float(best_params["drawdown_close_pct"]),
         "regime_gate_enabled": settings.portfolio.regime_gate_enabled,
-        "regime_high_volatility_threshold": settings.portfolio.regime_high_volatility_threshold,
-        "regime_cooldown_days": settings.portfolio.regime_cooldown_days,
-        "breadth_soft_floor_pct": settings.portfolio.breadth_soft_floor_pct,
-        "breadth_soft_size_mult": settings.portfolio.breadth_soft_size_mult,
+        "regime_high_volatility_threshold": float(best_params["regime_high_volatility_threshold"]),
+        "regime_cooldown_days": int(best_params["regime_cooldown_days"]),
+        "breadth_soft_floor_pct": _decode_soft_floor(best_params.get("breadth_soft_floor_pct")),
+        "breadth_soft_size_mult": (
+            float(best_params["breadth_soft_size_mult"])
+            if _decode_soft_floor(best_params.get("breadth_soft_floor_pct")) is not None
+            else 1.0
+        ),
     }
     best_exit_config = None
     if use_extended_exit_model:
@@ -504,7 +533,11 @@ def run_optuna_optimization() -> None:
     best_entry_gate: dict[date, bool] = {}
     best_entry_size_mult: dict[date, float] = {}
     if use_regime_entry_controls:
-        best_entry_gate, best_entry_size_mult = build_entry_controls(settings, regime_inputs)
+        best_entry_gate, best_entry_size_mult = build_entry_controls(
+            settings,
+            regime_inputs,
+            portfolio_overrides=best_portfolio,
+        )
     best_result = simulate_portfolio_python(
         best_signals,
         ohlcv_df,

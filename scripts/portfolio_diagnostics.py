@@ -959,20 +959,36 @@ def filter_signals(
 def build_entry_controls(
     settings: Any,
     regime_df: pl.DataFrame,
+    *,
+    portfolio_overrides: dict[str, Any] | None = None,
 ) -> tuple[dict[date, bool], dict[date, float]]:
-    if not settings.portfolio.regime_gate_enabled or regime_df.is_empty():
+    overrides = portfolio_overrides or {}
+    regime_gate_enabled = bool(overrides.get("regime_gate_enabled", settings.portfolio.regime_gate_enabled))
+    if not regime_gate_enabled or regime_df.is_empty():
         return {}, {}
 
-    cooldown_days = int(settings.portfolio.regime_cooldown_days)
-    breadth_soft_floor = settings.portfolio.breadth_soft_floor_pct
-    breadth_soft_size_mult = float(settings.portfolio.breadth_soft_size_mult)
+    high_volatility_threshold = float(
+        overrides.get(
+            "regime_high_volatility_threshold",
+            settings.portfolio.regime_high_volatility_threshold,
+        )
+    )
+    cooldown_days = int(overrides.get("regime_cooldown_days", settings.portfolio.regime_cooldown_days))
+    breadth_soft_floor = overrides.get("breadth_soft_floor_pct", settings.portfolio.breadth_soft_floor_pct)
+    breadth_soft_size_mult = float(
+        overrides.get("breadth_soft_size_mult", settings.portfolio.breadth_soft_size_mult)
+    )
     gate: dict[date, bool] = {}
     size_mult: dict[date, float] = {}
     cooldown_remaining = 0
 
     for row in regime_df.sort("date").iter_rows(named=True):
         today = row["date"]
-        high_vol = bool(row.get("high_vol_market") or False)
+        vol_20_ann = row.get("vol_20_ann")
+        if vol_20_ann is None:
+            high_vol = bool(row.get("high_vol_market") or False)
+        else:
+            high_vol = float(vol_20_ann) > high_volatility_threshold
         entries_allowed = (not high_vol) and cooldown_remaining == 0
         gate[today] = entries_allowed
 
