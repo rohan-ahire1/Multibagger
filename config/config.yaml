@@ -65,6 +65,7 @@ backtest:
   pending_days: 9
   max_hold_days: 167
   exit_mode: v3_trail_pct
+  use_regime_entry_controls: true
 
 alerts:
   max_alerts_per_day: 10
@@ -89,7 +90,8 @@ portfolio:
   initial_capital: 1000000
   risk_per_trade_pct: 0.04
   regime_gate_enabled: true
-  regime_high_volatility_threshold: 0.25
+  regime_high_volatility_threshold: 0.18
+  regime_cooldown_days: 5
 
 watchlist:
   max_candidates: 300
