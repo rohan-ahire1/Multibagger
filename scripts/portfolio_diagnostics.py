@@ -58,6 +58,24 @@ SIGNAL_QUALITY_PROFILES: dict[str, dict[str, Any]] = {
     },
 }
 
+SIGNAL_QUALITY_FEATURE_COLUMNS = [
+    "tt_pass",
+    "rs_pass",
+    "setup_pass",
+    "vcp1_range10_ok",
+    "vcp2_voldry_ok",
+    "vcp3_atr_trend_ok",
+    "vcp4_atr_contract_ok",
+    "vcp5_extension_ok",
+    "vcp6_base_depth_ok",
+    "contraction_count",
+    "contraction_quality",
+    "setup_active_streak",
+    "pivot_age_days",
+    "watch_fail_mask",
+    "breakout_fail_mask",
+]
+
 
 @dataclass(slots=True)
 class PendingSignal:
@@ -1203,17 +1221,7 @@ def apply_signal_quality_filters(
     if diagnostics is None or diagnostics.is_empty():
         return signals
 
-    merged = signals.join(
-        diagnostics.select(
-            pl.col("diag_date").alias("signal_date"),
-            "symbol",
-            "contraction_count",
-            "setup_active_streak",
-            "pivot_age_days",
-        ),
-        on=["signal_date", "symbol"],
-        how="left",
-    )
+    merged = attach_signal_quality_features(signals, diagnostics)
 
     if quality_filters.get("range10_min") is not None:
         merged = merged.filter(pl.col("range10") >= float(quality_filters["range10_min"]))
@@ -1238,7 +1246,28 @@ def apply_signal_quality_filters(
     if quality_filters.get("pivot_age_days_max") is not None:
         merged = merged.filter(pl.col("pivot_age_days") <= int(quality_filters["pivot_age_days_max"]))
 
-    return merged.select(signals.columns)
+    return merged
+
+
+def attach_signal_quality_features(
+    signals: pl.DataFrame,
+    diagnostics: pl.DataFrame | None,
+) -> pl.DataFrame:
+    if diagnostics is None or diagnostics.is_empty() or signals.is_empty():
+        return signals
+
+    diag_feature_cols = [
+        col for col in SIGNAL_QUALITY_FEATURE_COLUMNS
+        if col in diagnostics.columns and col not in signals.columns
+    ]
+    if not diag_feature_cols:
+        return signals
+
+    return signals.join(
+        diagnostics.select(pl.col("diag_date").alias("signal_date"), "symbol", *diag_feature_cols),
+        on=["signal_date", "symbol"],
+        how="left",
+    )
 
 
 def filter_signals(
@@ -1271,11 +1300,13 @@ def filter_signals(
     if rs_rank_max is not None and "rs_rank" in filtered.columns:
         filtered = filtered.filter(pl.col("rs_rank") <= float(rs_rank_max))
     filtered = apply_signal_quality_filters(filtered, diagnostics, quality_filters)
-    return select_top_signals_by_day(
+    filtered = attach_signal_quality_features(filtered, diagnostics)
+    ranked = select_top_signals_by_day(
         filtered.sort(["signal_date", "symbol"]),
         max_signals_per_day=max_signals_per_day,
         ranking_mode=ranking_mode,
     )
+    return ranked.select(signals.columns)
 
 
 def build_entry_controls(

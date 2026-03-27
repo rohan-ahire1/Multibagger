@@ -10,6 +10,8 @@ from datetime import date
 
 import polars as pl
 
+from sepa_scanner.strategy.ranking import add_signal_score
+
 
 FORWARD_DAYS = [1, 3, 5, 10, 20]
 
@@ -102,6 +104,9 @@ def _compute_forward_metrics(
             "mae_r": mae_r,
             "hit_stop_first": hit_stop_first,
             "hit_1r_first": hit_1r_first,
+            "reached_2r": mfe_r >= 2.0,
+            "reached_3r": mfe_r >= 3.0,
+            "reached_5r": mfe_r >= 5.0,
             "days_available": n,
         }
 
@@ -158,6 +163,9 @@ def _slice_summary(df: pl.DataFrame, group_col: str, forward_days: list[int]) ->
         pl.col("mae_r").mean().alias("avg_mae_r"),
         (pl.col("hit_stop_first").mean() * 100.0).alias("stop_hit_first_pct"),
         (pl.col("hit_1r_first").mean() * 100.0).alias("reached_1r_first_pct"),
+        (pl.col("reached_2r").mean() * 100.0).alias("reached_2r_pct"),
+        (pl.col("reached_3r").mean() * 100.0).alias("reached_3r_pct"),
+        (pl.col("reached_5r").mean() * 100.0).alias("reached_5r_pct"),
     ])
 
     result = df.group_by(group_col).agg(agg_exprs).sort(group_col)
@@ -191,10 +199,25 @@ def compute_scorecard(
         diag_cols = diagnostics.select(
             pl.col("diag_date").alias("signal_date"),
             "symbol",
+            "tt_pass",
+            "rs_pass",
+            "setup_pass",
+            "vcp1_range10_ok",
+            "vcp2_voldry_ok",
+            "vcp3_atr_trend_ok",
+            "vcp4_atr_contract_ok",
+            "vcp5_extension_ok",
+            "vcp6_base_depth_ok",
             "contraction_count",
             "contraction_quality",
+            "near_pivot",
+            "setup_active_streak",
+            "pivot_age_days",
+            "watch_fail_mask",
+            "breakout_fail_mask",
         )
         metrics = metrics.join(diag_cols, on=["signal_date", "symbol"], how="left")
+    metrics = add_signal_score(metrics, ranking_mode="offense_v2", score_column="offense_v2_score")
 
     # Overall summary
     overall = _slice_summary(
@@ -220,6 +243,60 @@ def compute_scorecard(
     metrics = metrics.with_columns(
         _bucket("voldry", [0.3, 0.45, 0.55], ["<0.30", "0.30-0.45", "0.45-0.55", "0.55-0.60"])
     )
+
+    if "contraction_quality" in metrics.columns:
+        metrics = metrics.with_columns(
+            _bucket(
+                "contraction_quality",
+                [0.35, 0.55, 0.75],
+                ["<0.35", "0.35-0.55", "0.55-0.75", "0.75+"],
+            )
+        )
+    if "setup_active_streak" in metrics.columns:
+        metrics = metrics.with_columns(
+            pl.when(pl.col("setup_active_streak").is_null())
+            .then(pl.lit("unknown"))
+            .when(pl.col("setup_active_streak") <= 1)
+            .then(pl.lit("1"))
+            .when(pl.col("setup_active_streak") <= 3)
+            .then(pl.lit("2-3"))
+            .when(pl.col("setup_active_streak") <= 6)
+            .then(pl.lit("4-6"))
+            .otherwise(pl.lit("7+"))
+            .alias("setup_active_streak_bucket")
+        )
+    if "pivot_age_days" in metrics.columns:
+        metrics = metrics.with_columns(
+            pl.when(pl.col("pivot_age_days").is_null())
+            .then(pl.lit("unknown"))
+            .when(pl.col("pivot_age_days") <= 1)
+            .then(pl.lit("0-1"))
+            .when(pl.col("pivot_age_days") <= 3)
+            .then(pl.lit("2-3"))
+            .when(pl.col("pivot_age_days") <= 7)
+            .then(pl.lit("4-7"))
+            .otherwise(pl.lit("8+"))
+            .alias("pivot_age_days_bucket")
+        )
+    if "near_pivot" in metrics.columns:
+        metrics = metrics.with_columns(
+            _bucket("near_pivot", [0.01, 0.02, 0.03], ["<1%", "1-2%", "2-3%", "3%+"])
+        )
+    if "atr_pct" in metrics.columns:
+        metrics = metrics.with_columns(
+            _bucket("atr_pct", [0.02, 0.03, 0.04], ["<2%", "2-3%", "3-4%", "4%+"])
+        )
+    if "offense_v2_score" in metrics.columns:
+        metrics = metrics.with_columns(
+            pl.when(pl.col("offense_v2_score") >= 9.0)
+            .then(pl.lit("9.0+"))
+            .when(pl.col("offense_v2_score") >= 8.0)
+            .then(pl.lit("8.0-9.0"))
+            .when(pl.col("offense_v2_score") >= 7.0)
+            .then(pl.lit("7.0-8.0"))
+            .otherwise(pl.lit("<7.0"))
+            .alias("offense_v2_score_bucket")
+        )
 
     result = {
         "total_signals": breakouts.height,
@@ -251,5 +328,17 @@ def compute_scorecard(
             .alias("contraction_bucket")
         )
         result["by_contraction"] = _slice_summary(metrics, "contraction_bucket", forward_days)
+    if "contraction_quality_bucket" in metrics.columns:
+        result["by_contraction_quality"] = _slice_summary(metrics, "contraction_quality_bucket", forward_days)
+    if "setup_active_streak_bucket" in metrics.columns:
+        result["by_setup_streak"] = _slice_summary(metrics, "setup_active_streak_bucket", forward_days)
+    if "pivot_age_days_bucket" in metrics.columns:
+        result["by_pivot_age"] = _slice_summary(metrics, "pivot_age_days_bucket", forward_days)
+    if "near_pivot_bucket" in metrics.columns:
+        result["by_near_pivot"] = _slice_summary(metrics, "near_pivot_bucket", forward_days)
+    if "atr_pct_bucket" in metrics.columns:
+        result["by_atr_pct"] = _slice_summary(metrics, "atr_pct_bucket", forward_days)
+    if "offense_v2_score_bucket" in metrics.columns:
+        result["by_offense_v2_score"] = _slice_summary(metrics, "offense_v2_score_bucket", forward_days)
 
     return result
