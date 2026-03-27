@@ -94,6 +94,10 @@ class BacktestSettings(BaseModel):
     pending_days: int = 11
     max_hold_days: int = 132
     exit_mode: str = "advanced_sepa"
+    rs_rank_min: float | None = None
+    rs_rank_max: float | None = None
+    use_extended_exit_model: bool = False
+    use_regime_entry_controls: bool = False
 
 
 class ExitStrategySettings(BaseModel):
@@ -105,7 +109,11 @@ class ExitStrategySettings(BaseModel):
     absolute_max_loss_pct: float = 0.10
     trail_mode: str = "adaptive"
     trail_pct: float = 0.10
+    trail_pct_bull: float = 0.25
+    trail_pct_bear: float = 0.15
     dead_money_days: int | None = 17
+    time_stop_days: int | None = 15
+    max_hold_before_tighten: int = 40
 
 
 class AlertsSettings(BaseModel):
@@ -145,6 +153,9 @@ class PortfolioSettings(BaseModel):
     risk_per_trade_pct: float = 0.035    # 3.5% risk per trade
     regime_gate_enabled: bool = True
     regime_high_volatility_threshold: float = 0.25  # 20D ann. realized vol on benchmark
+    regime_cooldown_days: int = 0
+    breadth_soft_floor_pct: float | None = None
+    breadth_soft_size_mult: float = 0.50
 
 
 class IndiaFilterSettings(BaseModel):
