@@ -23,7 +23,7 @@ from sepa_scanner.backtest.queries import (
 )
 from sepa_scanner.settings import load_settings
 from sepa_scanner.storage.parquet_store import ParquetOhlcvStore
-from sepa_scanner.strategy.ranking import select_top_signals_by_day
+from sepa_scanner.strategy.ranking import add_signal_score, select_top_signals_by_day
 
 try:
     import multibagger_core
@@ -1191,6 +1191,8 @@ def resolve_signal_quality_overrides(settings: Any) -> dict[str, Any]:
         "contraction_count_max": settings.backtest.signal_quality_contraction_max,
         "setup_active_streak_min": settings.backtest.signal_quality_setup_streak_min,
         "pivot_age_days_max": settings.backtest.signal_quality_pivot_age_max,
+        "offense_score_min": settings.backtest.signal_quality_offense_score_min,
+        "offense_score_max": settings.backtest.signal_quality_offense_score_max,
     }
 
 
@@ -1215,6 +1217,8 @@ def apply_signal_quality_filters(
     signals: pl.DataFrame,
     diagnostics: pl.DataFrame | None,
     quality_filters: dict[str, Any],
+    *,
+    ranking_mode: str = "default",
 ) -> pl.DataFrame:
     if not quality_filters:
         return signals
@@ -1245,6 +1249,15 @@ def apply_signal_quality_filters(
         )
     if quality_filters.get("pivot_age_days_max") is not None:
         merged = merged.filter(pl.col("pivot_age_days") <= int(quality_filters["pivot_age_days_max"]))
+    offense_score_min = quality_filters.get("offense_score_min")
+    offense_score_max = quality_filters.get("offense_score_max")
+    if offense_score_min is not None or offense_score_max is not None:
+        merged = add_signal_score(merged, ranking_mode="offense_v2", score_column="_offense_v2_score")
+        if offense_score_min is not None:
+            merged = merged.filter(pl.col("_offense_v2_score") >= float(offense_score_min))
+        if offense_score_max is not None:
+            merged = merged.filter(pl.col("_offense_v2_score") <= float(offense_score_max))
+        merged = merged.drop("_offense_v2_score", strict=False)
 
     return merged
 
@@ -1299,7 +1312,12 @@ def filter_signals(
         filtered = filtered.filter(pl.col("rs_rank") >= float(rs_rank_min))
     if rs_rank_max is not None and "rs_rank" in filtered.columns:
         filtered = filtered.filter(pl.col("rs_rank") <= float(rs_rank_max))
-    filtered = apply_signal_quality_filters(filtered, diagnostics, quality_filters)
+    filtered = apply_signal_quality_filters(
+        filtered,
+        diagnostics,
+        quality_filters,
+        ranking_mode=ranking_mode,
+    )
     filtered = attach_signal_quality_features(filtered, diagnostics)
     ranked = select_top_signals_by_day(
         filtered.sort(["signal_date", "symbol"]),
