@@ -318,7 +318,9 @@ def _evaluate_current_defaults(
         "use_regime_entry_controls": settings.backtest.use_regime_entry_controls,
         "use_rs_filter": signal_filters["rs_rank_min"] is not None,
     }
-    if portfolio["breadth_soft_floor_pct"] is not None:
+    if portfolio["breadth_soft_floor_pct"] is None:
+        param_dump["breadth_soft_floor_pct"] = "off"
+    else:
         param_dump["breadth_soft_floor_pct"] = portfolio["breadth_soft_floor_pct"]
         param_dump["breadth_soft_size_mult"] = portfolio["breadth_soft_size_mult"]
     if settings.backtest.use_extended_exit_model:
