@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from scripts.portfolio_diagnostics import filter_signals, simulate_portfolio_python
 from sepa_scanner.backtest.models import BacktestParams, ExitMode
 from sepa_scanner.backtest.signal_scorecard import compute_scorecard
+from sepa_scanner.strategy.ranking import add_signal_score, add_signal_size_multiplier
 
 
 def test_offense_v2_ranking_prefers_richer_setup_quality() -> None:
@@ -253,6 +254,64 @@ def test_simulate_portfolio_python_uses_signal_size_multiplier_for_position_sizi
     }
     assert trades["ALPHA"]["shares"] > trades["BETA"]["shares"]
     assert round(trades["ALPHA"]["shares"] / trades["BETA"]["shares"], 3) == round(1.4 / 0.6, 3)
+
+
+def test_offense_v2_band_tilt_peaks_near_midpoint_score() -> None:
+    frame = pl.DataFrame(
+        {
+            "signal_date": [date(2026, 3, 1)] * 3,
+            "symbol": ["ALPHA", "BETA", "GAMMA"],
+            "rs_rank": [90.0, 82.0, 95.0],
+            "vol_mult": [2.0, 1.1, 2.8],
+            "range10": [0.065, 0.11, 0.05],
+            "voldry": [0.40, 0.70, 0.28],
+            "near_pivot": [0.01, 0.05, 0.002],
+            "adv50": [1_000_000_000.0, 400_000_000.0, 1_500_000_000.0],
+            "atr_pct": [0.03, 0.06, 0.025],
+            "entry_ref": [100.0, 100.0, 100.0],
+            "r_per_share": [5.5, 7.0, 4.5],
+            "contraction_quality": [0.78, 0.25, 0.90],
+            "contraction_count": [2.0, 1.0, 3.0],
+            "setup_active_streak": [5.0, 1.0, 7.0],
+            "pivot_age_days": [2.0, 12.0, 0.0],
+            "tt_pass": [1.0, 1.0, 1.0],
+            "setup_pass": [1.0, 1.0, 1.0],
+            "rs_pass": [1.0, 1.0, 1.0],
+            "vcp1_range10_ok": [1.0, 0.0, 1.0],
+            "vcp2_voldry_ok": [1.0, 0.0, 1.0],
+            "vcp4_atr_contract_ok": [1.0, 0.0, 1.0],
+            "vcp5_extension_ok": [1.0, 0.0, 1.0],
+            "vcp6_base_depth_ok": [1.0, 1.0, 1.0],
+            "watch_fail_mask": [0.0, 4.0, 0.0],
+            "breakout_fail_mask": [0.0, 16.0, 0.0],
+        }
+    )
+
+    scored = add_signal_score(frame, ranking_mode="offense_v2", score_column="score")
+    linear = add_signal_size_multiplier(
+        frame,
+        tilt_mode="offense_v2",
+        score_min=7.0,
+        score_max=8.0,
+        min_mult=0.7,
+        max_mult=1.3,
+    )
+    banded = add_signal_size_multiplier(
+        frame,
+        tilt_mode="offense_v2_band",
+        score_min=7.0,
+        score_max=8.0,
+        min_mult=0.7,
+        max_mult=1.3,
+    )
+    merged = (
+        scored.join(linear.select("symbol", pl.col("signal_size_mult").alias("linear_mult")), on="symbol", how="left")
+        .join(banded.select("symbol", pl.col("signal_size_mult").alias("band_mult")), on="symbol", how="left")
+    )
+    highest = merged.sort("score", descending=True).head(1)
+
+    assert highest["score"].item() > 8.0
+    assert highest["band_mult"].item() < highest["linear_mult"].item()
 
 
 def test_scorecard_reports_multi_r_outcomes_and_quality_sections() -> None:
