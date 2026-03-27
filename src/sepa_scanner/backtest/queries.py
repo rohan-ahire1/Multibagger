@@ -41,6 +41,31 @@ def get_backtest_signals(
     return _query_frame(conn, query, params)
 
 
+def get_backtest_diagnostics(
+    conn: duckdb.DuckDBPyConnection,
+    start_date: date | None,
+    end_date: date | None,
+    symbols: list[str] | None = None,
+) -> pl.DataFrame:
+    query = """
+        SELECT *
+        FROM daily_diagnostics
+        WHERE 1 = 1
+    """
+    params: list[object] = []
+    if start_date is not None:
+        query += "\nAND diag_date >= ?"
+        params.append(start_date)
+    if end_date is not None:
+        query += "\nAND diag_date <= ?"
+        params.append(end_date)
+    if symbols:
+        query += "\nAND symbol IN (SELECT UNNEST(?))"
+        params.append(symbols)
+    query += "\nORDER BY diag_date ASC, symbol ASC"
+    return _query_frame(conn, query, params)
+
+
 def get_backtest_ohlcv(
     parquet_store: ParquetOhlcvStore,
     symbols: list[str],

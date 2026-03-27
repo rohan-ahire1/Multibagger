@@ -31,12 +31,17 @@ from scripts.portfolio_diagnostics import (  # noqa: E402
     filter_signals,
     join_strategy_and_benchmark,
     load_benchmark_curve,
+    load_sector_map as load_analysis_sector_map,
     resolve_exit_config,
+    resolve_signal_quality_overrides,
     simulate_portfolio_python,
 )
 from sepa_scanner.backtest.models import BacktestParams, ExitMode  # noqa: E402
-from sepa_scanner.backtest.queries import get_backtest_ohlcv, get_backtest_signals  # noqa: E402
-from sepa_scanner.data_sources.nse_meta import load_sector_map  # noqa: E402
+from sepa_scanner.backtest.queries import (  # noqa: E402
+    get_backtest_diagnostics,
+    get_backtest_ohlcv,
+    get_backtest_signals,
+)
 from sepa_scanner.settings import load_settings  # noqa: E402
 from sepa_scanner.storage.parquet_store import ParquetOhlcvStore  # noqa: E402
 
@@ -47,7 +52,10 @@ class ObjectiveThresholds:
     require_ex_2023_above_benchmark: bool
 
 
-def _load_optional_sector_map() -> dict[str, str]:
+def _load_optional_sector_map(constituent_csv_path: Path | None = None) -> dict[str, str]:
+    if constituent_csv_path is not None and constituent_csv_path.exists():
+        return load_analysis_sector_map(constituent_csv_path)
+
     candidates: list[Path] = []
     env_path = os.getenv("SEPA_SECTOR_MAP_PATH")
     if env_path:
@@ -62,8 +70,12 @@ def _load_optional_sector_map() -> dict[str, str]:
 
     for path in candidates:
         if path.exists():
-            return load_sector_map(path)
+            return load_analysis_sector_map(path)
     return {}
+
+
+def _decode_max_signals_per_day(value: Any) -> int | None:
+    return None if value in (None, "off") else int(value)
 
 
 def _resolve_optimization_window(ohlcv_df: pl.DataFrame) -> tuple[date, date]:
@@ -125,6 +137,15 @@ def _build_trial_params(
     use_extended_exit_model = trial.suggest_categorical("use_extended_exit_model", [False, True])
     use_regime_entry_controls = trial.suggest_categorical("use_regime_entry_controls", [False, True])
     use_rs_filter = trial.suggest_categorical("use_rs_filter", [False, True])
+    signal_ranking_mode = trial.suggest_categorical("signal_ranking_mode", ["default", "championship"])
+    max_signals_per_day_choice = trial.suggest_categorical(
+        "max_signals_per_day",
+        ["off", "2", "3", "4", "5", "6"],
+    )
+    signal_quality_profile = trial.suggest_categorical(
+        "signal_quality_profile",
+        ["default", "championship", "championship_loose"],
+    )
     params = BacktestParams(
         pending_days=trial.suggest_int("pending_days", 3, 15),
         max_hold_days=trial.suggest_int("max_hold_days", 40, 200),
@@ -167,6 +188,10 @@ def _build_trial_params(
     signal_filters = {
         "rs_rank_min": trial.suggest_int("rs_rank_min", 65, 85, step=5) if use_rs_filter else None,
         "rs_rank_max": settings.backtest.rs_rank_max,
+        "ranking_mode": signal_ranking_mode,
+        "max_signals_per_day": _decode_max_signals_per_day(max_signals_per_day_choice),
+        "quality_profile": signal_quality_profile,
+        "quality_overrides": None,
     }
     runtime_options = {
         "use_extended_exit_model": use_extended_exit_model,
@@ -232,6 +257,7 @@ def _evaluate_current_defaults(
     *,
     settings: Any,
     signals_df: pl.DataFrame,
+    diagnostics_df: pl.DataFrame,
     ohlcv_df: pl.DataFrame,
     benchmark_curve: pl.DataFrame,
     benchmark_roll: pl.DataFrame,
@@ -269,8 +295,12 @@ def _evaluate_current_defaults(
     signal_filters = {
         "rs_rank_min": settings.backtest.rs_rank_min,
         "rs_rank_max": settings.backtest.rs_rank_max,
+        "ranking_mode": settings.backtest.signal_ranking_mode,
+        "max_signals_per_day": settings.backtest.max_signals_per_day,
+        "quality_profile": settings.backtest.signal_quality_profile,
+        "quality_overrides": resolve_signal_quality_overrides(settings),
     }
-    filtered_signals = filter_signals(signals_df, **signal_filters)
+    filtered_signals = filter_signals(signals_df, diagnostics=diagnostics_df, **signal_filters)
     entry_gate: dict[date, bool] = {}
     entry_size_mult: dict[date, float] = {}
     if settings.backtest.use_regime_entry_controls:
@@ -317,6 +347,9 @@ def _evaluate_current_defaults(
         "use_extended_exit_model": settings.backtest.use_extended_exit_model,
         "use_regime_entry_controls": settings.backtest.use_regime_entry_controls,
         "use_rs_filter": signal_filters["rs_rank_min"] is not None,
+        "signal_ranking_mode": signal_filters["ranking_mode"],
+        "max_signals_per_day": signal_filters["max_signals_per_day"] or "off",
+        "signal_quality_profile": signal_filters["quality_profile"],
     }
     if portfolio["breadth_soft_floor_pct"] is None:
         param_dump["breadth_soft_floor_pct"] = "off"
@@ -356,7 +389,7 @@ def run_optuna_optimization() -> None:
     print(f"Study name: {study_name}")
     print(f"Minimum rolling 3Y beat rate: {thresholds.min_rolling_beat_rate:.0%}")
 
-    tri_csv_path, _ = ensure_reference_data(reference_dir, start_date, end_date)
+    tri_csv_path, constituent_csv_path = ensure_reference_data(reference_dir, start_date, end_date)
     benchmark_curve = load_benchmark_curve(tri_csv_path, start_date, end_date)
     benchmark_stats = compute_performance_stats(benchmark_curve.select("date", "tri"), "tri")
     benchmark_roll = compute_rolling_cagr(benchmark_curve.select("date", "tri"), "tri")
@@ -365,9 +398,16 @@ def run_optuna_optimization() -> None:
     parquet_store = ParquetOhlcvStore(root=PROJECT_ROOT / "data" / "yf_adjusted")
     conn = duckdb.connect(str(db_path), read_only=True)
     signals_df = get_backtest_signals(conn, start_date=start_date, end_date=end_date)
-    conn.close()
     if signals_df.is_empty():
+        conn.close()
         raise RuntimeError(f"No BREAKOUT signals found for optimization window {start_date} -> {end_date}")
+    diagnostics_df = get_backtest_diagnostics(
+        conn,
+        start_date=start_date,
+        end_date=end_date,
+        symbols=signals_df["symbol"].unique().to_list(),
+    )
+    conn.close()
 
     symbols = signals_df["symbol"].unique().to_list()
     ohlcv_end_date = end_date + timedelta(
@@ -379,7 +419,7 @@ def run_optuna_optimization() -> None:
         start_date=start_date,
         end_date=ohlcv_end_date,
     ).sort(["symbol", "date"])
-    sector_map = _load_optional_sector_map()
+    sector_map = _load_optional_sector_map(constituent_csv_path)
 
     print(f"Loaded {signals_df.height} signals across {len(symbols)} symbols")
     print(f"Loaded {ohlcv_df.height} OHLCV rows across {ohlcv_df['symbol'].n_unique()} symbols")
@@ -391,6 +431,7 @@ def run_optuna_optimization() -> None:
     baseline = _evaluate_current_defaults(
         settings=settings,
         signals_df=signals_df,
+        diagnostics_df=diagnostics_df,
         ohlcv_df=ohlcv_df,
         benchmark_curve=benchmark_curve,
         benchmark_roll=benchmark_roll,
@@ -410,7 +451,7 @@ def run_optuna_optimization() -> None:
             trial.set_user_attr("constraints_met", False)
             return -1_000_000.0
 
-        filtered_signals = filter_signals(signals_df, **signal_filters)
+        filtered_signals = filter_signals(signals_df, diagnostics=diagnostics_df, **signal_filters)
         if filtered_signals.is_empty():
             trial.set_user_attr("constraints_met", False)
             return -1_000_000.0
@@ -460,6 +501,9 @@ def run_optuna_optimization() -> None:
         trial.set_user_attr("use_extended_exit_model", runtime_options["use_extended_exit_model"])
         trial.set_user_attr("use_regime_entry_controls", runtime_options["use_regime_entry_controls"])
         trial.set_user_attr("use_rs_filter", runtime_options["use_rs_filter"])
+        trial.set_user_attr("signal_ranking_mode", signal_filters["ranking_mode"])
+        trial.set_user_attr("max_signals_per_day", signal_filters["max_signals_per_day"])
+        trial.set_user_attr("signal_quality_profile", signal_filters["quality_profile"])
         trial.set_user_attr("elapsed_sec", elapsed)
 
         return float(metrics["score"])
@@ -530,8 +574,12 @@ def run_optuna_optimization() -> None:
     best_signal_filters = {
         "rs_rank_min": int(best_params["rs_rank_min"]) if best_params.get("use_rs_filter") else None,
         "rs_rank_max": settings.backtest.rs_rank_max,
+        "ranking_mode": str(best_params.get("signal_ranking_mode", settings.backtest.signal_ranking_mode)),
+        "max_signals_per_day": _decode_max_signals_per_day(best_params.get("max_signals_per_day")),
+        "quality_profile": str(best_params.get("signal_quality_profile", settings.backtest.signal_quality_profile)),
+        "quality_overrides": None,
     }
-    best_signals = filter_signals(signals_df, **best_signal_filters)
+    best_signals = filter_signals(signals_df, diagnostics=diagnostics_df, **best_signal_filters)
     best_entry_gate: dict[date, bool] = {}
     best_entry_size_mult: dict[date, float] = {}
     if use_regime_entry_controls:

@@ -16,7 +16,11 @@ import polars as pl
 import requests
 
 from sepa_scanner.backtest.models import BacktestParams, ExitMode
-from sepa_scanner.backtest.queries import get_backtest_ohlcv, get_backtest_signals
+from sepa_scanner.backtest.queries import (
+    get_backtest_diagnostics,
+    get_backtest_ohlcv,
+    get_backtest_signals,
+)
 from sepa_scanner.settings import load_settings
 from sepa_scanner.storage.parquet_store import ParquetOhlcvStore
 from sepa_scanner.strategy.ranking import select_top_signals_by_day
@@ -29,6 +33,30 @@ except ImportError:  # pragma: no cover - exercised only when extension is missi
 
 OFFICIAL_TRI_URL = "https://niftyindices.com/Backpage.aspx/getTotalReturnIndexString"
 OFFICIAL_CONSTITUENTS_URL = "https://niftyindices.com/IndexConstituent/ind_nifty500list.csv"
+
+SIGNAL_QUALITY_PROFILES: dict[str, dict[str, Any]] = {
+    "default": {},
+    "championship": {
+        "rs_rank_min": 85.0,
+        "rs_rank_max": 95.0,
+        "range10_min": 0.04,
+        "range10_max": 0.10,
+        "voldry_min": 0.30,
+        "voldry_max": 0.80,
+        "contraction_count_min": 1,
+        "contraction_count_max": 3,
+    },
+    "championship_loose": {
+        "rs_rank_min": 85.0,
+        "rs_rank_max": 99.5,
+        "range10_min": 0.04,
+        "range10_max": 0.12,
+        "voldry_min": 0.25,
+        "voldry_max": 0.85,
+        "contraction_count_min": 1,
+        "contraction_count_max": 3,
+    },
+}
 
 
 @dataclass(slots=True)
@@ -191,8 +219,10 @@ def load_inputs(start_date: date, end_date: date) -> tuple[dict[str, Any], pl.Da
 
     signals = get_backtest_signals(conn, start_date=start_date, end_date=end_date, symbol=None)
     symbols = signals["symbol"].unique().to_list()
+    diagnostics = get_backtest_diagnostics(conn, start_date=start_date, end_date=end_date, symbols=symbols)
     ohlcv_end_date = end_date + timedelta(days=(settings.backtest.pending_days + settings.backtest.max_hold_days) * 2)
     ohlcv = get_backtest_ohlcv(parquet_store, symbols=symbols, start_date=start_date, end_date=ohlcv_end_date)
+    conn.close()
 
     params = BacktestParams(
         pending_days=settings.backtest.pending_days,
@@ -234,6 +264,7 @@ def load_inputs(start_date: date, end_date: date) -> tuple[dict[str, Any], pl.Da
         "params": params,
         "portfolio": portfolio,
         "exit_config": resolve_exit_config(settings),
+        "diagnostics": diagnostics,
         "parquet_store": parquet_store,
     }, signals, ohlcv
 
@@ -1048,19 +1079,114 @@ def compute_regime_inputs(
     )
 
 
+def resolve_signal_quality_overrides(settings: Any) -> dict[str, Any]:
+    return {
+        "range10_min": settings.backtest.signal_quality_range10_min,
+        "range10_max": settings.backtest.signal_quality_range10_max,
+        "voldry_min": settings.backtest.signal_quality_voldry_min,
+        "voldry_max": settings.backtest.signal_quality_voldry_max,
+        "contraction_count_min": settings.backtest.signal_quality_contraction_min,
+        "contraction_count_max": settings.backtest.signal_quality_contraction_max,
+        "setup_active_streak_min": settings.backtest.signal_quality_setup_streak_min,
+        "pivot_age_days_max": settings.backtest.signal_quality_pivot_age_max,
+    }
+
+
+def resolve_signal_quality_filters(
+    *,
+    quality_profile: str = "default",
+    overrides: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if quality_profile not in SIGNAL_QUALITY_PROFILES:
+        raise ValueError(
+            f"Unknown signal quality profile '{quality_profile}'. "
+            f"Expected one of: {sorted(SIGNAL_QUALITY_PROFILES)}"
+        )
+    quality_filters = dict(SIGNAL_QUALITY_PROFILES[quality_profile])
+    for key, value in (overrides or {}).items():
+        if value is not None:
+            quality_filters[key] = value
+    return quality_filters
+
+
+def apply_signal_quality_filters(
+    signals: pl.DataFrame,
+    diagnostics: pl.DataFrame | None,
+    quality_filters: dict[str, Any],
+) -> pl.DataFrame:
+    if not quality_filters:
+        return signals
+    if diagnostics is None or diagnostics.is_empty():
+        return signals
+
+    merged = signals.join(
+        diagnostics.select(
+            pl.col("diag_date").alias("signal_date"),
+            "symbol",
+            "contraction_count",
+            "setup_active_streak",
+            "pivot_age_days",
+        ),
+        on=["signal_date", "symbol"],
+        how="left",
+    )
+
+    if quality_filters.get("range10_min") is not None:
+        merged = merged.filter(pl.col("range10") >= float(quality_filters["range10_min"]))
+    if quality_filters.get("range10_max") is not None:
+        merged = merged.filter(pl.col("range10") <= float(quality_filters["range10_max"]))
+    if quality_filters.get("voldry_min") is not None:
+        merged = merged.filter(pl.col("voldry") >= float(quality_filters["voldry_min"]))
+    if quality_filters.get("voldry_max") is not None:
+        merged = merged.filter(pl.col("voldry") <= float(quality_filters["voldry_max"]))
+    if quality_filters.get("contraction_count_min") is not None:
+        merged = merged.filter(
+            pl.col("contraction_count") >= int(quality_filters["contraction_count_min"])
+        )
+    if quality_filters.get("contraction_count_max") is not None:
+        merged = merged.filter(
+            pl.col("contraction_count") <= int(quality_filters["contraction_count_max"])
+        )
+    if quality_filters.get("setup_active_streak_min") is not None:
+        merged = merged.filter(
+            pl.col("setup_active_streak") >= int(quality_filters["setup_active_streak_min"])
+        )
+    if quality_filters.get("pivot_age_days_max") is not None:
+        merged = merged.filter(pl.col("pivot_age_days") <= int(quality_filters["pivot_age_days_max"]))
+
+    return merged.select(signals.columns)
+
+
 def filter_signals(
     signals: pl.DataFrame,
     *,
+    diagnostics: pl.DataFrame | None = None,
     rs_rank_min: float | None = None,
     rs_rank_max: float | None = None,
     ranking_mode: str = "default",
     max_signals_per_day: int | None = None,
+    quality_profile: str = "default",
+    quality_overrides: dict[str, Any] | None = None,
 ) -> pl.DataFrame:
+    quality_filters = resolve_signal_quality_filters(
+        quality_profile=quality_profile,
+        overrides=quality_overrides,
+    )
+    if rs_rank_min is None:
+        rs_rank_min = quality_filters.pop("rs_rank_min", None)
+    else:
+        quality_filters.pop("rs_rank_min", None)
+    if rs_rank_max is None:
+        rs_rank_max = quality_filters.pop("rs_rank_max", None)
+    else:
+        quality_filters.pop("rs_rank_max", None)
+
     filtered = signals
     if rs_rank_min is not None and "rs_rank" in filtered.columns:
         filtered = filtered.filter(pl.col("rs_rank") >= float(rs_rank_min))
     if rs_rank_max is not None and "rs_rank" in filtered.columns:
         filtered = filtered.filter(pl.col("rs_rank") <= float(rs_rank_max))
+    filtered = apply_signal_quality_filters(filtered, diagnostics, quality_filters)
     return select_top_signals_by_day(
         filtered.sort(["signal_date", "symbol"]),
         max_signals_per_day=max_signals_per_day,
@@ -1206,10 +1332,13 @@ def main() -> None:
     benchmark_curve = load_benchmark_curve(tri_csv_path, start_date, end_date)
     filtered_signals = filter_signals(
         signals,
+        diagnostics=bundle["diagnostics"],
         rs_rank_min=bundle["settings"].backtest.rs_rank_min,
         rs_rank_max=bundle["settings"].backtest.rs_rank_max,
         ranking_mode=bundle["settings"].backtest.signal_ranking_mode,
         max_signals_per_day=bundle["settings"].backtest.max_signals_per_day,
+        quality_profile=bundle["settings"].backtest.signal_quality_profile,
+        quality_overrides=resolve_signal_quality_overrides(bundle["settings"]),
     )
     regime_inputs = compute_regime_inputs(bundle["settings"], start_date, end_date, benchmark_curve)
     entry_gate: dict[date, bool] = {}

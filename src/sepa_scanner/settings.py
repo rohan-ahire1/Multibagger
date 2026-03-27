@@ -98,6 +98,15 @@ class BacktestSettings(BaseModel):
     rs_rank_max: float | None = None
     signal_ranking_mode: str = "default"
     max_signals_per_day: int | None = None
+    signal_quality_profile: str = "default"
+    signal_quality_range10_min: float | None = None
+    signal_quality_range10_max: float | None = None
+    signal_quality_voldry_min: float | None = None
+    signal_quality_voldry_max: float | None = None
+    signal_quality_contraction_min: int | None = None
+    signal_quality_contraction_max: int | None = None
+    signal_quality_setup_streak_min: int | None = None
+    signal_quality_pivot_age_max: int | None = None
     use_extended_exit_model: bool = False
     use_regime_entry_controls: bool = False
 
