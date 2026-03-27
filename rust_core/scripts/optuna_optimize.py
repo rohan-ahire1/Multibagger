@@ -109,7 +109,10 @@ def _resolve_study_name(start_date: date, end_date: date, thresholds: ObjectiveT
 def _build_trial_params(
     settings: Any,
     trial: optuna.Trial,
-) -> tuple[BacktestParams, dict[str, Any], dict[str, Any], dict[str, Any]]:
+) -> tuple[BacktestParams, dict[str, Any], dict[str, Any] | None, dict[str, Any], dict[str, Any]]:
+    use_extended_exit_model = trial.suggest_categorical("use_extended_exit_model", [False, True])
+    use_regime_entry_controls = trial.suggest_categorical("use_regime_entry_controls", [False, True])
+    use_rs_filter = trial.suggest_categorical("use_rs_filter", [False, True])
     params = BacktestParams(
         pending_days=trial.suggest_int("pending_days", 3, 15),
         max_hold_days=trial.suggest_int("max_hold_days", 40, 200),
@@ -135,23 +138,30 @@ def _build_trial_params(
         "breadth_soft_floor_pct": settings.portfolio.breadth_soft_floor_pct,
         "breadth_soft_size_mult": settings.portfolio.breadth_soft_size_mult,
     }
-    exit_config = {
-        "breakeven_activation_r": trial.suggest_float("breakeven_activation_r", 0.8, 3.0, step=0.1),
-        "partial_profit_r": trial.suggest_float("partial_profit_r", 1.5, 5.0, step=0.5),
-        "partial_profit_pct": trial.suggest_float("partial_profit_pct", 0.25, 0.75, step=0.05),
-        "trail_activation_r": params.trail_activation_r,
-        "trail_pct": params.trail_pct,
-        "trail_pct_bull": params.trail_pct,
-        "trail_pct_bear": min(params.trail_pct, 0.15),
-        "dead_money_days": params.dead_money_days,
-        "time_stop_days": trial.suggest_int("time_stop_days", 8, 25),
-        "max_hold_before_tighten": trial.suggest_int("max_hold_before_tighten", 20, 80, step=5),
-    }
+    exit_config = None
+    if use_extended_exit_model:
+        exit_config = {
+            "breakeven_activation_r": trial.suggest_float("breakeven_activation_r", 0.8, 3.0, step=0.1),
+            "partial_profit_r": trial.suggest_float("partial_profit_r", 1.5, 5.0, step=0.5),
+            "partial_profit_pct": trial.suggest_float("partial_profit_pct", 0.25, 0.75, step=0.05),
+            "trail_activation_r": params.trail_activation_r,
+            "trail_pct": params.trail_pct,
+            "trail_pct_bull": params.trail_pct,
+            "trail_pct_bear": min(params.trail_pct, 0.15),
+            "dead_money_days": params.dead_money_days,
+            "time_stop_days": trial.suggest_int("time_stop_days", 8, 25),
+            "max_hold_before_tighten": trial.suggest_int("max_hold_before_tighten", 20, 80, step=5),
+        }
     signal_filters = {
-        "rs_rank_min": trial.suggest_int("rs_rank_min", 65, 85, step=5),
+        "rs_rank_min": trial.suggest_int("rs_rank_min", 65, 85, step=5) if use_rs_filter else None,
         "rs_rank_max": settings.backtest.rs_rank_max,
     }
-    return params, portfolio, exit_config, signal_filters
+    runtime_options = {
+        "use_extended_exit_model": use_extended_exit_model,
+        "use_regime_entry_controls": use_regime_entry_controls,
+        "use_rs_filter": use_rs_filter,
+    }
+    return params, portfolio, exit_config, signal_filters, runtime_options
 
 
 def _evaluate_trial_result(
@@ -273,29 +283,36 @@ def _evaluate_current_defaults(
         initial_capital=portfolio["initial_capital"],
         filled_trades=filled_trades,
     )
-    return {
-        "params": {
-            "pending_days": params.pending_days,
-            "max_hold_days": params.max_hold_days,
-            "trail_activation_r": params.trail_activation_r,
-            "trail_pct": params.trail_pct,
-            "dead_money_days": params.dead_money_days,
-            "risk_per_trade_pct": portfolio["risk_per_trade_pct"],
-            "exit_mode": params.exit_mode.value,
-            "breakeven_activation_r": exit_config["breakeven_activation_r"],
-            "partial_profit_r": exit_config["partial_profit_r"],
-            "partial_profit_pct": exit_config["partial_profit_pct"],
-            "time_stop_days": exit_config["time_stop_days"],
-            "max_hold_before_tighten": exit_config["max_hold_before_tighten"],
-            "max_positions": portfolio["max_positions"],
-            "max_heat_pct": portfolio["max_heat_pct"],
-            "drawdown_half_pct": portfolio["drawdown_half_pct"],
-            "drawdown_stop_pct": portfolio["drawdown_stop_pct"],
-            "drawdown_close_pct": portfolio["drawdown_close_pct"],
-            "rs_rank_min": signal_filters["rs_rank_min"],
-        },
-        "metrics": metrics,
+    param_dump: dict[str, Any] = {
+        "pending_days": params.pending_days,
+        "max_hold_days": params.max_hold_days,
+        "trail_activation_r": params.trail_activation_r,
+        "trail_pct": params.trail_pct,
+        "dead_money_days": params.dead_money_days,
+        "risk_per_trade_pct": portfolio["risk_per_trade_pct"],
+        "exit_mode": params.exit_mode.value,
+        "max_positions": portfolio["max_positions"],
+        "max_heat_pct": portfolio["max_heat_pct"],
+        "drawdown_half_pct": portfolio["drawdown_half_pct"],
+        "drawdown_stop_pct": portfolio["drawdown_stop_pct"],
+        "drawdown_close_pct": portfolio["drawdown_close_pct"],
+        "use_extended_exit_model": settings.backtest.use_extended_exit_model,
+        "use_regime_entry_controls": settings.backtest.use_regime_entry_controls,
+        "use_rs_filter": signal_filters["rs_rank_min"] is not None,
     }
+    if settings.backtest.use_extended_exit_model:
+        param_dump.update(
+            {
+                "breakeven_activation_r": exit_config["breakeven_activation_r"],
+                "partial_profit_r": exit_config["partial_profit_r"],
+                "partial_profit_pct": exit_config["partial_profit_pct"],
+                "time_stop_days": exit_config["time_stop_days"],
+                "max_hold_before_tighten": exit_config["max_hold_before_tighten"],
+            }
+        )
+    if signal_filters["rs_rank_min"] is not None:
+        param_dump["rs_rank_min"] = signal_filters["rs_rank_min"]
+    return {"params": param_dump, "metrics": metrics}
 
 
 def run_optuna_optimization() -> None:
@@ -363,7 +380,7 @@ def run_optuna_optimization() -> None:
     print(json.dumps(baseline, indent=2, default=str))
 
     def objective(trial: optuna.Trial) -> float:
-        params, portfolio, exit_config, signal_filters = _build_trial_params(settings, trial)
+        params, portfolio, exit_config, signal_filters, runtime_options = _build_trial_params(settings, trial)
         if not (
             portfolio["drawdown_half_pct"] < portfolio["drawdown_stop_pct"] < portfolio["drawdown_close_pct"]
         ):
@@ -375,7 +392,10 @@ def run_optuna_optimization() -> None:
             trial.set_user_attr("constraints_met", False)
             return -1_000_000.0
 
-        entry_gate, entry_size_mult = build_entry_controls(settings, regime_inputs)
+        entry_gate: dict[date, bool] = {}
+        entry_size_mult: dict[date, float] = {}
+        if runtime_options["use_regime_entry_controls"]:
+            entry_gate, entry_size_mult = build_entry_controls(settings, regime_inputs)
         started = time.perf_counter()
         result = simulate_portfolio_python(
             filtered_signals,
@@ -383,7 +403,7 @@ def run_optuna_optimization() -> None:
             params,
             portfolio,
             sector_map,
-            exit_config=exit_config,
+            exit_config=exit_config if runtime_options["use_extended_exit_model"] else None,
             entry_gate=entry_gate,
             entry_size_mult=entry_size_mult,
         )
@@ -410,6 +430,9 @@ def run_optuna_optimization() -> None:
         trial.set_user_attr("ex_2023_ok", metrics["ex_2023_ok"])
         trial.set_user_attr("beat_rate_ok", metrics["beat_rate_ok"])
         trial.set_user_attr("filled_trades", metrics["filled_trades"])
+        trial.set_user_attr("use_extended_exit_model", runtime_options["use_extended_exit_model"])
+        trial.set_user_attr("use_regime_entry_controls", runtime_options["use_regime_entry_controls"])
+        trial.set_user_attr("use_rs_filter", runtime_options["use_rs_filter"])
         trial.set_user_attr("elapsed_sec", elapsed)
 
         return float(metrics["score"])
@@ -422,6 +445,7 @@ def run_optuna_optimization() -> None:
         load_if_exists=True,
         sampler=sampler,
     )
+    study.enqueue_trial(baseline["params"], skip_if_exists=True)
 
     print(f"\n🚀 Starting robust AI optimization ({trial_count} trials)...")
     study.optimize(objective, n_trials=trial_count)
@@ -431,6 +455,8 @@ def run_optuna_optimization() -> None:
     best_trial = max(feasible_trials or completed_trials, key=lambda trial: float(trial.value))
 
     best_params = best_trial.params
+    use_extended_exit_model = bool(best_params.get("use_extended_exit_model", False))
+    use_regime_entry_controls = bool(best_params.get("use_regime_entry_controls", False))
     best_backtest_params = BacktestParams(
         pending_days=int(best_params["pending_days"]),
         max_hold_days=int(best_params["max_hold_days"]),
@@ -456,24 +482,29 @@ def run_optuna_optimization() -> None:
         "breadth_soft_floor_pct": settings.portfolio.breadth_soft_floor_pct,
         "breadth_soft_size_mult": settings.portfolio.breadth_soft_size_mult,
     }
-    best_exit_config = {
-        "breakeven_activation_r": float(best_params["breakeven_activation_r"]),
-        "partial_profit_r": float(best_params["partial_profit_r"]),
-        "partial_profit_pct": float(best_params["partial_profit_pct"]),
-        "trail_activation_r": best_backtest_params.trail_activation_r,
-        "trail_pct": best_backtest_params.trail_pct,
-        "trail_pct_bull": best_backtest_params.trail_pct,
-        "trail_pct_bear": min(best_backtest_params.trail_pct, 0.15),
-        "dead_money_days": best_backtest_params.dead_money_days,
-        "time_stop_days": int(best_params["time_stop_days"]),
-        "max_hold_before_tighten": int(best_params["max_hold_before_tighten"]),
-    }
+    best_exit_config = None
+    if use_extended_exit_model:
+        best_exit_config = {
+            "breakeven_activation_r": float(best_params["breakeven_activation_r"]),
+            "partial_profit_r": float(best_params["partial_profit_r"]),
+            "partial_profit_pct": float(best_params["partial_profit_pct"]),
+            "trail_activation_r": best_backtest_params.trail_activation_r,
+            "trail_pct": best_backtest_params.trail_pct,
+            "trail_pct_bull": best_backtest_params.trail_pct,
+            "trail_pct_bear": min(best_backtest_params.trail_pct, 0.15),
+            "dead_money_days": best_backtest_params.dead_money_days,
+            "time_stop_days": int(best_params["time_stop_days"]),
+            "max_hold_before_tighten": int(best_params["max_hold_before_tighten"]),
+        }
     best_signal_filters = {
-        "rs_rank_min": int(best_params["rs_rank_min"]),
+        "rs_rank_min": int(best_params["rs_rank_min"]) if best_params.get("use_rs_filter") else None,
         "rs_rank_max": settings.backtest.rs_rank_max,
     }
     best_signals = filter_signals(signals_df, **best_signal_filters)
-    best_entry_gate, best_entry_size_mult = build_entry_controls(settings, regime_inputs)
+    best_entry_gate: dict[date, bool] = {}
+    best_entry_size_mult: dict[date, float] = {}
+    if use_regime_entry_controls:
+        best_entry_gate, best_entry_size_mult = build_entry_controls(settings, regime_inputs)
     best_result = simulate_portfolio_python(
         best_signals,
         ohlcv_df,
@@ -501,6 +532,11 @@ def run_optuna_optimization() -> None:
         "window": {"start": start_date.isoformat(), "end": end_date.isoformat()},
         "baseline": baseline,
         "best_params": best_params,
+        "runtime_options": {
+            "use_extended_exit_model": use_extended_exit_model,
+            "use_regime_entry_controls": use_regime_entry_controls,
+            "use_rs_filter": bool(best_params.get("use_rs_filter", False)),
+        },
         "best_exit_config": best_exit_config,
         "best_signal_filters": best_signal_filters,
         "best_metrics": best_metrics,
