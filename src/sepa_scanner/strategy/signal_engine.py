@@ -562,6 +562,7 @@ def scan_for_date(
     signals = rank_signals(
         pl.concat([watch_signals, breakout_signals], how="vertical"),
         settings.alerts.max_alerts_per_day,
+        ranking_mode=settings.alerts.signal_ranking_mode,
     )
 
     if _lifecycle is not None:

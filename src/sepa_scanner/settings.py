@@ -96,6 +96,8 @@ class BacktestSettings(BaseModel):
     exit_mode: str = "advanced_sepa"
     rs_rank_min: float | None = None
     rs_rank_max: float | None = None
+    signal_ranking_mode: str = "default"
+    max_signals_per_day: int | None = None
     use_extended_exit_model: bool = False
     use_regime_entry_controls: bool = False
 
@@ -122,6 +124,7 @@ class ExitStrategySettings(BaseModel):
 
 class AlertsSettings(BaseModel):
     max_alerts_per_day: int
+    signal_ranking_mode: str = "default"
     send_watch_alerts: bool
     send_breakout_alerts: bool
     channels: list[str]

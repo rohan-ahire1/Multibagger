@@ -19,6 +19,7 @@ from sepa_scanner.backtest.models import BacktestParams, ExitMode
 from sepa_scanner.backtest.queries import get_backtest_ohlcv, get_backtest_signals
 from sepa_scanner.settings import load_settings
 from sepa_scanner.storage.parquet_store import ParquetOhlcvStore
+from sepa_scanner.strategy.ranking import select_top_signals_by_day
 
 try:
     import multibagger_core
@@ -986,13 +987,19 @@ def filter_signals(
     *,
     rs_rank_min: float | None = None,
     rs_rank_max: float | None = None,
+    ranking_mode: str = "default",
+    max_signals_per_day: int | None = None,
 ) -> pl.DataFrame:
     filtered = signals
     if rs_rank_min is not None and "rs_rank" in filtered.columns:
         filtered = filtered.filter(pl.col("rs_rank") >= float(rs_rank_min))
     if rs_rank_max is not None and "rs_rank" in filtered.columns:
         filtered = filtered.filter(pl.col("rs_rank") <= float(rs_rank_max))
-    return filtered.sort(["signal_date", "symbol"])
+    return select_top_signals_by_day(
+        filtered.sort(["signal_date", "symbol"]),
+        max_signals_per_day=max_signals_per_day,
+        ranking_mode=ranking_mode,
+    )
 
 
 def build_entry_controls(
@@ -1135,6 +1142,8 @@ def main() -> None:
         signals,
         rs_rank_min=bundle["settings"].backtest.rs_rank_min,
         rs_rank_max=bundle["settings"].backtest.rs_rank_max,
+        ranking_mode=bundle["settings"].backtest.signal_ranking_mode,
+        max_signals_per_day=bundle["settings"].backtest.max_signals_per_day,
     )
     regime_inputs = compute_regime_inputs(bundle["settings"], start_date, end_date, benchmark_curve)
     entry_gate: dict[date, bool] = {}
