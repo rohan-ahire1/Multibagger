@@ -62,9 +62,9 @@ risk:
   target_r: null
 
 backtest:
-  pending_days: 11
-  max_hold_days: 132
-  exit_mode: advanced_sepa
+  pending_days: 9
+  max_hold_days: 167
+  exit_mode: v3_trail_pct
 
 alerts:
   max_alerts_per_day: 10
@@ -87,7 +87,7 @@ portfolio:
   drawdown_stop_pct: 0.25
   drawdown_close_pct: 0.35
   initial_capital: 1000000
-  risk_per_trade_pct: 0.035
+  risk_per_trade_pct: 0.04
   regime_gate_enabled: true
   regime_high_volatility_threshold: 0.25
 
@@ -98,11 +98,11 @@ exit_strategy:
   breakeven_activation_r: 2.1 # Optimized
   partial_profit_r: 3.0
   partial_profit_pct: 0.50
-  trail_activation_r: 2.4 # Optimized
+  trail_activation_r: 1.0
   max_loss_pct: 0.12
   absolute_max_loss_pct: 0.15
   trail_mode: "adaptive"
-  trail_pct: 0.14 # Optimized
+  trail_pct: 0.25
   trail_pct_bull: 0.25
   trail_pct_bear: 0.15
   extension_limit_200d: 2.0
@@ -111,7 +111,7 @@ exit_strategy:
   largest_day_gain_pct: 0.15
   gap_sell_threshold: 0.10
   time_stop_days: 15
-  dead_money_days: 17
+  dead_money_days: 16
   max_hold_before_tighten: 60 # Increased from 40
   climax_min_hold_days: 15
   climax_conditions_required: 3
