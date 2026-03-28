@@ -17,24 +17,26 @@ from sepa_scanner.utils.io import ensure_directory
 
 
 def main() -> None:
+    settings = resolve_settings(None)
     parser = argparse.ArgumentParser(description="BREAKOUT signal performance analysis")
-    parser.add_argument("--pending", type=int, default=5, help="Pending entry window (days)")
-    parser.add_argument("--hold", type=int, default=20, help="Max hold days (default 20 per STRATEGY.md)")
+    parser.add_argument("--pending", type=int, default=settings.backtest.pending_days, help="Pending entry window (days)")
+    parser.add_argument("--hold", type=int, default=settings.backtest.max_hold_days, help="Max hold days")
     parser.add_argument(
         "--exit-mode",
         choices=[m.value for m in ExitMode],
-        default=ExitMode.V1_FIXED.value,
+        default=settings.backtest.exit_mode,
         help="Exit mode",
     )
     args = parser.parse_args()
 
-    settings = resolve_settings(None)
     data_dir = ensure_directory(settings.runtime.data_dir)
     parquet_store = ParquetOhlcvStore(root=ensure_directory(data_dir / "yf_adjusted"))
     import duckdb
     import shutil
     db_path = ensure_directory(data_dir / "db") / "sepa.duckdb"
-    tmp_path = Path("/tmp/sepa_perf_analysis.duckdb")
+    tmp_path = ensure_directory(data_dir / "tmp") / "sepa_perf_analysis.duckdb"
+    if tmp_path.exists():
+        tmp_path.unlink()
     shutil.copy2(db_path, tmp_path)
     wal_path = db_path.with_suffix(".duckdb.wal")
     if wal_path.exists():

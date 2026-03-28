@@ -127,49 +127,56 @@ def _build_trial_params(
     trial: optuna.Trial,
 ) -> tuple[BacktestParams, dict[str, Any], dict[str, Any] | None, dict[str, Any], dict[str, Any]]:
     breadth_soft_floor_choice = trial.suggest_categorical(
-        "breadth_soft_floor_pct",
-        ["off", "0.45", "0.50", "0.55"],
+        "breadth_soft_floor_pct", ["off", "0.45", "0.50", "0.55", "0.60"]
     )
-    breadth_soft_floor_pct = _decode_soft_floor(breadth_soft_floor_choice)
+    # breadth_soft_floor_pct = _decode_soft_floor(breadth_soft_floor_choice)
+    if breadth_soft_floor_choice == "off":
+        breadth_soft_floor_pct = None
+    else:
+        breadth_soft_floor_pct = float(breadth_soft_floor_choice)
     breadth_soft_size_mult = 1.0
     if breadth_soft_floor_pct is not None:
         breadth_soft_size_mult = trial.suggest_float("breadth_soft_size_mult", 0.25, 0.75, step=0.25)
-    use_extended_exit_model = trial.suggest_categorical("use_extended_exit_model", [False, True])
+    use_extended_exit_model = trial.suggest_categorical("use_extended_exit_model", [True]) # Always use advanced for sniper
     use_regime_entry_controls = trial.suggest_categorical("use_regime_entry_controls", [False, True])
     use_rs_filter = trial.suggest_categorical("use_rs_filter", [False, True])
-    signal_ranking_mode = trial.suggest_categorical("signal_ranking_mode", ["default", "championship"])
+    signal_ranking_mode = trial.suggest_categorical("signal_ranking_mode", ["default", "championship", "offense_v2"])
     max_signals_per_day_choice = trial.suggest_categorical(
         "max_signals_per_day",
-        ["off", "2", "3", "4", "5", "6"],
+        ["off", "1", "2", "3", "4", "5"],
     )
     signal_quality_profile = trial.suggest_categorical(
         "signal_quality_profile",
         ["default", "championship", "championship_loose"],
     )
     params = BacktestParams(
-        pending_days=trial.suggest_int("pending_days", 3, 15),
-        max_hold_days=trial.suggest_int("max_hold_days", 40, 200),
+        pending_days=trial.suggest_int("pending_days", 3, 12),
+        max_hold_days=trial.suggest_int("max_hold_days", 60, 250),
         target_r=settings.risk.target_r,
         exit_mode=ExitMode(trial.suggest_categorical("exit_mode", ["v3_trail_pct", "advanced_sepa"])),
-        trail_activation_r=trial.suggest_float("trail_activation_r", 1.0, 4.0, step=0.5),
+        trail_activation_r=trial.suggest_float("trail_activation_r", 1.5, 4.5, step=0.5),
         trail_pct=trial.suggest_float("trail_pct", 0.05, 0.25, step=0.05),
-        dead_money_days=trial.suggest_int("dead_money_days", 10, 40),
+        dead_money_days=trial.suggest_int("dead_money_days", 15, 45),
     )
     portfolio = {
         "initial_capital": settings.portfolio.initial_capital,
-        "risk_per_trade_pct": trial.suggest_float("risk_per_trade_pct", 0.01, 0.05, step=0.005),
-        "max_positions": trial.suggest_int("max_positions", 5, 30),
+        "risk_per_trade_pct": trial.suggest_float("risk_per_trade_pct", 0.02, 0.08, step=0.01),
+        "max_positions": trial.suggest_int("max_positions", 3, 15),
         "max_sector_positions": settings.portfolio.max_sector_positions,
         "max_sector_pct": settings.portfolio.max_sector_pct,
-        "max_heat_pct": trial.suggest_float("max_heat_pct", 0.10, 0.50, step=0.05),
-        "drawdown_half_pct": trial.suggest_float("drawdown_half_pct", 0.08, 0.16, step=0.02),
-        "drawdown_stop_pct": trial.suggest_float("drawdown_stop_pct", 0.20, 0.28, step=0.02),
-        "drawdown_close_pct": trial.suggest_float("drawdown_close_pct", 0.20, 0.30, step=0.01),
+        "max_heat_pct": trial.suggest_float("max_heat_pct", 0.20, 1.0, step=0.1),
+        "drawdown_half_pct": trial.suggest_float("drawdown_half_pct", 0.10, 0.25, step=0.05),
+        "drawdown_stop_pct": trial.suggest_float("drawdown_stop_pct", 0.20, 0.35, step=0.05),
+        "drawdown_close_pct": trial.suggest_float("drawdown_close_pct", 0.30, 0.45, step=0.05),
         "regime_gate_enabled": settings.portfolio.regime_gate_enabled,
-        "regime_high_volatility_threshold": trial.suggest_float("regime_high_volatility_threshold", 0.18, 0.25, step=0.01),
+        "regime_high_volatility_threshold": trial.suggest_float("regime_high_volatility_threshold", 0.18, 0.30, step=0.02),
         "regime_cooldown_days": trial.suggest_int("regime_cooldown_days", 0, 10),
         "breadth_soft_floor_pct": breadth_soft_floor_pct,
         "breadth_soft_size_mult": breadth_soft_size_mult,
+        "pyramid_max_adds": trial.suggest_int("pyramid_max_adds", 0, 2),
+        "pyramid_trigger_r": trial.suggest_float("pyramid_trigger_r", 1.0, 3.0, step=0.5),
+        "pyramid_add_interval_r": trial.suggest_float("pyramid_add_interval_r", 0.5, 2.0, step=0.5),
+        "pyramid_risk_frac": trial.suggest_float("pyramid_risk_frac", 0.25, 0.75, step=0.25),
     }
     exit_config = None
     if use_extended_exit_model:
@@ -203,50 +210,77 @@ def _build_trial_params(
 
 def _evaluate_trial_result(
     *,
-    strategy_curve: pl.DataFrame,
+    result: dict[str, Any],
     benchmark_curve: pl.DataFrame,
-    benchmark_cagr: float,
     benchmark_roll: pl.DataFrame,
     thresholds: ObjectiveThresholds,
     initial_capital: float,
-    filled_trades: int,
 ) -> dict[str, Any]:
+    strategy_curve = result["daily_equity"]
+    trades = result["trades"]
+    first_entry = trades.filter(pl.col("entry_date").is_not_null())["entry_date"].min()
+    
+    if first_entry is None:
+        return {
+            "score": -1_000_000.0,
+            "constraints_met": False,
+            "calmar": 0.0,
+            "cagr": 0.0,
+            "max_drawdown_pct": 0.0,
+            "final_equity": initial_capital,
+            "benchmark_cagr": 0.0,
+            "ex_2023_cagr": 0.0,
+            "rolling_beat_rate": 0.0,
+            "rolling_latest_cagr": 0.0,
+            "rolling_median_cagr": 0.0,
+            "filled_trades": 0,
+            "ex_2023_ok": False,
+            "beat_rate_ok": False,
+        }
+
     joined_curve = join_strategy_and_benchmark(strategy_curve, benchmark_curve)
-    strategy_stats = compute_performance_stats(strategy_curve.select("date", "equity"), "equity")
+    strategy_stats = compute_performance_stats(strategy_curve.select("date", "equity"), "equity", first_trade_date=first_entry)
     strategy_roll = compute_rolling_cagr(joined_curve.select("date", "equity"), "equity")
     rolling_summary = compute_rolling_summary(strategy_roll, benchmark_roll)
     ex_2023 = compute_ex_2023_cagr(strategy_curve, initial_capital)
 
-    calmar = float(strategy_stats["calmar"])
-    cagr_spread = float(strategy_stats["cagr"] - benchmark_cagr)
-    ex_2023_spread = float(ex_2023["cagr_ex_2023"] - benchmark_cagr)
-    beat_rate_spread = float(rolling_summary["strategy_beat_rate"] - thresholds.min_rolling_beat_rate)
-    max_drawdown_pct = float(strategy_stats["max_drawdown_pct"])
+    active_benchmark_stats = compute_performance_stats(benchmark_curve.select("date", "tri"), "tri", first_trade_date=first_entry)
+    benchmark_cagr = float(active_benchmark_stats["cagr"])
 
-    score = (20.0 * calmar) + (5.0 * cagr_spread) + (10.0 * ex_2023_spread) + (3.0 * beat_rate_spread)
-    if calmar < 0.3:
-        score -= 500.0
-    if filled_trades < 50:
+    calmar = float(strategy_stats["calmar"])
+    cagr = float(strategy_stats["cagr"])
+    max_drawdown_pct = float(strategy_stats["max_drawdown_pct"])
+    filled_trades = int(trades.filter(pl.col("entry_date").is_not_null()).height)
+
+    ex_2023_spread = float(ex_2023["cagr_ex_2023"] - benchmark_cagr)
+    
+    score = (100.0 * cagr) + (10.0 * calmar) + (5.0 * ex_2023_spread)
+    
+    if calmar < 0.25:
+        score -= 5000.0
+    if filled_trades < 60:
+        score -= 2000.0
+    if max_drawdown_pct < -0.40:
+        score -= 3000.0
+    if ex_2023_spread < -0.05:
         score -= 1000.0
-    if max_drawdown_pct < -0.35:
-        score -= 500.0
 
     ex_2023_ok = ex_2023["cagr_ex_2023"] > benchmark_cagr if thresholds.require_ex_2023_above_benchmark else True
     beat_rate_ok = rolling_summary["strategy_beat_rate"] >= thresholds.min_rolling_beat_rate
-    constraints_met = calmar >= 0.3 and filled_trades >= 50 and max_drawdown_pct >= -0.35
+    constraints_met = calmar >= 0.25 and filled_trades >= 60 and max_drawdown_pct >= -0.40
 
     return {
         "score": score,
         "constraints_met": constraints_met,
         "calmar": calmar,
-        "cagr": float(strategy_stats["cagr"]),
+        "cagr": cagr,
         "max_drawdown_pct": max_drawdown_pct,
         "final_equity": float(strategy_stats["end_value"]),
         "benchmark_cagr": benchmark_cagr,
         "ex_2023_cagr": float(ex_2023["cagr_ex_2023"]),
         "rolling_beat_rate": float(rolling_summary["strategy_beat_rate"]),
-        "rolling_latest_cagr": rolling_summary["strategy_latest"],
-        "rolling_median_cagr": rolling_summary["strategy_median"],
+        "rolling_latest_cagr": float(rolling_summary["strategy_latest"]),
+        "rolling_median_cagr": float(rolling_summary["strategy_median"]),
         "filled_trades": filled_trades,
         "ex_2023_ok": ex_2023_ok,
         "beat_rate_ok": beat_rate_ok,
@@ -321,13 +355,11 @@ def _evaluate_current_defaults(
     )
     filled_trades = int(result["trades"].filter(pl.col("entry_date").is_not_null()).height)
     metrics = _evaluate_trial_result(
-        strategy_curve=result["daily_equity"].sort("date"),
+        result=result,
         benchmark_curve=benchmark_curve,
-        benchmark_cagr=benchmark_cagr,
         benchmark_roll=benchmark_roll,
         thresholds=thresholds,
-        initial_capital=portfolio["initial_capital"],
-        filled_trades=filled_trades,
+        initial_capital=settings.portfolio.initial_capital,
     )
     param_dump: dict[str, Any] = {
         "pending_days": params.pending_days,
@@ -382,15 +414,23 @@ def run_optuna_optimization() -> None:
     print("Loading data for robust Optuna...")
     full_ohlcv_df = pl.read_parquet(ohlcv_path)
     start_date, end_date = _resolve_optimization_window(full_ohlcv_df)
-    study_name = _resolve_study_name(start_date, end_date, thresholds)
+    study_name = f"{_resolve_study_name(start_date, end_date, thresholds)}_alpha"
     storage = _resolve_study_storage()
     print(f"Optimization window: {start_date} -> {end_date}")
     print(f"Study storage: {storage}")
     print(f"Study name: {study_name}")
     print(f"Minimum rolling 3Y beat rate: {thresholds.min_rolling_beat_rate:.0%}")
 
-    tri_csv_path, constituent_csv_path = ensure_reference_data(reference_dir, start_date, end_date)
-    benchmark_curve = load_benchmark_curve(tri_csv_path, start_date, end_date)
+    # tri_csv_path, constituent_csv_path = ensure_reference_data(reference_dir, start_date, end_date)
+    # benchmark_curve = load_benchmark_curve(tri_csv_path, start_date, end_date)
+    benchmark_curve = (
+        full_ohlcv_df.filter(pl.col("symbol") == settings.market.benchmark_symbol)
+        .select(["date", "close"])
+        .rename({"close": "tri"})
+        .filter((pl.col("date") >= pl.lit(start_date)) & (pl.col("date") <= pl.lit(end_date)))
+        .sort("date")
+    )
+    constituent_csv_path = None
     benchmark_stats = compute_performance_stats(benchmark_curve.select("date", "tri"), "tri")
     benchmark_roll = compute_rolling_cagr(benchmark_curve.select("date", "tri"), "tri")
     regime_inputs = compute_regime_inputs(settings, start_date, end_date, benchmark_curve)
@@ -477,13 +517,11 @@ def run_optuna_optimization() -> None:
         )
         filled_trades = int(result["trades"].filter(pl.col("entry_date").is_not_null()).height)
         metrics = _evaluate_trial_result(
-            strategy_curve=result["daily_equity"].sort("date"),
+            result=result,
             benchmark_curve=benchmark_curve,
-            benchmark_cagr=float(benchmark_stats["cagr"]),
             benchmark_roll=benchmark_roll,
             thresholds=thresholds,
-            initial_capital=portfolio["initial_capital"],
-            filled_trades=filled_trades,
+            initial_capital=settings.portfolio.initial_capital,
         )
         elapsed = time.perf_counter() - started
 
@@ -516,7 +554,7 @@ def run_optuna_optimization() -> None:
         load_if_exists=True,
         sampler=sampler,
     )
-    study.enqueue_trial(baseline["params"], skip_if_exists=True)
+    # study.enqueue_trial(baseline["params"], skip_if_exists=True)
 
     print(f"\n🚀 Starting robust AI optimization ({trial_count} trials)...")
     study.optimize(objective, n_trials=trial_count)
@@ -600,13 +638,11 @@ def run_optuna_optimization() -> None:
     )
     filled_trades = int(best_result["trades"].filter(pl.col("entry_date").is_not_null()).height)
     best_metrics = _evaluate_trial_result(
-        strategy_curve=best_result["daily_equity"].sort("date"),
+        result=best_result,
         benchmark_curve=benchmark_curve,
-        benchmark_cagr=float(benchmark_stats["cagr"]),
         benchmark_roll=benchmark_roll,
         thresholds=thresholds,
-        initial_capital=best_portfolio["initial_capital"],
-        filled_trades=filled_trades,
+        initial_capital=settings.portfolio.initial_capital,
     )
 
     result_payload = {

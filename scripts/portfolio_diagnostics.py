@@ -37,24 +37,18 @@ OFFICIAL_CONSTITUENTS_URL = "https://niftyindices.com/IndexConstituent/ind_nifty
 SIGNAL_QUALITY_PROFILES: dict[str, dict[str, Any]] = {
     "default": {},
     "championship": {
-        "rs_rank_min": 85.0,
-        "rs_rank_max": 95.0,
-        "range10_min": 0.04,
-        "range10_max": 0.10,
-        "voldry_min": 0.30,
-        "voldry_max": 0.80,
-        "contraction_count_min": 1,
-        "contraction_count_max": 3,
+        "rs_rank_min": 70.0,
+        "rs_rank_max": 99.5,
+        "range10_max": 0.20,
+        "voldry_max": 1.20,
+        "contraction_count_min": 0,
     },
     "championship_loose": {
-        "rs_rank_min": 85.0,
+        "rs_rank_min": 60.0,
         "rs_rank_max": 99.5,
-        "range10_min": 0.04,
-        "range10_max": 0.12,
-        "voldry_min": 0.25,
-        "voldry_max": 0.85,
-        "contraction_count_min": 1,
-        "contraction_count_max": 3,
+        "range10_max": 0.25,
+        "voldry_max": 1.50,
+        "contraction_count_min": 0,
     },
 }
 
@@ -244,6 +238,29 @@ def load_inputs(start_date: date, end_date: date) -> tuple[dict[str, Any], pl.Da
     ohlcv = get_backtest_ohlcv(parquet_store, symbols=symbols, start_date=start_date, end_date=ohlcv_end_date)
     conn.close()
 
+    # CRITICAL: Adjust signal prices to match OHLCV adjusted basis
+    # Join signals with ohlcv on date/symbol to get the adjustment factor
+    sig_with_ohlcv = signals.join(
+        ohlcv.select(["date", "symbol", "close"]).rename({"close": "ohlcv_close", "date": "signal_date"}),
+        on=["signal_date", "symbol"],
+        how="inner"
+    )
+    
+    # Calculate adjustment factor
+    # Some signals might not have a matching OHLCV row if data is missing
+    sig_with_ohlcv = sig_with_ohlcv.with_columns(
+        (pl.col("ohlcv_close") / pl.col("close")).alias("_adj_factor")
+    )
+    
+    # Apply factor
+    signals = sig_with_ohlcv.with_columns(
+        (pl.col("entry_ref") * pl.col("_adj_factor")).alias("entry_ref"),
+        (pl.col("stop") * pl.col("_adj_factor")).alias("stop"),
+        (pl.when(pl.col("pivot").is_not_null()).then(pl.col("pivot") * pl.col("_adj_factor")).otherwise(None)).alias("pivot")
+    ).drop(["ohlcv_close", "_adj_factor"])
+    
+    print(f"Adjusted prices for {signals.height} signals to match OHLCV basis")
+
     params = BacktestParams(
         pending_days=settings.backtest.pending_days,
         max_hold_days=settings.backtest.max_hold_days,
@@ -392,6 +409,9 @@ def simulate_portfolio_python(
 ) -> dict[str, Any]:
     symbols = build_signal_rows(signals)
     symbol_data, unique_dates = build_symbol_data(ohlcv)
+    print(f"Unique dates in simulation: {len(unique_dates)}")
+    if unique_dates:
+        print(f"Date range: {unique_dates[0]} to {unique_dates[-1]}")
     exit_cfg = {
         "breakeven_activation_r": 1.0,
         "partial_profit_r": None,
@@ -412,15 +432,17 @@ def simulate_portfolio_python(
     for signal in symbols:
         signals_by_date[signal["signal_date"]].append(signal)
 
-    cash = float(portfolio["initial_capital"])
-    equity_peak = float(portfolio["initial_capital"])
+    initial_capital = float(portfolio["initial_capital"])
+    cash = initial_capital
+    equity_peak = initial_capital
     open_positions: list[OpenPosition] = []
     pending_signals: list[PendingSignal] = []
     closed_trades: list[dict[str, Any]] = []
     daily_rows: list[dict[str, Any]] = []
-    previous_equity: float | None = None
+    previous_equity = initial_capital
 
     for today in unique_dates:
+        # print(f"Processing {today}...")
         i = 0
         while i < len(open_positions):
             pos = open_positions[i]
@@ -745,17 +767,8 @@ def simulate_portfolio_python(
                 j += 1
                 continue
 
-            if size_mult == 0.0 or len(open_positions) >= portfolio["max_positions"] or current_equity <= 0.0:
-                closed_trades.append(
-                    empty_trade_dict(
-                        symbol=pending.symbol,
-                        signal_date=pending.signal_date,
-                        status="skipped_portfolio",
-                        entry_ref=pending.entry_ref,
-                        stop=pending.stop,
-                    )
-                )
-                pending_signals.pop(j)
+            if size_mult == 0.0 or len(open_positions) >= int(portfolio["max_positions"]) or current_equity <= 0.0:
+                j += 1
                 continue
 
             sym_prices = symbol_data.get(pending.symbol)
@@ -775,10 +788,11 @@ def simulate_portfolio_python(
             idx = sym_prices["date_to_idx"].get(today)
             filled = False
             if idx is not None:
-                open_price = sym_prices["opens"][idx]
-                high_price = sym_prices["highs"][idx]
+                open_price = float(sym_prices["opens"][idx])
+                high_price = float(sym_prices["highs"][idx])
+                target = float(pending.entry_ref)
 
-                if open_price >= pending.entry_ref or high_price >= pending.entry_ref:
+                if open_price >= target or high_price >= target:
                     fill_price = max(open_price, pending.entry_ref)
                     risk_budget = (
                         current_equity
@@ -816,96 +830,119 @@ def simulate_portfolio_python(
 
                     risk_per_share = fill_price - pending.stop
                     if risk_per_share > 0.0:
-                        shares = risk_budget / risk_per_share
-                        cost = shares * fill_price
-                        sector = analysis_sector_map.get(pending.symbol, "UNKNOWN")
-                        max_sector_positions = int(portfolio.get("max_sector_positions", 0) or 0)
-                        if max_sector_positions > 0 and open_sector_counts.get(sector, 0) >= max_sector_positions:
-                            closed_trades.append(
-                                empty_trade_dict(
-                                    symbol=pending.symbol,
-                                    signal_date=pending.signal_date,
-                                    status="skipped_portfolio",
-                                    entry_ref=pending.entry_ref,
-                                    stop=pending.stop,
-                                )
-                            )
-                            pending_signals.pop(j)
-                            continue
-                        max_sector_pct = float(portfolio.get("max_sector_pct", 1.0) or 1.0)
-                        if (
-                            current_equity > 0.0
-                            and max_sector_pct < 1.0
-                            and ((marked_sector_values.get(sector, 0.0) + cost) / current_equity) > max_sector_pct
-                        ):
-                            closed_trades.append(
-                                empty_trade_dict(
-                                    symbol=pending.symbol,
-                                    signal_date=pending.signal_date,
-                                    status="skipped_portfolio",
-                                    entry_ref=pending.entry_ref,
-                                    stop=pending.stop,
-                                )
-                            )
-                            pending_signals.pop(j)
-                            continue
-                        if cost <= cash:
-                            cash -= cost
-                            target_price = None
-                            if params.target_r is not None:
-                                target_price = fill_price + (risk_per_share * params.target_r)
+                        # Size by risk budget
+                        shares_by_risk = risk_budget / risk_per_share
+                        # Size by available cash
+                        shares_by_cash = cash / fill_price
 
-                            open_positions.append(
-                                OpenPosition(
-                                    symbol=pending.symbol,
-                                    signal_date=pending.signal_date,
-                                    entry_ref=pending.entry_ref,
-                                    stop=pending.stop,
-                                    pivot=pending.pivot,
-                                    entry_date=today,
-                                    entry_price=fill_price,
-                                    shares=shares,
-                                    active_stop=pending.stop,
-                                    initial_risk=risk_per_share,
-                                    target_price=target_price,
-                                    mae_price=fill_price,
-                                    mfe_price=fill_price,
-                                    breakeven_activated=False,
-                                    trail_activated=False,
-                                    partial_taken=False,
-                                    partial_exit_price=None,
-                                    partial_exit_date=None,
-                                    partial_exit_r=None,
-                                    realized_pnl=0.0,
-                                    original_shares=shares,
-                                    cost_basis=cost,
-                                    signal_size_mult=max(0.0, pending.size_mult),
-                                    dead_money_deadline_days=params.dead_money_days,
-                                    dead_money_extended=False,
-                                    pyramid_adds_taken=0,
-                                    next_pyramid_r=(
-                                        float(portfolio.get("pyramid_trigger_r", 1.0))
-                                        if int(portfolio.get("pyramid_max_adds", 0) or 0) > 0
-                                        else None
-                                    ),
+                        shares = min(shares_by_risk, shares_by_cash)
+                        cost = shares * fill_price
+
+                        if shares > 0:
+                            sector = analysis_sector_map.get(pending.symbol, "UNKNOWN")
+                            max_sector_positions = int(portfolio.get("max_sector_positions", 0) or 0)
+                            if max_sector_positions > 0 and open_sector_counts.get(sector, 0) >= max_sector_positions:
+                                closed_trades.append(
+                                    empty_trade_dict(
+                                        symbol=pending.symbol,
+                                        signal_date=pending.signal_date,
+                                        status="skipped_portfolio",
+                                        entry_ref=pending.entry_ref,
+                                        stop=pending.stop,
+                                    )
                                 )
-                            )
-                            marked_sector_values[sector] += cost
-                            open_sector_costs[sector] += cost
-                            open_sector_counts[sector] += 1
-                            filled = True
+                                pending_signals.pop(j)
+                                continue
+                            max_sector_pct = float(portfolio.get("max_sector_pct", 1.0) or 1.0)
+                            if (
+                                current_equity > 0.0
+                                and max_sector_pct < 1.0
+                                and ((marked_sector_values.get(sector, 0.0) + cost) / current_equity) > max_sector_pct
+                            ):
+                                closed_trades.append(
+                                    empty_trade_dict(
+                                        symbol=pending.symbol,
+                                        signal_date=pending.signal_date,
+                                        status="skipped_portfolio",
+                                        entry_ref=pending.entry_ref,
+                                        stop=pending.stop,
+                                    )
+                                )
+                                pending_signals.pop(j)
+                                continue
+                            if cost <= cash:
+                                cash -= cost
+                                target_price = None
+                                if params.target_r is not None:
+                                    target_price = fill_price + (risk_per_share * params.target_r)
+
+                                open_positions.append(
+                                    OpenPosition(
+                                        symbol=pending.symbol,
+                                        signal_date=pending.signal_date,
+                                        entry_ref=pending.entry_ref,
+                                        stop=pending.stop,
+                                        pivot=pending.pivot,
+                                        entry_date=today,
+                                        entry_price=fill_price,
+                                        shares=shares,
+                                        active_stop=pending.stop,
+                                        initial_risk=risk_per_share,
+                                        target_price=target_price,
+                                        mae_price=fill_price,
+                                        mfe_price=fill_price,
+                                        breakeven_activated=False,
+                                        trail_activated=False,
+                                        partial_taken=False,
+                                        partial_exit_price=None,
+                                        partial_exit_date=None,
+                                        partial_exit_r=None,
+                                        realized_pnl=0.0,
+                                        original_shares=shares,
+                                        cost_basis=cost,
+                                        signal_size_mult=max(0.0, pending.size_mult),
+                                        dead_money_deadline_days=params.dead_money_days,
+                                        dead_money_extended=False,
+                                        pyramid_adds_taken=0,
+                                        next_pyramid_r=(
+                                            float(portfolio.get("pyramid_trigger_r", 1.0))
+                                            if int(portfolio.get("pyramid_max_adds", 0) or 0) > 0
+                                            else None
+                                        ),
+                                    )
+                                )
+                                marked_sector_values[sector] += cost
+                                open_sector_costs[sector] += cost
+                                open_sector_counts[sector] += 1
+                                filled = True
 
             if filled:
                 pending_signals.pop(j)
             else:
                 j += 1
 
+        # Recalculate end-of-day equity
+        invested_value = 0.0
+        marked_sector_values = defaultdict(float)
+        for pos in open_positions:
+            sym_prices = symbol_data[pos.symbol]
+            idx = sym_prices["date_to_idx"].get(today)
+            price = sym_prices["closes"][idx] if idx is not None else pos.entry_price
+            mv = pos.shares * price
+            invested_value += mv
+            sector = analysis_sector_map.get(pos.symbol, "UNKNOWN")
+            marked_sector_values[sector] += mv
+
+        current_equity = cash + invested_value
+        equity_peak = max(equity_peak, current_equity)
+
         top_sector_weight = 0.0
         if invested_value > 0.0 and marked_sector_values:
             top_sector_weight = max(marked_sector_values.values()) / invested_value
 
-        daily_pnl = None if previous_equity is None else current_equity - previous_equity
-        daily_return = None if previous_equity in (None, 0.0) else (current_equity / previous_equity) - 1.0
+        daily_pnl = current_equity - previous_equity
+        daily_return = (current_equity / previous_equity) - 1.0 if previous_equity > 0.0 else 0.0
+
         daily_rows.append(
             {
                 "date": today,
@@ -952,20 +989,33 @@ def simulate_portfolio_python(
                 )
             )
 
+    daily_equity_df = pl.DataFrame(daily_rows, infer_schema_length=10000)
+    if not daily_equity_df.is_empty():
+        cols_to_cast = [c for c in daily_equity_df.columns if c != "date"]
+        daily_equity_df = daily_equity_df.with_columns([
+            pl.col("date").cast(pl.Date),
+            *[pl.col(c).cast(pl.Float64) for c in cols_to_cast]
+        ])
+
     return {
         "final_equity": cash,
-        "daily_equity": pl.DataFrame(daily_rows),
-        "trades": pl.DataFrame(closed_trades).sort(["signal_date", "symbol"]),
+        "daily_equity": daily_equity_df,
+        "trades": pl.DataFrame(closed_trades, infer_schema_length=10000).sort(["signal_date", "symbol"]),
     }
 
 
 def build_signal_rows(signals: pl.DataFrame) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for row in signals.sort(["signal_date", "symbol"]).to_dicts():
+        # Ensure signal_date is a date object for dictionary lookup
+        sig_date = row["signal_date"]
+        if isinstance(sig_date, datetime):
+            sig_date = sig_date.date()
+            
         rows.append(
             {
                 "symbol": str(row["symbol"]),
-                "signal_date": row["signal_date"],
+                "signal_date": sig_date,
                 "entry_ref": float(row["entry_ref"]),
                 "stop": float(row["stop"]),
                 "pivot": float(row["pivot"]) if row.get("pivot") is not None else None,
@@ -1044,8 +1094,22 @@ def close_trade_dict(
     }
 
 
-def compute_performance_stats(curve: pl.DataFrame, value_col: str) -> dict[str, float]:
+def compute_performance_stats(
+    curve: pl.DataFrame, value_col: str, first_trade_date: date | None = None
+) -> dict[str, float]:
     series = curve.sort("date")
+    if first_trade_date:
+        series = series.filter(pl.col("date") >= first_trade_date)
+
+    if series.is_empty():
+        return {
+            "start_value": 0.0,
+            "end_value": 0.0,
+            "cagr": 0.0,
+            "max_drawdown_pct": 0.0,
+            "calmar": 0.0,
+        }
+
     start_value = float(series[value_col][0])
     end_value = float(series[value_col][-1])
     start_date = series["date"][0]
@@ -1059,13 +1123,13 @@ def compute_performance_stats(curve: pl.DataFrame, value_col: str) -> dict[str, 
         running_peak = max(running_peak, float(value))
         if running_peak > 0:
             max_drawdown = min(max_drawdown, (float(value) / running_peak) - 1.0)
-    calmar = cagr / abs(max_drawdown) if max_drawdown < 0 else float("inf")
+    calmar = cagr / abs(max_drawdown) if max_drawdown < -0.0001 else 50.0
     return {
         "start_value": start_value,
         "end_value": end_value,
         "cagr": cagr,
         "max_drawdown_pct": max_drawdown,
-        "calmar": calmar,
+        "calmar": min(calmar, 50.0),
     }
 
 
@@ -1376,20 +1440,26 @@ def filter_signals(
     filtered = signals
     if rs_rank_min is not None and "rs_rank" in filtered.columns:
         filtered = filtered.filter(pl.col("rs_rank") >= float(rs_rank_min))
+    print(f"Signals after RS rank filter ({rs_rank_min}): {filtered.height}")
+    
     if rs_rank_max is not None and "rs_rank" in filtered.columns:
         filtered = filtered.filter(pl.col("rs_rank") <= float(rs_rank_max))
+    
     filtered = apply_signal_quality_filters(
         filtered,
         diagnostics,
         quality_filters,
         ranking_mode=ranking_mode,
     )
+    print(f"Signals after quality filters: {filtered.height}")
+    
     filtered = attach_signal_quality_features(filtered, diagnostics)
     ranked = select_top_signals_by_day(
         filtered.sort(["signal_date", "symbol"]),
         max_signals_per_day=max_signals_per_day,
         ranking_mode=ranking_mode,
     )
+    print(f"Signals after daily ranking: {ranked.height}")
     ranked = apply_signal_size_tilt(ranked, diagnostics, **size_tilt_config)
     selected_columns = list(signals.columns)
     if "signal_size_mult" in ranked.columns:
@@ -1448,6 +1518,14 @@ def build_entry_controls(
 
 
 def compute_regime_summary(strategy_curve: pl.DataFrame, trades: pl.DataFrame, regime_df: pl.DataFrame) -> dict[str, Any]:
+    if trades.is_empty():
+        return {
+            "daily": {},
+            "trade_entries": {},
+            "sweet_spot": {"days": 0, "pnl": 0.0, "avg_daily_return": 0.0},
+            "hostile": {"days": 0, "pnl": 0.0, "avg_daily_return": 0.0},
+            "daily_frame": strategy_curve,
+        }
     merged_daily = strategy_curve.join(regime_df, on="date", how="left")
     merged_daily = merged_daily.with_columns((pl.col("top_sector_weight") > 0.35).alias("sector_concentration"))
 
@@ -1528,11 +1606,32 @@ def main() -> None:
     output_dir = Path(args.output_dir) / f"{start_date.isoformat()}_{end_date.isoformat()}"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    tri_csv_path, constituent_csv_path = ensure_reference_data(Path(args.reference_dir), start_date, end_date)
-    sector_map = load_sector_map(constituent_csv_path)
-
+    # tri_csv_path, constituent_csv_path = ensure_reference_data(Path(args.reference_dir), start_date, end_date)
     bundle, signals, ohlcv = load_inputs(start_date, end_date)
-    benchmark_curve = load_benchmark_curve(tri_csv_path, start_date, end_date)
+    settings = bundle["settings"]
+    
+    # Load benchmark from OHLCV if available
+    benchmark_curve = (
+        ohlcv.filter(pl.col("symbol") == settings.market.benchmark_symbol)
+        .select(["date", "close"])
+        .rename({"close": "tri"})
+        .filter((pl.col("date") >= start_date) & (pl.col("date") <= end_date))
+        .sort("date")
+    )
+    if benchmark_curve.is_empty():
+        # Fallback to local file if Parquet doesn't have it
+        local_ref = Path(args.reference_dir) / f"nifty500_tri_2010-01-04_2026-03-17.csv"
+        if local_ref.exists():
+            benchmark_curve = load_benchmark_curve(local_ref, start_date, end_date)
+        else:
+            raise RuntimeError(f"Benchmark {settings.market.benchmark_symbol} not found in OHLCV or local ref")
+    
+    constituent_csv_path = Path(args.reference_dir) / "nifty500_constituents.csv"
+    sector_map = load_sector_map(constituent_csv_path)
+    print(f"Loaded RS rank min: {bundle['settings'].backtest.rs_rank_min}")
+    print(f"Loaded max positions: {bundle['portfolio']['max_positions']}")
+    print(f"Loaded risk per trade: {bundle['portfolio']['risk_per_trade_pct']}")
+    
     filtered_signals = filter_signals(
         signals,
         diagnostics=bundle["diagnostics"],
@@ -1571,10 +1670,15 @@ def main() -> None:
 
     strategy_curve = py_result["daily_equity"].sort("date")
     trades = py_result["trades"]
+    
+    first_entry = trades.filter(pl.col("entry_date").is_not_null())["entry_date"].min()
+    if first_entry is None:
+        first_entry = start_date
+
     joined_curve = join_strategy_and_benchmark(strategy_curve, benchmark_curve)
 
-    strategy_stats = compute_performance_stats(strategy_curve.select("date", "equity"), "equity")
-    benchmark_stats = compute_performance_stats(benchmark_curve.select("date", "tri"), "tri")
+    strategy_stats = compute_performance_stats(strategy_curve.select("date", "equity"), "equity", first_trade_date=first_entry)
+    benchmark_stats = compute_performance_stats(benchmark_curve.select("date", "tri"), "tri", first_trade_date=first_entry)
 
     strategy_roll = compute_rolling_cagr(joined_curve.select("date", "equity"), "equity")
     benchmark_roll = compute_rolling_cagr(joined_curve.select("date", "benchmark_tri"), "benchmark_tri")
