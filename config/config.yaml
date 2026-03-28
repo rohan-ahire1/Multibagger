@@ -27,19 +27,19 @@ trend_template:
 
 relative_strength:
   lookbacks: [21, 63, 126, 252]
-  weights: [1.0, 0.0, 0.0, 0.0] # 100% focus on the NOW
+  weights: [1.0, 0.0, 0.0, 0.0]
   rs_rank_min: 50
   rs_rank_max: 99.5
   skip_recent_days: 5
 
 setup_vcp:
   base_lookback: 65
-  max_range10_pct: 0.25
-  max_vol_dryup_ratio: 1.5
+  max_range10_pct: 0.20
+  max_vol_dryup_ratio: 1.2
   atr_period: 14
   atr_contraction_factor: 1.0
-  max_extension_from_50sma_pct: 0.30
-  base_max_depth_pct: 0.50
+  max_extension_from_50sma_pct: 0.25
+  base_max_depth_pct: 0.40
   pre_alert_proximity_pct: 0.05
   contraction_smooth_window: 5
   contraction_min_peak_pct: 0.02
@@ -50,9 +50,9 @@ breakout:
   require_market_filter: false
   breakout_buffer_pct: 0.003
   breakout_buffer_atr_mult: 0.5
-  breakout_vol_mult: 1.0
-  breakout_vol_max_mult: 10.0
-  max_extension_breakout_pct: 0.25
+  breakout_vol_mult: 2.5 # Institutional Floor
+  breakout_vol_max_mult: 12.0
+  max_extension_breakout_pct: 0.20
 
 risk:
   entry_buffer_pct: 0.003
@@ -62,8 +62,8 @@ risk:
   target_r: null
 
 backtest:
-  pending_days: 2 # 48 hours to break out
-  max_hold_days: 30 # Hyper-rotation
+  pending_days: 2
+  max_hold_days: 250
   exit_mode: advanced_sepa
   use_regime_entry_controls: false
   use_extended_exit_model: true
@@ -85,7 +85,7 @@ market_filter:
 
 portfolio:
   max_heat_pct: 1.0
-  max_positions: 6 # 6 Positions
+  max_positions: 6
   max_sector_positions: 2
   regime_heat_mult_strong: 1.0
   max_sector_pct: 1.0
@@ -93,28 +93,28 @@ portfolio:
   drawdown_stop_pct: 0.50
   drawdown_close_pct: 0.60
   initial_capital: 1000000
-  risk_per_trade_pct: 0.10 # 10% RISK
+  risk_per_trade_pct: 0.12 # 12% RISK
   regime_gate_enabled: false
   regime_high_volatility_threshold: 0.50
   regime_cooldown_days: 0
   breadth_soft_floor_pct: null
-  pyramid_max_adds: 3 # Feed the beast
-  pyramid_trigger_r: 0.5 # Add every 2.5% move
-  pyramid_add_interval_r: 0.5
+  pyramid_max_adds: 3
+  pyramid_trigger_r: 0.25 # Pyramid fast!
+  pyramid_add_interval_r: 0.25
   pyramid_risk_frac: 0.50
 
 watchlist:
   max_candidates: 500
 
 exit_strategy:
-  breakeven_activation_r: 1.0
-  partial_profit_r: 3.0
-  partial_profit_pct: 0.50 # Sell half quickly to fund more trades
+  breakeven_activation_r: 0.7 # Secure principal early
+  partial_profit_r: 5.0
+  partial_profit_pct: 0.0
   trail_activation_r: 1.5
   max_loss_pct: 0.05
   absolute_max_loss_pct: 0.06
   trail_mode: "adaptive"
-  trail_pct: 0.10 # Super tight
+  trail_pct: 0.10
   trail_pct_bull: 0.10
   trail_pct_bear: 0.05
   extension_limit_200d: 3.0
@@ -122,7 +122,7 @@ exit_strategy:
   extension_limit_50d: 1.50
   largest_day_gain_pct: 0.25
   gap_sell_threshold: 0.20
-  time_stop_days: 5 # 5 DAYS TO SHOW PROFIT OR DIE
+  time_stop_days: 5
   dead_money_days: 10
   max_hold_before_tighten: 20
   climax_min_hold_days: 10

@@ -312,6 +312,20 @@ def evaluate_exit(
         if _should_tighten(trade, bar=bar, config=config):
             trade.phase = ExitPhase.TIGHTEN
             trade.tighten_activated = True
+            
+        # Velocity Sniper: Soft Expiry at 30 days
+        # If we haven't made 20% gain in a month, rotate the cash.
+        # If we have, hold for the triple digits.
+        if trade.days_held == 30:
+            gain_pct = (close - trade.entry_price) / trade.entry_price if trade.entry_price > 0 else 0
+            if gain_pct < 0.20:
+                actions.append(ExitAction(action="SELL_ALL", reason="soft_expiry_rotation"))
+                return actions
+            else:
+                # Stock is a monster, tighten trail to 10d low and keep holding
+                trade.phase = ExitPhase.TIGHTEN
+                trade.trail_mode = "trail_10d_low"
+                trade.tighten_activated = True
 
     # Phase 4: TIGHTEN
     if trade.phase == ExitPhase.TIGHTEN:
