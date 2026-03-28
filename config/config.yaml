@@ -22,27 +22,27 @@ trend_template:
   sma_slow: 200
   lookback_52w: 252
   sma200_slope_lookback: 21
-  min_above_52w_low_pct: 0.15
-  max_below_52w_high_pct: 0.40
+  min_above_52w_low_pct: 0.10 # Wide open
+  max_below_52w_high_pct: 0.45
 
 relative_strength:
   lookbacks: [21, 63, 126, 252]
-  weights: [1.0, 0.0, 0.0, 0.0]
-  rs_rank_min: 50
+  weights: [1.0, 0.0, 0.0, 0.0] # 100% Velocity
+  rs_rank_min: 40
   rs_rank_max: 99.5
-  skip_recent_days: 5
+  skip_recent_days: 2
 
 setup_vcp:
   base_lookback: 65
-  max_range10_pct: 0.20
-  max_vol_dryup_ratio: 1.2
+  max_range10_pct: 0.30
+  max_vol_dryup_ratio: 2.0
   atr_period: 14
-  atr_contraction_factor: 1.0
-  max_extension_from_50sma_pct: 0.25
-  base_max_depth_pct: 0.40
+  atr_contraction_factor: 1.2
+  max_extension_from_50sma_pct: 0.40
+  base_max_depth_pct: 0.60
   pre_alert_proximity_pct: 0.05
   contraction_smooth_window: 5
-  contraction_min_peak_pct: 0.02
+  contraction_min_peak_pct: 0.01
   contraction_min_count: 0
   contraction_standard_count: 3
 
@@ -50,80 +50,77 @@ breakout:
   require_market_filter: false
   breakout_buffer_pct: 0.003
   breakout_buffer_atr_mult: 0.5
-  breakout_vol_mult: 2.5 # Institutional Floor
-  breakout_vol_max_mult: 12.0
-  max_extension_breakout_pct: 0.20
+  breakout_vol_mult: 1.0 # Take everything
+  breakout_vol_max_mult: 20.0
+  max_extension_breakout_pct: 0.30
 
 risk:
   entry_buffer_pct: 0.003
   entry_buffer_atr_mult: 0.5
-  max_stop_pct: 0.05 # 5% TIGHT STOP
+  max_stop_pct: 0.05 # 5% HARD STOP
   struct_stop_atr_mult: 1.0
   target_r: null
 
 backtest:
   pending_days: 2
-  max_hold_days: 250
+  max_hold_days: 21 # 3 WEEKS MAX
   exit_mode: advanced_sepa
   use_regime_entry_controls: false
   use_extended_exit_model: true
-  max_signals_per_day: 5
+  max_signals_per_day: 20
   signal_ranking_mode: offense_v2
-  rs_rank_min: 50
+  rs_rank_min: 40
   rs_rank_max: 99.5
 
 alerts:
-  max_alerts_per_day: 20
+  max_alerts_per_day: 50
   send_watch_alerts: true
   send_breakout_alerts: true
   channels: ["telegram", "console"]
 
 market_filter:
   benchmark_ema_period: 21
-  breadth_strong_pct: 0.50
-  breadth_weak_pct: 0.30
+  breadth_strong_pct: 0.40
+  breadth_weak_pct: 0.20
 
 portfolio:
   max_heat_pct: 1.0
   max_positions: 6
-  max_sector_positions: 2
+  max_sector_positions: 3
   regime_heat_mult_strong: 1.0
   max_sector_pct: 1.0
-  drawdown_half_pct: 0.40
-  drawdown_stop_pct: 0.50
-  drawdown_close_pct: 0.60
+  drawdown_half_pct: 0.50
+  drawdown_stop_pct: 0.60
+  drawdown_close_pct: 0.70
   initial_capital: 1000000
-  risk_per_trade_pct: 0.12 # 12% RISK
+  risk_per_trade_pct: 0.15 # 15% RISK (Forces 100% positioning)
   regime_gate_enabled: false
-  regime_high_volatility_threshold: 0.50
+  regime_high_volatility_threshold: 0.60
   regime_cooldown_days: 0
   breadth_soft_floor_pct: null
-  pyramid_max_adds: 3
-  pyramid_trigger_r: 0.25 # Pyramid fast!
-  pyramid_add_interval_r: 0.25
-  pyramid_risk_frac: 0.50
+  pyramid_max_adds: 0 # No time, just rotate
 
 watchlist:
-  max_candidates: 500
+  max_candidates: 1000
 
 exit_strategy:
-  breakeven_activation_r: 0.7 # Secure principal early
-  partial_profit_r: 5.0
-  partial_profit_pct: 0.0
-  trail_activation_r: 1.5
+  breakeven_activation_r: 0.5 # Protect instantly
+  partial_profit_r: 2.0
+  partial_profit_pct: 0.50 # Sell half to rotate
+  trail_activation_r: 1.0
   max_loss_pct: 0.05
   absolute_max_loss_pct: 0.06
   trail_mode: "adaptive"
-  trail_pct: 0.10
-  trail_pct_bull: 0.10
-  trail_pct_bear: 0.05
-  extension_limit_200d: 3.0
-  extension_limit_200d_extreme: 4.0
-  extension_limit_50d: 1.50
-  largest_day_gain_pct: 0.25
-  gap_sell_threshold: 0.20
-  time_stop_days: 5
-  dead_money_days: 10
-  max_hold_before_tighten: 20
-  climax_min_hold_days: 10
+  trail_pct: 0.05 # Razor tight
+  trail_pct_bull: 0.05
+  trail_pct_bear: 0.03
+  extension_limit_200d: 5.0
+  extension_limit_200d_extreme: 10.0
+  extension_limit_50d: 2.50
+  largest_day_gain_pct: 0.40
+  gap_sell_threshold: 0.30
+  time_stop_days: 2 # 48 HOURS OR DIE
+  dead_money_days: 5
+  max_hold_before_tighten: 10
+  climax_min_hold_days: 5
   climax_conditions_required: 2
