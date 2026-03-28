@@ -136,6 +136,10 @@ class ExitStrategySettings(BaseModel):
     dead_money_extend_to_breakeven: bool = False
     time_stop_days: int | None = 15
     max_hold_before_tighten: int = 40
+    climax_min_hold_days: int = 15
+    climax_conditions_required: int = 3
+    soft_expiry_days: int = 30
+    soft_expiry_gain: float = 0.20
 
 
 class AlertsSettings(BaseModel):

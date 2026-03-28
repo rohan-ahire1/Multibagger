@@ -119,6 +119,19 @@ def _offense_v2_score_expr(columns: set[str]) -> pl.Expr:
     ).alias("_signal_score")
 
 
+def _sector_alpha_score_expr(columns: set[str]) -> pl.Expr:
+    base_score = _offense_v2_score_expr(columns)
+    # sector_rs is calculated externally and passed in the frame
+    sector_rs = _value_expr(columns, "sector_rs", 50.0)
+    # Boost signals from top sectors (SRS > 70 gets +1, SRS > 85 gets +2)
+    sector_boost = (
+        pl.when(sector_rs >= 85.0).then(pl.lit(2.0))
+        .when(sector_rs >= 70.0).then(pl.lit(1.0))
+        .otherwise(pl.lit(0.0))
+    )
+    return base_score + sector_boost
+
+
 def add_signal_score(
     frame: pl.DataFrame,
     *,
@@ -133,6 +146,8 @@ def add_signal_score(
         return frame.with_columns(_championship_score_expr(columns).alias(score_column))
     if ranking_mode == "offense_v2":
         return frame.with_columns(_offense_v2_score_expr(columns).alias(score_column))
+    if ranking_mode == "sector_alpha":
+        return frame.with_columns(_sector_alpha_score_expr(columns).alias(score_column))
     return frame
 
 
@@ -173,7 +188,7 @@ def _sort_for_mode(frame: pl.DataFrame, ranking_mode: str, primary_group_col: st
             by=[primary_group_col, "_signal_score", "rs_rank", "vol_mult", "range10", "symbol"],
             descending=[False, True, True, True, False, False],
         )
-    if ranking_mode == "offense_v2":
+    if ranking_mode in {"offense_v2", "sector_alpha"}:
         ranked = add_signal_score(frame, ranking_mode=ranking_mode)
         sort_cols = [primary_group_col, "_signal_score", "rs_rank", "contraction_quality", "range10", "symbol"]
         descending = [False, True, True, True, False, False]

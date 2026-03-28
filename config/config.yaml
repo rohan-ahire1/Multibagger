@@ -22,12 +22,12 @@ trend_template:
   sma_slow: 200
   lookback_52w: 252
   sma200_slope_lookback: 21
-  min_above_52w_low_pct: 0.10 # Wide open
+  min_above_52w_low_pct: 0.10
   max_below_52w_high_pct: 0.45
 
 relative_strength:
   lookbacks: [21, 63, 126, 252]
-  weights: [1.0, 0.0, 0.0, 0.0] # 100% Velocity
+  weights: [1.0, 0.0, 0.0, 0.0]
   rs_rank_min: 40
   rs_rank_max: 99.5
   skip_recent_days: 2
@@ -50,25 +50,25 @@ breakout:
   require_market_filter: false
   breakout_buffer_pct: 0.003
   breakout_buffer_atr_mult: 0.5
-  breakout_vol_mult: 1.0 # Take everything
+  breakout_vol_mult: 1.0
   breakout_vol_max_mult: 20.0
   max_extension_breakout_pct: 0.30
 
 risk:
   entry_buffer_pct: 0.003
   entry_buffer_atr_mult: 0.5
-  max_stop_pct: 0.05 # 5% HARD STOP
+  max_stop_pct: 0.05
   struct_stop_atr_mult: 1.0
   target_r: null
 
 backtest:
   pending_days: 2
-  max_hold_days: 21 # 3 WEEKS MAX
+  max_hold_days: 21
   exit_mode: advanced_sepa
   use_regime_entry_controls: false
   use_extended_exit_model: true
   max_signals_per_day: 20
-  signal_ranking_mode: offense_v2
+  signal_ranking_mode: sector_alpha
   rs_rank_min: 40
   rs_rank_max: 99.5
 
@@ -93,25 +93,28 @@ portfolio:
   drawdown_stop_pct: 0.60
   drawdown_close_pct: 0.70
   initial_capital: 1000000
-  risk_per_trade_pct: 0.15 # 15% RISK (Forces 100% positioning)
+  risk_per_trade_pct: 0.15
   regime_gate_enabled: false
   regime_high_volatility_threshold: 0.60
   regime_cooldown_days: 0
   breadth_soft_floor_pct: null
-  pyramid_max_adds: 0 # No time, just rotate
+  pyramid_max_adds: 2 # Add to winners
+  pyramid_trigger_r: 0.5
+  pyramid_add_interval_r: 0.5
+  pyramid_risk_frac: 0.50
 
 watchlist:
   max_candidates: 1000
 
 exit_strategy:
-  breakeven_activation_r: 0.5 # Protect instantly
+  breakeven_activation_r: 0.5
   partial_profit_r: 2.0
-  partial_profit_pct: 0.50 # Sell half to rotate
+  partial_profit_pct: 0.50
   trail_activation_r: 1.0
   max_loss_pct: 0.05
   absolute_max_loss_pct: 0.06
   trail_mode: "adaptive"
-  trail_pct: 0.05 # Razor tight
+  trail_pct: 0.05
   trail_pct_bull: 0.05
   trail_pct_bear: 0.03
   extension_limit_200d: 5.0
@@ -119,8 +122,10 @@ exit_strategy:
   extension_limit_50d: 2.50
   largest_day_gain_pct: 0.40
   gap_sell_threshold: 0.30
-  time_stop_days: 2 # 48 HOURS OR DIE
+  time_stop_days: 2
   dead_money_days: 5
   max_hold_before_tighten: 10
   climax_min_hold_days: 5
   climax_conditions_required: 2
+  soft_expiry_days: 30
+  soft_expiry_gain: 0.20

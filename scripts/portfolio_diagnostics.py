@@ -223,6 +223,10 @@ def resolve_exit_config(settings: Any) -> dict[str, Any]:
         "dead_money_extend_to_breakeven": settings.exit_strategy.dead_money_extend_to_breakeven,
         "time_stop_days": settings.exit_strategy.time_stop_days,
         "max_hold_before_tighten": settings.exit_strategy.max_hold_before_tighten,
+        "climax_min_hold_days": settings.exit_strategy.climax_min_hold_days,
+        "climax_conditions_required": settings.exit_strategy.climax_conditions_required,
+        "soft_expiry_days": settings.exit_strategy.soft_expiry_days,
+        "soft_expiry_gain": settings.exit_strategy.soft_expiry_gain,
     }
 
 
@@ -538,6 +542,22 @@ def simulate_portfolio_python(
 
                 if reached_1r:
                     pos.breakeven_activated = True
+                
+                # Velocity Sniper: Soft Expiry at 30 days
+                if exit_price is None and holding_days == 30:
+                    gain_pct = (close_price - pos.entry_price) / pos.entry_price if pos.entry_price > 0 else 0
+                    soft_expiry_gain = float(exit_cfg.get("soft_expiry_gain", 0.20))
+                    if gain_pct < soft_expiry_gain:
+                        exit_price = close_price
+                        status = "soft_expiry"
+                    else:
+                        # Stock is a monster, tighten trail to 10d low
+                        pos.trail_activated = True
+                        lookback = 10
+                        if idx >= lookback:
+                            min_low = min(sym_prices["lows"][idx - lookback:idx])
+                            pos.active_stop = max(pos.active_stop, min_low)
+
                 if exit_price is None and exit_cfg["time_stop_days"] is not None and not pos.breakeven_activated and holding_days >= int(exit_cfg["time_stop_days"]):
                     exit_price = close_price
                     status = "time_stop"
@@ -1410,6 +1430,7 @@ def filter_signals(
     signals: pl.DataFrame,
     *,
     diagnostics: pl.DataFrame | None = None,
+    sector_map: dict[str, str] | None = None,
     rs_rank_min: float | None = None,
     rs_rank_max: float | None = None,
     ranking_mode: str = "default",
@@ -1437,6 +1458,29 @@ def filter_signals(
     else:
         quality_filters.pop("rs_rank_max", None)
 
+    # Add Sector RS if needed
+    if (ranking_mode == "sector_alpha" or True) and sector_map:
+        sector_df = pl.DataFrame([
+            {"symbol": sym, "sector": sec} for sym, sec in sector_map.items()
+        ])
+        signals = signals.join(sector_df, on="symbol", how="left").fill_null("UNKNOWN")
+        
+        # Calculate Sector RS: Median RS Rank of signals in that sector on that day
+        sector_rs_df = (
+            signals.group_by(["signal_date", "sector"])
+            .agg(pl.col("rs_rank").median().alias("sector_rs"))
+        )
+        signals = signals.join(sector_rs_df, on=["signal_date", "sector"], how="left")
+        
+        # Apply Size Tilt based on Sector Alpha
+        # Institutional "Clusters" get 20% more size
+        signals = signals.with_columns(
+            pl.when(pl.col("sector_rs") >= 85.0).then(pl.lit(1.2))
+            .when(pl.col("sector_rs") <= 60.0).then(pl.lit(0.8))
+            .otherwise(pl.lit(1.0))
+            .alias("signal_size_mult")
+        )
+
     filtered = signals
     if rs_rank_min is not None and "rs_rank" in filtered.columns:
         filtered = filtered.filter(pl.col("rs_rank") >= float(rs_rank_min))
@@ -1461,10 +1505,8 @@ def filter_signals(
     )
     print(f"Signals after daily ranking: {ranked.height}")
     ranked = apply_signal_size_tilt(ranked, diagnostics, **size_tilt_config)
-    selected_columns = list(signals.columns)
-    if "signal_size_mult" in ranked.columns:
-        selected_columns.append("signal_size_mult")
-    return ranked.select(selected_columns)
+    
+    return ranked.select(pl.all().exclude(["_signal_score"]))
 
 
 def build_entry_controls(
@@ -1635,6 +1677,7 @@ def main() -> None:
     filtered_signals = filter_signals(
         signals,
         diagnostics=bundle["diagnostics"],
+        sector_map=sector_map,
         rs_rank_min=bundle["settings"].backtest.rs_rank_min,
         rs_rank_max=bundle["settings"].backtest.rs_rank_max,
         ranking_mode=bundle["settings"].backtest.signal_ranking_mode,
