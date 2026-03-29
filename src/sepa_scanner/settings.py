@@ -116,6 +116,11 @@ class BacktestSettings(BaseModel):
     signal_quality_size_tilt_max_mult: float = 1.40
     use_extended_exit_model: bool = False
     use_regime_entry_controls: bool = False
+    sector_alpha_enabled: bool = True
+    sector_alpha_threshold_high: float = 85.0
+    sector_alpha_threshold_low: float = 60.0
+    sector_alpha_mult_high: float = 1.2
+    sector_alpha_mult_low: float = 0.8
 
 
 class ExitStrategySettings(BaseModel):

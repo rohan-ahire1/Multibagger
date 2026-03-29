@@ -1429,6 +1429,7 @@ def apply_signal_size_tilt(
 def filter_signals(
     signals: pl.DataFrame,
     *,
+    settings: AppSettings,
     diagnostics: pl.DataFrame | None = None,
     sector_map: dict[str, str] | None = None,
     rs_rank_min: float | None = None,
@@ -1459,7 +1460,7 @@ def filter_signals(
         quality_filters.pop("rs_rank_max", None)
 
     # Add Sector RS if needed
-    if (ranking_mode == "sector_alpha" or True) and sector_map:
+    if settings.backtest.sector_alpha_enabled and sector_map:
         sector_df = pl.DataFrame([
             {"symbol": sym, "sector": sec} for sym, sec in sector_map.items()
         ])
@@ -1472,11 +1473,11 @@ def filter_signals(
         )
         signals = signals.join(sector_rs_df, on=["signal_date", "sector"], how="left")
         
-        # Apply Size Tilt based on Sector Alpha
-        # Institutional "Clusters" get 20% more size
+        # Apply Size Tilt based on Sector Alpha from Settings
+        s_cfg = settings.backtest
         signals = signals.with_columns(
-            pl.when(pl.col("sector_rs") >= 85.0).then(pl.lit(1.2))
-            .when(pl.col("sector_rs") <= 60.0).then(pl.lit(0.8))
+            pl.when(pl.col("sector_rs") >= s_cfg.sector_alpha_threshold_high).then(pl.lit(s_cfg.sector_alpha_mult_high))
+            .when(pl.col("sector_rs") <= s_cfg.sector_alpha_threshold_low).then(pl.lit(s_cfg.sector_alpha_mult_low))
             .otherwise(pl.lit(1.0))
             .alias("signal_size_mult")
         )
@@ -1676,6 +1677,7 @@ def main() -> None:
     
     filtered_signals = filter_signals(
         signals,
+        settings=bundle["settings"],
         diagnostics=bundle["diagnostics"],
         sector_map=sector_map,
         rs_rank_min=bundle["settings"].backtest.rs_rank_min,

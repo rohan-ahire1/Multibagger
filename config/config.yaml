@@ -71,6 +71,11 @@ backtest:
   signal_ranking_mode: sector_alpha
   rs_rank_min: 40
   rs_rank_max: 99.5
+  sector_alpha_enabled: true
+  sector_alpha_threshold_high: 85.0
+  sector_alpha_threshold_low: 60.0
+  sector_alpha_mult_high: 1.2
+  sector_alpha_mult_low: 0.8
 
 alerts:
   max_alerts_per_day: 50
