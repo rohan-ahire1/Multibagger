@@ -23,6 +23,10 @@ class ExitMode(str, Enum):
     V3_TRAIL_PCT = "v3_trail_pct"
     MINERVINI_PHASED = "minervini_phased"
     ADVANCED_SEPA = "advanced_sepa"
+    # Strict book-faithful baseline modes (Minervini TLASMW)
+    BASELINE_HARD = "baseline_hard"       # hard stop only, no trail
+    BASELINE_EMA10 = "baseline_ema10"     # trail on 10-day EMA after breakeven
+    BASELINE_EMA21 = "baseline_ema21"     # trail on 21-day EMA after breakeven
 
 
 EXIT_MODE_LABELS: dict[ExitMode, str] = {

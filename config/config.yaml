@@ -26,15 +26,15 @@ trend_template:
   max_below_52w_high_pct: 0.45
 
 relative_strength:
-  lookbacks: [21, 63, 126, 252]
-  weights: [1.0, 0.0, 0.0, 0.0]
+  lookbacks: [63]
+  weights: [1.0]
   rs_rank_min: 40
-  rs_rank_max: 99.5
-  skip_recent_days: 2
+  rs_rank_max: 100.0
+  skip_recent_days: 0
 
 setup_vcp:
   base_lookback: 65
-  max_range10_pct: 0.30
+  max_range10_pct: 0.08
   max_vol_dryup_ratio: 2.0
   atr_period: 14
   atr_contraction_factor: 1.2
@@ -44,6 +44,7 @@ setup_vcp:
   contraction_smooth_window: 5
   contraction_min_peak_pct: 0.01
   contraction_min_count: 0
+  contraction_max_count: 2
   contraction_standard_count: 3
 
 breakout:
@@ -57,25 +58,21 @@ breakout:
 risk:
   entry_buffer_pct: 0.003
   entry_buffer_atr_mult: 0.5
-  max_stop_pct: 0.05
+  max_stop_pct: 0.07
   struct_stop_atr_mult: 1.0
   target_r: null
 
 backtest:
   pending_days: 2
-  max_hold_days: 21
-  exit_mode: advanced_sepa
+  max_hold_days: 500        # no hard time limit — exit_mode controls the exit
+  exit_mode: baseline_ema21 # options: baseline_hard | baseline_ema10 | baseline_ema21
   use_regime_entry_controls: false
-  use_extended_exit_model: true
+  use_extended_exit_model: false
   max_signals_per_day: 20
-  signal_ranking_mode: sector_alpha
+  signal_ranking_mode: default  # plain RS rank — no sector alpha
   rs_rank_min: 40
-  rs_rank_max: 99.5
-  sector_alpha_enabled: true
-  sector_alpha_threshold_high: 85.0
-  sector_alpha_threshold_low: 60.0
-  sector_alpha_mult_high: 1.2
-  sector_alpha_mult_low: 0.8
+  rs_rank_max: 100.0
+  sector_alpha_enabled: false
 
 alerts:
   max_alerts_per_day: 50
@@ -89,48 +86,23 @@ market_filter:
   breadth_weak_pct: 0.20
 
 portfolio:
+  max_positions: 8
+  max_sector_positions: 2
+  initial_capital: 1000000
+  risk_per_trade_pct: 0.005  # 0.5% risk per trade (book: 0.5% of capital)
   max_heat_pct: 1.0
-  max_positions: 6
-  max_sector_positions: 3
-  regime_heat_mult_strong: 1.0
   max_sector_pct: 1.0
-  drawdown_half_pct: 0.50
+  drawdown_half_pct: 0.50    # effectively off
   drawdown_stop_pct: 0.60
   drawdown_close_pct: 0.70
-  initial_capital: 1000000
-  risk_per_trade_pct: 0.15
   regime_gate_enabled: false
-  regime_high_volatility_threshold: 0.60
-  regime_cooldown_days: 0
-  breadth_soft_floor_pct: null
-  pyramid_max_adds: 2 # Add to winners
-  pyramid_trigger_r: 0.5
-  pyramid_add_interval_r: 0.5
-  pyramid_risk_frac: 0.50
+  pyramid_max_adds: 0        # no pyramiding in baseline
 
 watchlist:
   max_candidates: 1000
 
 exit_strategy:
-  breakeven_activation_r: 0.5
-  partial_profit_r: 2.0
-  partial_profit_pct: 0.50
-  trail_activation_r: 1.0
-  max_loss_pct: 0.05
-  absolute_max_loss_pct: 0.06
-  trail_mode: "adaptive"
-  trail_pct: 0.05
-  trail_pct_bull: 0.05
-  trail_pct_bear: 0.03
-  extension_limit_200d: 5.0
-  extension_limit_200d_extreme: 10.0
-  extension_limit_50d: 2.50
-  largest_day_gain_pct: 0.40
-  gap_sell_threshold: 0.30
-  time_stop_days: 2
-  dead_money_days: 5
-  max_hold_before_tighten: 10
-  climax_min_hold_days: 5
-  climax_conditions_required: 2
-  soft_expiry_days: 30
-  soft_expiry_gain: 0.20
+  # Baseline modes (baseline_hard / baseline_ema10 / baseline_ema21) ignore most
+  # of these — only max_loss_pct matters as the hard stop floor.
+  max_loss_pct: 0.07
+  absolute_max_loss_pct: 0.07

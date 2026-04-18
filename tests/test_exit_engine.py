@@ -65,7 +65,9 @@ def test_exit_config_defaults() -> None:
     assert c.largest_day_gain_pct == 0.15
     assert c.gap_sell_threshold == 0.10
     assert c.time_stop_days == 15
-    assert c.max_hold_before_tighten == 40
+    assert c.time_stop_min_r == 0.3
+    assert c.max_hold_before_tighten == 60
+    assert c.soft_expiry_days == 45
     assert c.climax_min_hold_days == 15
     assert c.climax_conditions_required == 3
 
@@ -498,6 +500,7 @@ def _bar(
     volume: int = 1_000_000,
     sma_50: float = 95.0,
     sma_200: float = 90.0,
+    ema_10: float = 101.0,
     ema_21: float = 100.0,
     ema_50: float = 98.0,
     low_10d: float = 97.0,
@@ -513,6 +516,7 @@ def _bar(
         volume=volume,
         sma_50=sma_50,
         sma_200=sma_200,
+        ema_10=ema_10,
         ema_21=ema_21,
         ema_50=ema_50,
         low_10d=low_10d,
@@ -541,7 +545,7 @@ def test_evaluate_exit_initial_stop_hit() -> None:
 
 
 def test_evaluate_exit_time_stop() -> None:
-    """Test 3: Stagnation - 15 days without +1R → exit."""
+    """Test 3: Stagnation - 15 days without meaningful gain → exit."""
     config = ExitConfig()
     trade = TradeState(
         symbol="XYZ",
@@ -552,8 +556,48 @@ def test_evaluate_exit_time_stop() -> None:
         planned_shares=100,
     )
     trade.days_held = 14
+    trade.r_multiple = 0.1  # Below time_stop_min_r of 0.3
+    bar = _bar(close=100.5, high=101.0, low=100.0, prev_close=100.0)
+    actions = evaluate_exit(trade, bar=bar, config=config, market_regime="bull")
+    assert len(actions) == 1
+    assert actions[0].action == "SELL_ALL"
+    assert actions[0].reason == "time_stop"
+
+
+def test_time_stop_spares_trade_at_half_r() -> None:
+    """A trade at 0.5R on day 15 should NOT be time-stopped."""
+    config = ExitConfig()
+    trade = TradeState(
+        symbol="XYZ",
+        entry_date=date(2026, 3, 1),
+        entry_price=100.0,
+        initial_risk=5.0,
+        initial_stop=95.0,
+        planned_shares=100,
+    )
+    trade.days_held = 14  # will be incremented to 15 inside evaluate_exit
     trade.r_multiple = 0.5
-    bar = _bar(close=102.5, prev_close=100.0)
+    bar = _bar(close=102.5, high=103.0, prev_close=102.0)
+    actions = evaluate_exit(trade, bar=bar, config=config, market_regime="bull")
+    # Should NOT fire time_stop — trade is showing strength at 0.5R
+    sell_all_reasons = [a.reason for a in actions if a.action == "SELL_ALL"]
+    assert "time_stop" not in sell_all_reasons
+
+
+def test_time_stop_kills_stagnant_trade() -> None:
+    """A trade at 0.1R on day 15 should be time-stopped."""
+    config = ExitConfig()
+    trade = TradeState(
+        symbol="XYZ",
+        entry_date=date(2026, 3, 1),
+        entry_price=100.0,
+        initial_risk=5.0,
+        initial_stop=95.0,
+        planned_shares=100,
+    )
+    trade.days_held = 14  # will be incremented to 15
+    trade.r_multiple = 0.1
+    bar = _bar(close=100.5, high=101.0, low=100.0, prev_close=100.0)
     actions = evaluate_exit(trade, bar=bar, config=config, market_regime="bull")
     assert len(actions) == 1
     assert actions[0].action == "SELL_ALL"
@@ -647,7 +691,7 @@ def test_should_tighten_max_hold() -> None:
         planned_shares=100,
     )
     trade.phase = ExitPhase.TRAILING
-    trade.days_held = 40
+    trade.days_held = 60
     trade.tighten_activated = False
     bar = _bar(close=110.0, prev_close=109.0, ema_21=108.0)
     assert _should_tighten(trade, bar=bar, config=config) is True
@@ -703,6 +747,74 @@ def test_should_tighten_no_conditions() -> None:
     trade.tighten_activated = False
     bar = _bar(close=105.0, prev_close=104.0, ema_21=103.0, sma_50=100.0)
     assert _should_tighten(trade, bar=bar, config=config) is False
+
+
+# --- 3R+ trail widening ---
+def test_trail_widens_to_50ema_at_3r() -> None:
+    """When a trade reaches 3R+, trail mode should widen to trail_50ema."""
+    config = ExitConfig()
+    trade = TradeState(
+        symbol="SUPER",
+        entry_date=date(2026, 3, 1),
+        entry_price=100.0,
+        initial_risk=5.0,
+        initial_stop=95.0,
+        planned_shares=100,
+    )
+    trade.phase = ExitPhase.TRAILING
+    trade.trail_mode = "trail_21ema"
+    trade.trail_activated = True
+    trade.partial_taken = True
+    trade.current_shares = 50
+    trade.days_held = 20
+    trade.highest_close = 115.0
+    trade.active_stop = 108.0
+    # Bar where trade hits 3R+ (entry 100 + 3*5 = 115)
+    bar = _bar(
+        close=116.0, high=117.0, low=114.0,
+        prev_close=115.0,
+        ema_21=112.0, ema_50=108.0, low_10d=110.0,
+        sma_50=107.0,
+    )
+    actions = evaluate_exit(trade, bar=bar, config=config, market_regime="bull")
+    # Trail should have widened to 50ema
+    assert trade.trail_mode == "trail_50ema"
+    # Should NOT be stopped (close 116 > ema_50 108)
+    sell_all = [a for a in actions if a.action == "SELL_ALL"]
+    assert len(sell_all) == 0
+
+
+def test_trail_stays_wide_after_3r_pullback() -> None:
+    """After widening at 3R, a pullback to 2.5R should not tighten the trail back."""
+    config = ExitConfig()
+    trade = TradeState(
+        symbol="SUPER",
+        entry_date=date(2026, 3, 1),
+        entry_price=100.0,
+        initial_risk=5.0,
+        initial_stop=95.0,
+        planned_shares=50,
+    )
+    trade.phase = ExitPhase.TRAILING
+    trade.trail_mode = "trail_50ema"  # Already widened
+    trade.trail_activated = True
+    trade.partial_taken = True
+    trade.current_shares = 50
+    trade.days_held = 25
+    trade.highest_close = 118.0
+    trade.active_stop = 108.0
+    trade.r_multiple = 2.5  # Pulled back from 3R+
+    # Close is above 50ema, so should hold
+    bar = _bar(
+        close=112.5, high=113.0, low=111.0,
+        prev_close=114.0,
+        ema_21=111.0, ema_50=108.5, low_10d=110.0,
+        sma_50=107.0,
+    )
+    actions = evaluate_exit(trade, bar=bar, config=config, market_regime="bull")
+    assert trade.trail_mode == "trail_50ema"
+    sell_all = [a for a in actions if a.action == "SELL_ALL"]
+    assert len(sell_all) == 0
 
 
 # --- trailing stop hit ---

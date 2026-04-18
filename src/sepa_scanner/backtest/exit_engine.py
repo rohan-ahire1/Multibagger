@@ -26,9 +26,13 @@ class ExitConfig:
     largest_day_gain_pct: float = 0.15
     gap_sell_threshold: float = 0.10
     time_stop_days: int = 15
-    max_hold_before_tighten: int = 40
+    time_stop_min_r: float = 0.3
+    max_hold_before_tighten: int = 60
     climax_min_hold_days: int = 15
     climax_conditions_required: int = 3
+    soft_expiry_days: int = 45
+    soft_expiry_gain: float = 0.20
+    trail_widen_r: float = 3.0
 
 
 @dataclass(slots=True)
@@ -87,6 +91,7 @@ class BarData:
     volume: int
     sma_50: float
     sma_200: float
+    ema_10: float
     ema_21: float
     ema_50: float
     low_10d: float
@@ -209,7 +214,7 @@ def evaluate_exit(
 
     # Phase 0: INITIAL_STOP
     if trade.phase == ExitPhase.INITIAL_STOP:
-        if trade.days_held >= config.time_stop_days and trade.r_multiple < 1.0:
+        if trade.days_held >= config.time_stop_days and trade.r_multiple < config.time_stop_min_r:
             actions.append(ExitAction(action="SELL_ALL", reason="time_stop"))
             return actions
         if close <= trade.active_stop:
@@ -253,6 +258,11 @@ def evaluate_exit(
 
     # Phase 3: TRAILING
     if trade.phase == ExitPhase.TRAILING:
+        # Widen trail for big winners — once a trade reaches trail_widen_r,
+        # switch to 50 EMA trail to give it room to consolidate
+        if trade.r_multiple >= config.trail_widen_r and trade.trail_mode != "trail_50ema":
+            trade.trail_mode = "trail_50ema"
+
         trail_value = compute_trail_value(
             trade,
             trail_mode=trade.trail_mode,
@@ -313,12 +323,12 @@ def evaluate_exit(
             trade.phase = ExitPhase.TIGHTEN
             trade.tighten_activated = True
             
-        # Velocity Sniper: Soft Expiry at 30 days
-        # If we haven't made 20% gain in a month, rotate the cash.
-        # If we have, hold for the triple digits.
-        if trade.days_held == 30:
+        # Velocity Sniper: Soft Expiry
+        # If we haven't reached the gain threshold by the soft expiry day, rotate the cash.
+        # If we have, hold for the triple digits by tightening the trail.
+        if trade.days_held == config.soft_expiry_days:
             gain_pct = (close - trade.entry_price) / trade.entry_price if trade.entry_price > 0 else 0
-            if gain_pct < 0.20:
+            if gain_pct < config.soft_expiry_gain:
                 actions.append(ExitAction(action="SELL_ALL", reason="soft_expiry_rotation"))
                 return actions
             else:
@@ -345,6 +355,58 @@ def evaluate_exit(
                 ExitAction(action="SELL_ALL", reason=f"tighten_{trade.trail_mode}")
             )
             return actions
+
+    return actions
+
+
+def evaluate_exit_baseline(
+    trade: TradeState,
+    *,
+    bar: BarData,
+    exit_mode: str,
+) -> list[ExitAction]:
+    """Strict Minervini (TLASMW) exit — three rules only:
+
+    1. Hard stop: 7% below entry (stop is pre-set on TradeState).
+    2. Breakeven: when price reaches entry + 3 × initial_risk (≈+21% on a 7% stop),
+       raise stop to entry price.
+    3. Trail (EMA modes only, active after breakeven):
+       - baseline_ema10: close below 10-day EMA → exit
+       - baseline_ema21: close below 21-day EMA → exit
+       - baseline_hard:  no trail — just hold until stopped at entry or next stop level
+
+    No partial profits, no time stops, no climax sells.
+    """
+    actions: list[ExitAction] = []
+    close = bar.close
+
+    trade.days_held += 1
+    trade.highest_close = max(trade.highest_close, close)
+    if trade.initial_risk > 0:
+        trade.r_multiple = (close - trade.entry_price) / trade.initial_risk
+
+    # Breakeven trigger: 3R above entry
+    if not trade.breakeven_activated:
+        if close >= trade.entry_price + 3.0 * trade.initial_risk:
+            trade.breakeven_activated = True
+            trade.active_stop = max(trade.active_stop, trade.entry_price)
+            trade.phase = ExitPhase.BREAKEVEN
+
+    # EMA trail: ratchet stop up to EMA value (only after breakeven, only EMA modes)
+    if trade.breakeven_activated and exit_mode != "baseline_hard":
+        ema_val = bar.ema_10 if exit_mode == "baseline_ema10" else bar.ema_21
+        if ema_val > 0:
+            trade.active_stop = max(trade.active_stop, ema_val)
+
+    # Check stop
+    if close <= trade.active_stop:
+        if not trade.breakeven_activated:
+            reason = "initial_stop"
+        elif exit_mode == "baseline_hard":
+            reason = "breakeven_stop"
+        else:
+            reason = f"trail_{exit_mode}"
+        actions.append(ExitAction(action="SELL_ALL", reason=reason))
 
     return actions
 
