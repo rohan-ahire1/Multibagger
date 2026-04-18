@@ -87,12 +87,27 @@ Install the package, then use the `sepa` command from the project virtual enviro
 ./.venv/bin/sepa --help
 ```
 
+### Build a broad historical universe
+
+Builds a reusable NSE `EQ` symbol list from bhavcopy snapshots. This is for symbol
+discovery only; OHLCV still comes from yfinance.
+
+```bash
+./.venv/bin/sepa build-universe --start 2005-01-01 --end 2026-04-18 --cadence monthly
+```
+
+The default output is `data/reference/nse_eq_universe.yaml`. Use `--cadence weekly`
+for broader coverage, or `--cadence daily` if you have brought tea and patience.
+
 ### Backfill
 
-Downloads adjusted yfinance OHLCV for the configured full universe over a date range and upserts it into the local parquet store.
+Downloads adjusted yfinance OHLCV over a date range and upserts it into the local
+parquet store. By default, historical backfills use every known symbol in the parquet
+store, not just symbols present on the latest date.
 
 ```bash
 ./.venv/bin/sepa backfill --start 2025-01-01 --end 2025-03-31
+./.venv/bin/sepa backfill --start 2005-01-01 --end 2026-04-18 --symbols-from file --symbols-file data/reference/nse_eq_universe.yaml
 ```
 
 ### Update
@@ -193,7 +208,8 @@ The repository also includes thin wrappers:
 
 ## Strategy notes
 
-- Universe is liquidity-filtered from EQ series only.
+- Universe is liquidity-filtered from local yfinance history on each scan date.
+- Broad historical symbol discovery can use NSE bhavcopy snapshots via `sepa build-universe`.
 - Benchmark is `NIFTYBEES`.
 - WATCH requires current-day setup quality.
 - BREAKOUT requires trend and RS on day `D`, but setup quality on day `D-1`.

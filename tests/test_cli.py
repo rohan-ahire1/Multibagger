@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import polars as pl
 from typer.testing import CliRunner
 
-from sepa_scanner.main import app, run_scan_command, run_update_command
+from sepa_scanner.main import app, run_backfill_command, run_scan_command, run_update_command
 from sepa_scanner.strategy.signal_engine import ScanResult
 
 
@@ -139,7 +139,73 @@ def test_run_update_command_uses_yfinance_universe_and_upserts(monkeypatch, tmp_
     }
     assert len(upserts) == 1
     assert latest_date == date(2026, 3, 7)
-    assert meta is None
+    assert meta == []
+
+
+def test_backfill_command_uses_all_known_store_symbols_by_default(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+    upserts: list[pl.DataFrame] = []
+
+    class FakeParquetStore:
+        def latest_date(self) -> date:
+            return date(2026, 4, 16)
+
+        def read_frame(self, *, start_date=None, end_date=None, columns=None) -> pl.DataFrame:
+            if start_date == date(2026, 4, 16) and end_date == date(2026, 4, 16):
+                return pl.DataFrame({"symbol": ["CURRENT"]})
+            return pl.DataFrame({"symbol": ["CURRENT", "OLD_DELISTED", "OLDER_MERGED"]})
+
+        def upsert(self, frame: pl.DataFrame) -> None:
+            upserts.append(frame)
+
+    fake_settings = SimpleNamespace(
+        runtime=SimpleNamespace(data_dir=tmp_path),
+        manual_universe=[],
+    )
+
+    def fake_download_adjusted_history(symbols, *, start, end):
+        captured["symbols"] = symbols
+        captured["start"] = start
+        captured["end"] = end
+        return (
+            pl.DataFrame(
+                {
+                    "date": [date(2005, 1, 3)],
+                    "symbol": ["OLD_DELISTED"],
+                    "open": [100.0],
+                    "high": [105.0],
+                    "low": [99.0],
+                    "close": [104.0],
+                    "volume": [1_000_000],
+                    "turnover": [104_000_000.0],
+                }
+            ),
+            [],
+        )
+
+    monkeypatch.setattr("sepa_scanner.main.resolve_settings", lambda config_dir: fake_settings)
+    monkeypatch.setattr("sepa_scanner.main._stores", lambda settings: (FakeParquetStore(), None))
+    monkeypatch.setattr(
+        "sepa_scanner.main.download_adjusted_history",
+        fake_download_adjusted_history,
+        raising=False,
+    )
+
+    processed = run_backfill_command(
+        config_dir=None,
+        start=date(2005, 1, 1),
+        end=date(2005, 1, 31),
+        final_only=True,
+        sleep_seconds=0.0,
+    )
+
+    assert captured == {
+        "symbols": ["CURRENT", "OLDER_MERGED", "OLD_DELISTED"],
+        "start": date(2005, 1, 1),
+        "end": date(2005, 2, 1),
+    }
+    assert len(upserts) == 1
+    assert processed == [date(2005, 1, 3)]
 
 
 def test_run_scan_command_bootstraps_plain_nse_session(monkeypatch, tmp_path: Path) -> None:
@@ -299,6 +365,9 @@ def test_backtest_command_routes_options(monkeypatch) -> None:
         target_r,
         symbol,
         export_csv,
+        use_rust,
+        use_portfolio,
+        max_positions,
     ):
         captured.update(
             {
@@ -310,6 +379,9 @@ def test_backtest_command_routes_options(monkeypatch) -> None:
                 "target_r": target_r,
                 "symbol": symbol,
                 "export_csv": export_csv,
+                "use_rust": use_rust,
+                "use_portfolio": use_portfolio,
+                "max_positions": max_positions,
             }
         )
         return SimpleNamespace(
@@ -357,6 +429,9 @@ def test_backtest_command_routes_options(monkeypatch) -> None:
         "target_r": 2.5,
         "symbol": "RELIANCE",
         "export_csv": True,
+        "use_rust": True,
+        "use_portfolio": False,
+        "max_positions": 8,
     }
     assert "total_signals: 1" in result.stdout
 
@@ -372,6 +447,9 @@ def test_backtest_command_prints_empty_state(monkeypatch) -> None:
         target_r,
         symbol,
         export_csv,
+        use_rust,
+        use_portfolio,
+        max_positions,
     ):
         return SimpleNamespace(
             summary=SimpleNamespace(

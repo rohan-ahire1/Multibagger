@@ -341,6 +341,16 @@ def classify_market_regime(
 
 The universe determines which symbols are eligible for signal generation on day `D`.
 
+### Source Universe
+
+Runtime scanning and backtesting are not limited to current Nifty 500 constituents.
+They start from every yfinance symbol present in the local parquet store for the loaded
+history window, then apply the date-specific liquidity filters below.
+
+For broad historical backfills, symbols may be discovered from NSE bhavcopy snapshots
+with `sepa build-universe`. This uses bhavcopy only for symbol discovery; yfinance
+adjusted OHLCV remains the canonical price and volume source.
+
 ### Eligibility Conditions (ALL must be true)
 
 | # | Condition | Default |
@@ -355,6 +365,9 @@ The universe determines which symbols are eligible for signal generation on day 
 1. Exclude the benchmark symbol (NIFTYBEES) from candidates
 2. Sort remaining symbols by `adv50` descending
 3. Keep top `max_symbols` (default 1500)
+
+This means a stock belongs to the day `D` universe if it has enough local history and
+passes the day `D` liquidity floors, even if it is not a current index constituent.
 
 ### Key Definitions
 
@@ -1720,10 +1733,16 @@ VIX bands are applied as a multiplier to the base position size formula. When VI
 
 ### 23.5 Survivorship Bias
 
-The scanner uses NSE Bhavcopy as its data source, which includes all stocks that traded on a given day. This naturally avoids survivorship bias because:
-- Delisted stocks appear in historical bhavcopies up to their last trading day
-- No external "current constituent" list is applied retroactively
-- Backtest results reflect the actual investable universe at each point in time
+The scanner reduces survivorship bias by avoiding current index constituent lists in
+the backtest universe. The intended workflow is:
+
+- Discover a broad historical NSE `EQ` symbol list from bhavcopy snapshots with `sepa build-universe`
+- Download adjusted OHLCV for that symbol list from yfinance
+- Let each scan date decide eligibility from local OHLCV using history, price, `adv50`, and `vol50`
+- Exclude symbols only when they fail the day-specific liquidity filters or lack enough history
+
+This is not perfect point-in-time index membership data, but it is materially better
+than applying today's Nifty 500 list to historical dates.
 
 ### 23.6 Settings Model
 

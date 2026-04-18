@@ -28,6 +28,13 @@ DEFAULT_OUTPUT = PROJECT_ROOT / "data" / "yf_adjusted" / "ohlcv_all.parquet"
 
 
 def _symbols_from_file(path: Path) -> list[str]:
+    if path.suffix.lower() in {".yaml", ".yml"}:
+        import yaml
+
+        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if not isinstance(payload, dict) or not isinstance(payload.get("symbols"), list):
+            raise SystemExit(f"Expected YAML file with a `symbols` list: {path}")
+        return sorted({str(symbol).strip() for symbol in payload["symbols"] if str(symbol).strip()})
     return sorted({line.strip() for line in path.read_text().splitlines() if line.strip()})
 
 
@@ -61,7 +68,7 @@ def _symbols_from_auto(output: Path) -> list[str]:
 
 def download_universe(
     symbols: list[str],
-    start: str = "2010-01-01",
+    start: str = "2005-01-01",
     output: Path = DEFAULT_OUTPUT,
 ) -> None:
     log.info("Downloading %d symbols from %s", len(symbols), start)
@@ -98,9 +105,9 @@ def main() -> None:
         default="auto",
         help="Source of symbol list (default: auto)",
     )
-    parser.add_argument("--symbols-file", type=Path, help="Text file with one symbol per line")
+    parser.add_argument("--symbols-file", type=Path, help="Text or YAML file with symbols")
     parser.add_argument("--symbols", nargs="*", help="Explicit symbol list")
-    parser.add_argument("--start", default="2010-01-01", help="Start date YYYY-MM-DD (default: 2010-01-01)")
+    parser.add_argument("--start", default="2005-01-01", help="Start date YYYY-MM-DD (default: 2005-01-01)")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     args = parser.parse_args()
 

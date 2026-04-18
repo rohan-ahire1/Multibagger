@@ -29,6 +29,10 @@ from sepa_scanner.calendar import (
     previous_trading_days,
     trading_days_between,
 )
+from sepa_scanner.data_sources.nse_universe import (
+    UniverseBuildResult,
+    build_universe_from_bhavcopy_snapshots,
+)
 from sepa_scanner.data_sources.yfinance_adjusted import download_adjusted_history
 from sepa_scanner.logging_setup import setup_logging
 from sepa_scanner.settings import AppSettings, load_settings
@@ -151,10 +155,17 @@ def run_backfill_command(
     end: date,
     final_only: bool,
     sleep_seconds: float,
+    symbols_from: str = "auto",
+    symbols_file: Path | None = None,
 ) -> list[date]:
     settings = resolve_settings(config_dir)
     parquet_store, _ = _stores(settings)
-    symbols = _resolve_runtime_symbols(settings, parquet_store)
+    symbols = _resolve_backfill_symbols(
+        settings,
+        parquet_store,
+        symbols_from=symbols_from,
+        symbols_file=symbols_file,
+    )
     frame, _failed = download_adjusted_history(
         symbols,
         start=start,
@@ -207,6 +218,91 @@ def _resolve_runtime_symbols(
     if settings.manual_universe:
         return sorted(set(settings.manual_universe))
 
+    latest_symbols = _symbols_from_latest_store_date(parquet_store)
+    if latest_symbols:
+        return latest_symbols
+
+    all_symbols = _symbols_from_store(parquet_store)
+    if all_symbols:
+        return all_symbols
+
+    raise typer.BadParameter(
+        "No full symbol universe available. Populate config/universe.yaml or seed data/yf_adjusted/ohlcv_all.parquet first."
+    )
+
+
+def _resolve_backfill_symbols(
+    settings: AppSettings,
+    parquet_store: ParquetOhlcvStore,
+    *,
+    symbols_from: str,
+    symbols_file: Path | None,
+) -> list[str]:
+    source = symbols_from.lower().replace("_", "-")
+    if source not in {"auto", "config", "store-all", "store-latest", "file"}:
+        raise typer.BadParameter(
+            "symbols_from must be one of: auto, config, store-all, store-latest, file"
+        )
+
+    if source == "file":
+        if symbols_file is None:
+            raise typer.BadParameter("--symbols-file is required when --symbols-from=file")
+        return _symbols_from_file(symbols_file)
+
+    if source == "config":
+        if settings.manual_universe:
+            return sorted(set(settings.manual_universe))
+        raise typer.BadParameter("config/universe.yaml has no symbols")
+
+    if source == "store-latest":
+        symbols = _symbols_from_latest_store_date(parquet_store)
+        if symbols:
+            return symbols
+        raise typer.BadParameter("No symbols found on latest parquet date")
+
+    if source == "store-all":
+        symbols = _symbols_from_store(parquet_store)
+        if symbols:
+            return symbols
+        raise typer.BadParameter("No symbols found in parquet store")
+
+    if settings.manual_universe:
+        return sorted(set(settings.manual_universe))
+
+    symbols = _symbols_from_store(parquet_store)
+    if symbols:
+        return symbols
+
+    latest_symbols = _symbols_from_latest_store_date(parquet_store)
+    if latest_symbols:
+        return latest_symbols
+
+    raise typer.BadParameter(
+        "No symbol universe found. Generate one with `sepa build-universe` or pass --symbols-from=file."
+    )
+
+
+def _symbols_from_file(path: Path) -> list[str]:
+    if not path.exists():
+        raise typer.BadParameter(f"Symbols file not found: {path}")
+    if path.suffix.lower() in {".yaml", ".yml"}:
+        import yaml
+
+        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if not isinstance(payload, dict):
+            raise typer.BadParameter(f"Expected YAML mapping in symbols file: {path}")
+        raw_symbols = payload.get("symbols", [])
+        if not isinstance(raw_symbols, list):
+            raise typer.BadParameter(f"Expected `symbols` list in symbols file: {path}")
+        symbols = sorted({str(symbol).strip() for symbol in raw_symbols if str(symbol).strip()})
+    else:
+        symbols = sorted({line.strip() for line in path.read_text().splitlines() if line.strip()})
+    if not symbols:
+        raise typer.BadParameter(f"Symbols file is empty: {path}")
+    return symbols
+
+
+def _symbols_from_latest_store_date(parquet_store: ParquetOhlcvStore) -> list[str]:
     latest_date = parquet_store.latest_date()
     if latest_date is not None:
         latest_symbols = parquet_store.read_frame(
@@ -216,13 +312,39 @@ def _resolve_runtime_symbols(
         )
         if not latest_symbols.is_empty():
             return sorted(latest_symbols["symbol"].unique().to_list())
+    return []
 
+
+def _symbols_from_store(parquet_store: ParquetOhlcvStore) -> list[str]:
     existing = parquet_store.read_frame(columns=["symbol"])
     if not existing.is_empty():
         return sorted(existing["symbol"].unique().to_list())
+    return []
 
-    raise typer.BadParameter(
-        "No full symbol universe available. Populate config/universe.yaml or seed data/yf_adjusted/ohlcv_all.parquet first."
+
+def run_build_universe_command(
+    *,
+    config_dir: Path | None,
+    start: date,
+    end: date,
+    cadence: str,
+    output: Path | None,
+    final_only: bool,
+    force: bool,
+    sleep_seconds: float,
+) -> UniverseBuildResult:
+    settings = resolve_settings(config_dir)
+    output_path = output or settings.runtime.data_dir / "reference" / "nse_eq_universe.yaml"
+    return build_universe_from_bhavcopy_snapshots(
+        settings=settings,
+        raw_dir=_raw_dir(settings) / "universe_snapshots",
+        start=start,
+        end=end,
+        cadence=cadence,
+        output_path=output_path,
+        final_only=final_only,
+        force=force,
+        sleep_seconds=sleep_seconds,
     )
 
 
@@ -547,6 +669,14 @@ def backfill(
     end: str = typer.Option(..., help="End date YYYY-MM-DD"),
     final_only: bool = typer.Option(True, "--final-only/--allow-provisional"),
     sleep: float = typer.Option(0.4, help="Sleep seconds between archive downloads"),
+    symbols_from: str = typer.Option(
+        "auto",
+        help="Symbol source: auto, config, store-all, store-latest, or file",
+    ),
+    symbols_file: Path | None = typer.Option(
+        None,
+        help="Text or YAML file with NSE symbols; used with --symbols-from=file",
+    ),
     config_dir: Path | None = typer.Option(None, help="Override config directory"),
 ) -> None:
     processed = run_backfill_command(
@@ -555,8 +685,43 @@ def backfill(
         end=_parse_iso_date(end) or date.today(),
         final_only=final_only,
         sleep_seconds=sleep,
+        symbols_from=symbols_from,
+        symbols_file=symbols_file,
     )
     typer.echo(f"processed_dates: {len(processed)}")
+
+
+@app.command("build-universe")
+def build_universe_command(
+    start: str = typer.Option(..., help="Start date YYYY-MM-DD"),
+    end: str = typer.Option(..., help="End date YYYY-MM-DD"),
+    cadence: str = typer.Option(
+        "monthly",
+        help="Snapshot cadence: daily, weekly, monthly, or quarterly",
+    ),
+    output: Path | None = typer.Option(
+        None,
+        help="Output YAML path (default: data/reference/nse_eq_universe.yaml)",
+    ),
+    final_only: bool = typer.Option(True, "--final-only/--allow-provisional"),
+    force: bool = typer.Option(False, help="Re-download cached bhavcopy snapshots"),
+    sleep: float = typer.Option(0.4, help="Sleep seconds between NSE archive downloads"),
+    config_dir: Path | None = typer.Option(None, help="Override config directory"),
+) -> None:
+    result = run_build_universe_command(
+        config_dir=config_dir,
+        start=_parse_iso_date(start) or date.today(),
+        end=_parse_iso_date(end) or date.today(),
+        cadence=cadence,
+        output=output,
+        final_only=final_only,
+        force=force,
+        sleep_seconds=sleep,
+    )
+    typer.echo(f"symbols: {result.symbol_count}")
+    typer.echo(f"snapshots_requested: {result.snapshots_requested}")
+    typer.echo(f"snapshots_loaded: {result.snapshots_loaded}")
+    typer.echo(f"output: {result.output_path}")
 
 
 @app.command()

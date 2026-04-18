@@ -4,7 +4,7 @@ Run on weekends when the market is closed.
 
 Usage:
     uv run python scripts/yf_weekly_refresh.py
-    uv run python scripts/yf_weekly_refresh.py --start 2010-01-01
+    uv run python scripts/yf_weekly_refresh.py --start 2005-01-01
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger(__name__)
 
 
-def weekly_refresh(store_path: Path = DEFAULT_OUTPUT, start: str = "2010-01-01") -> None:
+def weekly_refresh(store_path: Path = DEFAULT_OUTPUT, start: str = "2005-01-01") -> None:
     if store_path.exists():
         before = pl.read_parquet(store_path)
         before_rows = before.height
@@ -48,7 +48,7 @@ def main() -> None:
     import argparse
 
     parser = argparse.ArgumentParser(description="Weekly yfinance full refresh")
-    parser.add_argument("--start", default="2010-01-01", help="Start date YYYY-MM-DD (default: 2010-01-01)")
+    parser.add_argument("--start", default="2005-01-01", help="Start date YYYY-MM-DD (default: 2005-01-01)")
     parser.add_argument("--store", type=Path, default=DEFAULT_OUTPUT)
     args = parser.parse_args()
     weekly_refresh(store_path=args.store, start=args.start)
