@@ -75,7 +75,7 @@ backtest:
   sector_alpha_enabled: false
   skip_months: [1]
   signal_quality_range10_max: 0.08
-  signal_quality_voldry_max: 1.0
+  signal_quality_voldry_max: 0.9
   signal_quality_setup_streak_max: 0   # fresh setups only — streak decays WR fast
 
 alerts:
@@ -93,7 +93,7 @@ portfolio:
   max_positions: 20
   max_sector_positions: 4
   initial_capital: 1000000
-  risk_per_trade_pct: 0.005
+  risk_per_trade_pct: 0.010
   max_heat_pct: 1.0
   max_sector_pct: 1.0
   drawdown_half_pct: 0.50

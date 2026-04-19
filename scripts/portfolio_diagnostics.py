@@ -1527,6 +1527,15 @@ def filter_signals(
     vol_mult_min = quality_filters.pop("vol_mult_min", None)
 
     filtered = signals
+
+    # Skip months filter
+    skip_months = list(settings.backtest.skip_months or [])
+    if skip_months and "signal_date" in filtered.columns:
+        filtered = filtered.filter(
+            ~pl.col("signal_date").dt.month().is_in(skip_months)
+        )
+        print(f"Signals after skip_months filter ({skip_months}): {filtered.height}")
+
     if rs_rank_min is not None and "rs_rank" in filtered.columns:
         filtered = filtered.filter(pl.col("rs_rank") >= float(rs_rank_min))
     print(f"Signals after RS rank filter ({rs_rank_min}): {filtered.height}")
