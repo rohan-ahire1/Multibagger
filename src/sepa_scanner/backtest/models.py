@@ -98,6 +98,9 @@ class BacktestTrade:
     partial_exit_r: float | None = None
     partial_exit_pct: float | None = None
     trail_mode_used: str | None = None
+    rs_rank: float | None = None
+    range10: float | None = None
+    voldry: float | None = None
 
 
 @dataclass(slots=True)

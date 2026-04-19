@@ -103,6 +103,9 @@ def _close_trade(
         mae_r=mae_r,
         mfe_r=mfe_r,
         giveback_pct=giveback_pct,
+        rs_rank=trade.rs_rank,
+        range10=trade.range10,
+        voldry=trade.voldry,
     )
 
 
@@ -114,6 +117,9 @@ def _empty_trade(signal: dict[str, object], status: str) -> BacktestTrade:
         entry_ref=float(signal["entry_ref"]),
         stop=float(signal["stop"]),
         pivot=float(signal["pivot"]) if signal.get("pivot") is not None else None,
+        rs_rank=float(signal["rs_rank"]) if signal.get("rs_rank") is not None else None,
+        range10=float(signal["range10"]) if signal.get("range10") is not None else None,
+        voldry=float(signal["voldry"]) if signal.get("voldry") is not None else None,
     )
 
 
@@ -167,6 +173,9 @@ def _simulate_signal(
         pivot=float(signal["pivot"]) if signal.get("pivot") is not None else None,
         entry_date=entry_date,
         entry_price=entry_price,
+        rs_rank=float(signal["rs_rank"]) if signal.get("rs_rank") is not None else None,
+        range10=float(signal["range10"]) if signal.get("range10") is not None else None,
+        voldry=float(signal["voldry"]) if signal.get("voldry") is not None else None,
     )
 
     risk = _risk_per_share(entry_price, initial_stop)
@@ -613,6 +622,9 @@ def _simulate_signal_phased(
         partial_exit_r=trade_state.partial_r if trade_state.partial_taken else None,
         partial_exit_pct=exit_config.partial_profit_pct if trade_state.partial_taken else None,
         trail_mode_used=trade_state.trail_mode if trade_state.trail_activated else None,
+        rs_rank=float(signal["rs_rank"]) if signal.get("rs_rank") is not None else None,
+        range10=float(signal["range10"]) if signal.get("range10") is not None else None,
+        voldry=float(signal["voldry"]) if signal.get("voldry") is not None else None,
     )
 
 

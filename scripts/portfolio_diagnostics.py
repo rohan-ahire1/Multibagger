@@ -15,15 +15,35 @@ import numpy as np
 import polars as pl
 import requests
 
-from sepa_scanner.backtest.models import BacktestParams, ExitMode
+from sepa_scanner.backtest import (
+    BacktestParams,
+    ExitMode,
+    simulate_portfolio_python,
+    build_entry_controls,
+    compute_regime_inputs,
+    filter_signals,
+)
 from sepa_scanner.backtest.queries import (
     get_backtest_diagnostics,
     get_backtest_ohlcv,
     get_backtest_signals,
 )
-from sepa_scanner.settings import load_settings
+from sepa_scanner.backtest.exit_engine import (
+    BarData,
+    ExitConfig,
+    TradeState,
+    evaluate_exit,
+)
+from sepa_scanner.backtest.models import ExitPhase
+from sepa_scanner.backtest.simulation import _build_exit_config, _rolling_mean, _rolling_min, _ema
+from sepa_scanner.strategy.ranking import (
+    add_signal_score,
+    add_signal_size_multiplier,
+    load_sector_map,
+    select_top_signals_by_day,
+)
+from sepa_scanner.settings import load_settings, AppSettings
 from sepa_scanner.storage.parquet_store import ParquetOhlcvStore
-from sepa_scanner.strategy.ranking import add_signal_score, add_signal_size_multiplier, select_top_signals_by_day
 
 try:
     import multibagger_core
@@ -81,6 +101,8 @@ class PendingSignal:
     rs_rank: float | None
     size_mult: float
     expiration_date: date
+    range10: float | None = None
+    voldry: float | None = None
 
 
 @dataclass(slots=True)
@@ -112,6 +134,12 @@ class OpenPosition:
     dead_money_extended: bool
     pyramid_adds_taken: int
     next_pyramid_r: float | None
+    phase: ExitPhase = ExitPhase.INITIAL_STOP
+    trail_mode: str = "adaptive"
+    tighten_activated: bool = False
+    rs_rank: float | None = None
+    range10: float | None = None
+    voldry: float | None = None
 
 
 def parse_args() -> argparse.Namespace:
@@ -199,14 +227,6 @@ def parse_tri_payload_text(text: str) -> list[dict[str, Any]]:
     return rows
 
 
-def load_sector_map(path: Path) -> dict[str, str]:
-    df = pl.read_csv(path).rename({"Industry": "sector", "Symbol": "symbol"})
-    return {
-        str(row["symbol"]): str(row["sector"])
-        for row in df.select("symbol", "sector").to_dicts()
-    }
-
-
 def resolve_exit_config(settings: Any) -> dict[str, Any]:
     return {
         "breakeven_activation_r": settings.exit_strategy.breakeven_activation_r,
@@ -267,7 +287,7 @@ def load_inputs(start_date: date, end_date: date) -> tuple[dict[str, Any], pl.Da
 
     params = BacktestParams(
         pending_days=settings.backtest.pending_days,
-        max_hold_days=settings.backtest.max_hold_days,
+        max_hold_days=max(settings.backtest.max_hold_days, 90),
         target_r=settings.risk.target_r,
         exit_mode=ExitMode(settings.backtest.exit_mode),
         trail_activation_r=settings.exit_strategy.trail_activation_r,
@@ -321,14 +341,39 @@ def build_symbol_data(ohlcv: pl.DataFrame) -> tuple[dict[str, dict[str, Any]], l
         highs = group["high"].to_list()
         lows = group["low"].to_list()
         closes = group["close"].to_list()
+        volumes = group["volume"].to_list() if "volume" in group.columns else [0] * len(closes)
         date_to_idx = {d: idx for idx, d in enumerate(dates)}
+
+        # Technical indicators for exit engine
+        sma_50 = _rolling_mean(closes, 50)
+        sma_200 = _rolling_mean(closes, 200)
+        ema_10 = _ema(closes, 10)
+        ema_21 = _ema(closes, 21)
+        ema_50 = _ema(closes, 50)
+        low_10d = _rolling_min(lows, 10)
+        prev_close = [0.0] + closes[:-1]
+        ranges = [h - l for h, l in zip(highs, lows)]
+        avg_range_20 = _rolling_mean(ranges, 20)
+        vol_floats = [float(v) for v in volumes]
+        avg_volume_50 = _rolling_mean(vol_floats, 50)
+
         by_symbol[symbol] = {
             "dates": dates,
             "opens": opens,
             "highs": highs,
             "lows": lows,
             "closes": closes,
+            "volumes": volumes,
             "date_to_idx": date_to_idx,
+            "sma_50": sma_50,
+            "sma_200": sma_200,
+            "ema_10": ema_10,
+            "ema_21": ema_21,
+            "ema_50": ema_50,
+            "low_10d": low_10d,
+            "prev_close": prev_close,
+            "avg_range_20": avg_range_20,
+            "avg_volume_50": avg_volume_50,
         }
     return by_symbol, unique_dates
 
@@ -416,19 +461,21 @@ def simulate_portfolio_python(
     print(f"Unique dates in simulation: {len(unique_dates)}")
     if unique_dates:
         print(f"Date range: {unique_dates[0]} to {unique_dates[-1]}")
-    exit_cfg = {
-        "breakeven_activation_r": 1.0,
-        "partial_profit_r": None,
-        "partial_profit_pct": 0.0,
-        "trail_pct_bull": params.trail_pct,
-        "trail_pct_bear": params.trail_pct,
-        "time_stop_days": None,
-        "max_hold_before_tighten": params.max_hold_days,
-    }
+    # Build phased exit config using sensible defaults.
+    # The settings file may have aggressive values tuned for the old inline engine
+    # (e.g. time_stop_days=2), so we use ExitConfig defaults and only override
+    # fields that are compatible with the phased exit approach.
+    phased_exit_config = ExitConfig()
     if exit_config:
+        safe_overrides = {
+            "breakeven_activation_r", "partial_profit_r", "partial_profit_pct",
+            "trail_pct_bull", "trail_pct_bear", "trail_pct",
+            "climax_min_hold_days", "climax_conditions_required",
+        }
         for key, value in exit_config.items():
-            if value is not None:
-                exit_cfg[key] = value
+            if value is not None and key in safe_overrides and hasattr(phased_exit_config, key):
+                setattr(phased_exit_config, key, type(getattr(phased_exit_config, key))(value))
+
     entry_gate = entry_gate or {}
     entry_size_mult = entry_size_mult or {}
 
@@ -457,161 +504,131 @@ def simulate_portfolio_python(
 
             idx = sym_prices["date_to_idx"].get(today)
             if idx is not None:
-                open_price = sym_prices["opens"][idx]
-                high_price = sym_prices["highs"][idx]
-                low_price = sym_prices["lows"][idx]
-                close_price = sym_prices["closes"][idx]
+                open_price = float(sym_prices["opens"][idx])
+                high_price = float(sym_prices["highs"][idx])
+                low_price = float(sym_prices["lows"][idx])
+                close_price = float(sym_prices["closes"][idx])
                 holding_days = (today - pos.entry_date).days
                 market_hostile = not bool(entry_gate.get(today, True))
 
                 pos.mae_price = min(pos.mae_price, low_price)
                 pos.mfe_price = max(pos.mfe_price, high_price)
 
+                # --- Gap-down stop: if open gaps below stop, exit at open ---
+                if open_price <= pos.active_stop:
+                    cash += pos.shares * open_price
+                    closed_trades.append(
+                        close_trade_dict(
+                            symbol=pos.symbol, signal_date=pos.signal_date,
+                            status="stopped", entry_ref=pos.entry_ref,
+                            stop=pos.stop, pivot=pos.pivot,
+                            entry_date=pos.entry_date, entry_price=pos.entry_price,
+                            exit_date=today, exit_price=open_price,
+                            holding_days=holding_days,
+                            mae_price=pos.mae_price, mfe_price=pos.mfe_price,
+                            shares=pos.shares, sector=analysis_sector_map.get(pos.symbol, "UNKNOWN"),
+                            original_shares=pos.original_shares, realized_pnl=pos.realized_pnl,
+                            rs_rank=pos.rs_rank, range10=pos.range10, voldry=pos.voldry,
+                        )
+                    )
+                    open_positions.pop(i)
+                    continue
+
+                # --- Build TradeState from OpenPosition ---
+                trade_state = TradeState(
+                    symbol=pos.symbol,
+                    entry_date=pos.entry_date,
+                    entry_price=pos.entry_price,
+                    initial_risk=pos.initial_risk,
+                    initial_stop=pos.stop,
+                    planned_shares=int(pos.original_shares),
+                    phase=pos.phase,
+                    current_shares=int(pos.shares),
+                    active_stop=pos.active_stop,
+                    highest_close=pos.mfe_price,
+                    trail_mode=pos.trail_mode,
+                    breakeven_activated=pos.breakeven_activated,
+                    partial_taken=pos.partial_taken,
+                    trail_activated=pos.trail_activated,
+                    tighten_activated=pos.tighten_activated,
+                    days_held=holding_days - 1,  # evaluate_exit increments by 1
+                )
+
+                # --- Build BarData from symbol_data ---
+                bar = BarData(
+                    open=open_price,
+                    high=high_price,
+                    low=low_price,
+                    close=close_price,
+                    volume=int(sym_prices["volumes"][idx]),
+                    sma_50=float(sym_prices["sma_50"][idx]),
+                    sma_200=float(sym_prices["sma_200"][idx]),
+                    ema_10=float(sym_prices["ema_10"][idx]),
+                    ema_21=float(sym_prices["ema_21"][idx]),
+                    ema_50=float(sym_prices["ema_50"][idx]),
+                    low_10d=float(sym_prices["low_10d"][idx]),
+                    prev_close=float(sym_prices["prev_close"][idx]),
+                    avg_range_20=float(sym_prices["avg_range_20"][idx]),
+                    avg_volume_50=float(sym_prices["avg_volume_50"][idx]),
+                )
+
+                # --- Call phased exit engine ---
+                market_regime = "defensive" if market_hostile else "bull"
+                actions = evaluate_exit(
+                    trade_state,
+                    bar=bar,
+                    config=phased_exit_config,
+                    market_regime=market_regime,
+                    rs_rank=80.0,
+                )
+
+                # --- Sync state back to OpenPosition ---
+                pos.phase = trade_state.phase
+                pos.active_stop = trade_state.active_stop
+                pos.breakeven_activated = trade_state.breakeven_activated
+                pos.partial_taken = trade_state.partial_taken
+                pos.trail_activated = trade_state.trail_activated
+                pos.tighten_activated = trade_state.tighten_activated
+                pos.trail_mode = trade_state.trail_mode
+                pos.mfe_price = max(pos.mfe_price, trade_state.highest_close)
+
+                # --- Process actions ---
                 exit_price: float | None = None
                 status = ""
-
-                if open_price <= pos.active_stop:
-                    exit_price = open_price
-                    status = "stopped"
-                elif pos.target_price is not None:
-                    if open_price >= pos.target_price:
-                        exit_price = open_price
-                        status = "target"
-                    elif high_price >= pos.target_price and low_price <= pos.active_stop:
-                        exit_price = pos.active_stop
-                        status = "stopped"
-                    elif low_price <= pos.active_stop:
-                        exit_price = pos.active_stop
-                        status = "stopped"
-                    elif high_price >= pos.target_price:
-                        exit_price = pos.target_price
-                        status = "target"
-                elif low_price <= pos.active_stop:
-                    exit_price = pos.active_stop
-                    status = "stopped"
-
-                risk = pos.initial_risk
-                reached_1r = risk > 0.0 and high_price >= (pos.entry_price + risk)
-                if exit_price is None and risk > 0.0:
-                    breakeven_activation_r = float(exit_cfg["breakeven_activation_r"])
-                    partial_profit_r = exit_cfg["partial_profit_r"]
-                    partial_profit_pct = float(exit_cfg["partial_profit_pct"])
-                    max_hold_before_tighten = int(exit_cfg["max_hold_before_tighten"])
-                    if not pos.breakeven_activated and high_price >= (pos.entry_price + (risk * breakeven_activation_r)):
-                        pos.breakeven_activated = True
-                        pos.active_stop = max(pos.active_stop, pos.entry_price)
-
-                    if (
-                        partial_profit_r is not None
-                        and partial_profit_pct > 0.0
-                        and not pos.partial_taken
-                        and pos.shares > 0.0
-                        and high_price >= (pos.entry_price + (risk * float(partial_profit_r)))
-                    ):
-                        partial_trigger_price = pos.entry_price + (risk * float(partial_profit_r))
-                        partial_fill_price = max(open_price, partial_trigger_price) if open_price >= partial_trigger_price else partial_trigger_price
-                        sell_shares = min(pos.shares, pos.shares * partial_profit_pct)
-                        if sell_shares > 0.0:
-                            cash += sell_shares * partial_fill_price
-                            pos.realized_pnl += sell_shares * (partial_fill_price - pos.entry_price)
+                for action in actions:
+                    if action.action == "SELL_ALL":
+                        exit_price = close_price
+                        status = action.reason
+                        break
+                    elif action.action == "SELL_PARTIAL":
+                        sell_shares = min(pos.shares, float(action.shares))
+                        if sell_shares > 0:
+                            cash += sell_shares * close_price
+                            pos.realized_pnl += sell_shares * (close_price - pos.entry_price)
                             pos.shares -= sell_shares
-                            pos.partial_taken = True
-                            pos.partial_exit_price = partial_fill_price
+                            pos.partial_exit_price = close_price
                             pos.partial_exit_date = today
-                            pos.partial_exit_r = (partial_fill_price - pos.entry_price) / risk
-                            pos.breakeven_activated = True
-                            pos.trail_activated = True
-                            pos.active_stop = max(pos.active_stop, pos.entry_price)
+                            pos.partial_exit_r = (close_price - pos.entry_price) / pos.initial_risk if pos.initial_risk > 0 else 0.0
 
-                    if not pos.trail_activated and high_price >= (pos.entry_price + (risk * params.trail_activation_r)):
-                        pos.trail_activated = True
-
-                    if pos.trail_activated:
-                        trail_pct = float(exit_cfg["trail_pct_bear"] if market_hostile else exit_cfg["trail_pct_bull"])
-                        if holding_days >= max_hold_before_tighten:
-                            trail_pct = min(trail_pct, max(0.05, trail_pct * 0.6))
-                        if params.exit_mode == ExitMode.ADVANCED_SEPA:
-                            if high_price >= (pos.entry_price + (risk * 3.0)):
-                                lookback = 10
-                                if idx >= lookback:
-                                    min_low = min(sym_prices["lows"][idx - lookback:idx])
-                                    pos.active_stop = max(pos.active_stop, min_low)
-                                pos.active_stop = max(pos.active_stop, pos.entry_price + (risk * 2.0))
-                        trail_price = pos.mfe_price * (1.0 - trail_pct)
-                        pos.active_stop = max(pos.active_stop, trail_price)
-
-                if reached_1r:
-                    pos.breakeven_activated = True
-                
-                # Velocity Sniper: Soft Expiry at 30 days
-                if exit_price is None and holding_days == 30:
-                    gain_pct = (close_price - pos.entry_price) / pos.entry_price if pos.entry_price > 0 else 0
-                    soft_expiry_gain = float(exit_cfg.get("soft_expiry_gain", 0.20))
-                    if gain_pct < soft_expiry_gain:
-                        exit_price = close_price
-                        status = "soft_expiry"
-                    else:
-                        # Stock is a monster, tighten trail to 10d low
-                        pos.trail_activated = True
-                        lookback = 10
-                        if idx >= lookback:
-                            min_low = min(sym_prices["lows"][idx - lookback:idx])
-                            pos.active_stop = max(pos.active_stop, min_low)
-
-                if exit_price is None and exit_cfg["time_stop_days"] is not None and not pos.breakeven_activated and holding_days >= int(exit_cfg["time_stop_days"]):
-                    exit_price = close_price
-                    status = "time_stop"
-                if (
-                    exit_price is None
-                    and pos.dead_money_deadline_days is not None
-                    and not pos.breakeven_activated
-                    and not reached_1r
-                    and holding_days >= pos.dead_money_deadline_days
-                ):
-                    open_r = ((close_price - pos.entry_price) / risk) if risk > 0.0 else None
-                    mfe_r = ((pos.mfe_price - pos.entry_price) / risk) if risk > 0.0 else None
-                    can_extend_dead_money = (
-                        not pos.dead_money_extended
-                        and params.dead_money_extend_days > 0
-                        and open_r is not None
-                        and mfe_r is not None
-                        and open_r >= params.dead_money_min_open_r
-                        and mfe_r >= params.dead_money_min_mfe_r
-                    )
-                    if can_extend_dead_money:
-                        pos.dead_money_deadline_days += params.dead_money_extend_days
-                        pos.dead_money_extended = True
-                        if params.dead_money_extend_to_breakeven:
-                            pos.active_stop = max(pos.active_stop, pos.entry_price)
-                            pos.breakeven_activated = True
-                    else:
-                        exit_price = close_price
-                        status = "dead_money"
+                # --- Hard max hold cap ---
                 if exit_price is None and holding_days >= params.max_hold_days:
                     exit_price = close_price
-                    status = "time_stop"
+                    status = "max_hold"
 
                 if exit_price is not None:
                     cash += pos.shares * exit_price
                     closed_trades.append(
                         close_trade_dict(
-                            symbol=pos.symbol,
-                            signal_date=pos.signal_date,
-                            status=status,
-                            entry_ref=pos.entry_ref,
-                            stop=pos.stop,
-                            pivot=pos.pivot,
-                            entry_date=pos.entry_date,
-                            entry_price=pos.entry_price,
-                            exit_date=today,
-                            exit_price=exit_price,
+                            symbol=pos.symbol, signal_date=pos.signal_date,
+                            status=status, entry_ref=pos.entry_ref,
+                            stop=pos.stop, pivot=pos.pivot,
+                            entry_date=pos.entry_date, entry_price=pos.entry_price,
+                            exit_date=today, exit_price=exit_price,
                             holding_days=holding_days,
-                            mae_price=pos.mae_price,
-                            mfe_price=pos.mfe_price,
-                            shares=pos.shares,
-                            sector=analysis_sector_map.get(pos.symbol, "UNKNOWN"),
-                            original_shares=pos.original_shares,
-                            realized_pnl=pos.realized_pnl,
+                            mae_price=pos.mae_price, mfe_price=pos.mfe_price,
+                            shares=pos.shares, sector=analysis_sector_map.get(pos.symbol, "UNKNOWN"),
+                            original_shares=pos.original_shares, realized_pnl=pos.realized_pnl,
+                            rs_rank=pos.rs_rank, range10=pos.range10, voldry=pos.voldry,
                         )
                     )
                     open_positions.pop(i)
@@ -664,6 +681,7 @@ def simulate_portfolio_python(
                         sector=analysis_sector_map.get(pos.symbol, "UNKNOWN"),
                         original_shares=pos.original_shares,
                         realized_pnl=pos.realized_pnl,
+                        rs_rank=pos.rs_rank, range10=pos.range10, voldry=pos.voldry,
                     )
                 )
 
@@ -686,6 +704,8 @@ def simulate_portfolio_python(
                         rs_rank=sig["rs_rank"],
                         size_mult=float(sig.get("signal_size_mult", 1.0) or 1.0),
                         expiration_date=today + timedelta(days=params.pending_days),
+                        range10=float(sig["range10"]) if sig.get("range10") is not None else None,
+                        voldry=float(sig["voldry"]) if sig.get("voldry") is not None else None,
                     )
                 )
 
@@ -929,6 +949,9 @@ def simulate_portfolio_python(
                                             if int(portfolio.get("pyramid_max_adds", 0) or 0) > 0
                                             else None
                                         ),
+                                        rs_rank=pending.rs_rank,
+                                        range10=pending.range10,
+                                        voldry=pending.voldry,
                                     )
                                 )
                                 marked_sector_values[sector] += cost
@@ -1006,6 +1029,7 @@ def simulate_portfolio_python(
                     sector=analysis_sector_map.get(pos.symbol, "UNKNOWN"),
                     original_shares=pos.original_shares,
                     realized_pnl=pos.realized_pnl,
+                    rs_rank=pos.rs_rank, range10=pos.range10, voldry=pos.voldry,
                 )
             )
 
@@ -1040,6 +1064,8 @@ def build_signal_rows(signals: pl.DataFrame) -> list[dict[str, Any]]:
                 "stop": float(row["stop"]),
                 "pivot": float(row["pivot"]) if row.get("pivot") is not None else None,
                 "rs_rank": float(row["rs_rank"]) if row.get("rs_rank") is not None else None,
+                "range10": float(row["range10"]) if row.get("range10") is not None else None,
+                "voldry": float(row["voldry"]) if row.get("voldry") is not None else None,
                 "signal_size_mult": float(row.get("signal_size_mult", 1.0) or 1.0),
             }
         )
@@ -1088,6 +1114,9 @@ def close_trade_dict(
     sector: str,
     original_shares: float | None = None,
     realized_pnl: float = 0.0,
+    rs_rank: float | None = None,
+    range10: float | None = None,
+    voldry: float | None = None,
 ) -> dict[str, Any]:
     risk = entry_price - stop
     total_shares = original_shares if original_shares is not None else shares
@@ -1111,6 +1140,9 @@ def close_trade_dict(
         "shares": total_shares,
         "pnl": pnl,
         "sector": sector,
+        "rs_rank": rs_rank,
+        "range10": range10,
+        "voldry": voldry,
     }
 
 
@@ -1439,6 +1471,7 @@ def filter_signals(
     quality_profile: str = "default",
     quality_overrides: dict[str, Any] | None = None,
 ) -> pl.DataFrame:
+    original_columns = list(signals.columns)
     quality_filters = resolve_signal_quality_filters(
         quality_profile=quality_profile,
         overrides=quality_overrides,
@@ -1507,7 +1540,10 @@ def filter_signals(
     print(f"Signals after daily ranking: {ranked.height}")
     ranked = apply_signal_size_tilt(ranked, diagnostics, **size_tilt_config)
     
-    return ranked.select(pl.all().exclude(["_signal_score"]))
+    output_columns = [column for column in original_columns if column in ranked.columns]
+    if "signal_size_mult" in ranked.columns and "signal_size_mult" not in output_columns:
+        output_columns.append("signal_size_mult")
+    return ranked.select(output_columns)
 
 
 def build_entry_controls(

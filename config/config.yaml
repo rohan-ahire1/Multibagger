@@ -63,17 +63,19 @@ risk:
   target_r: null
 
 backtest:
-  pending_days: 5           # was 2 — give breakouts more room to develop
-  max_hold_days: 60         # capital release — velocity beats duration at 0.5% risk
-  exit_mode: baseline_ema21 # options: baseline_hard | baseline_ema10 | baseline_ema21
+  pending_days: 5
+  max_hold_days: 60
+  exit_mode: baseline_ema21
   use_regime_entry_controls: false
   use_extended_exit_model: false
   max_signals_per_day: 20
-  signal_ranking_mode: default  # plain RS rank — no sector alpha
-  rs_rank_min: 40
+  signal_ranking_mode: default
+  rs_rank_min: 70
   rs_rank_max: 100.0
   sector_alpha_enabled: false
-  skip_months: [1]           # January has 18.9% win rate — structural drain
+  skip_months: [1]
+  signal_quality_range10_max: 0.08
+  signal_quality_voldry_max: 1.0
 
 alerts:
   max_alerts_per_day: 50
@@ -87,23 +89,21 @@ market_filter:
   breadth_weak_pct: 0.20
 
 portfolio:
-  max_positions: 20          # was 8 — 0.5% risk × 20 = 10% total at risk, plenty of room
+  max_positions: 20
   max_sector_positions: 4
   initial_capital: 1000000
-  risk_per_trade_pct: 0.005  # 0.5% risk per trade (book: 0.5% of capital)
+  risk_per_trade_pct: 0.005
   max_heat_pct: 1.0
   max_sector_pct: 1.0
-  drawdown_half_pct: 0.50    # effectively off
+  drawdown_half_pct: 0.50
   drawdown_stop_pct: 0.60
   drawdown_close_pct: 0.70
   regime_gate_enabled: true
-  pyramid_max_adds: 0        # no pyramiding in baseline
+  pyramid_max_adds: 0
 
 watchlist:
   max_candidates: 1000
 
 exit_strategy:
-  # Baseline modes (baseline_hard / baseline_ema10 / baseline_ema21) ignore most
-  # of these — only max_loss_pct matters as the hard stop floor.
   max_loss_pct: 0.07
   absolute_max_loss_pct: 0.07
