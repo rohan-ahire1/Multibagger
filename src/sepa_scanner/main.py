@@ -17,7 +17,7 @@ import polars as pl
 import typer
 
 from sepa_scanner.backtest.engine import simulate_breakout_backtest
-from sepa_scanner.backtest.metrics import build_equity_curve, summarize_backtest
+from sepa_scanner.backtest.metrics import build_equity_curve, estimate_compounded_cagr, summarize_backtest
 from sepa_scanner.backtest.models import BacktestParams, BacktestReport, ExitMode
 from sepa_scanner.backtest.portfolio import PortfolioManager
 from sepa_scanner.backtest.regime_gate import compute_regime_gate, gate_lookup
@@ -551,7 +551,7 @@ def run_backtest_command(
     target_r: float | None,
     symbol: str | None,
     export_csv: bool,
-    use_rust: bool = True,
+    use_rust: bool = False,
     use_portfolio: bool = False,
     max_positions: int | None = None,
 ) -> BacktestReport:
@@ -602,6 +602,11 @@ def run_backtest_command(
         symbol=symbol,
     )
 
+    if settings.backtest.skip_months:
+        signals = signals.filter(
+            ~pl.col("signal_date").dt.month().is_in(settings.backtest.skip_months)
+        )
+
     if signals.is_empty():
         return BacktestReport(
             params=params,
@@ -628,6 +633,12 @@ def run_backtest_command(
     )
     trades = _trade_frame(result.trades)
     summary = summarize_backtest(result.trades, exit_mode=params.exit_mode)
+    summary.final_equity_multiple, summary.cagr_pct = estimate_compounded_cagr(
+        result.trades,
+        start_date=start_date,
+        end_date=end_date,
+        risk_per_trade_pct=settings.portfolio.risk_per_trade_pct,
+    )
     equity_curve = build_equity_curve(result.trades)
 
     if export_csv and not trades.is_empty():
@@ -818,7 +829,7 @@ def backtest_command(
     max_positions: int | None = typer.Option(None, help="Max concurrent positions"),
     symbol: str | None = typer.Option(None, help="Optional symbol filter"),
     export_csv: bool = typer.Option(False, help="Export the trade table as CSV"),
-    use_rust: bool = typer.Option(True, help="Use the high-performance Rust engine"),
+    use_rust: bool = typer.Option(False, help="Use the high-performance Rust engine"),
     portfolio: bool = typer.Option(False, "--portfolio", help="Run with portfolio capital simulation (Money Mode)"),
     config_dir: Path | None = typer.Option(None, help="Override config directory"),
     ) -> None:
@@ -852,6 +863,10 @@ def backtest_command(
     typer.echo(f"cumulative_r: {s.cumulative_r:.4f}")
     typer.echo(f"expectancy: {s.expectancy:+.4f}R" if s.expectancy is not None else "expectancy: N/A")
     typer.echo(f"max_drawdown: {s.max_drawdown:.2f}R")
+    final_equity_multiple = getattr(s, "final_equity_multiple", None)
+    cagr_pct = getattr(s, "cagr_pct", None)
+    typer.echo(f"final_equity_multiple: {final_equity_multiple:.4f}x" if final_equity_multiple is not None else "final_equity_multiple: N/A")
+    typer.echo(f"cagr: {cagr_pct:.2f}%" if cagr_pct is not None else "cagr: N/A")
     typer.echo(f"exit_mode: {s.exit_mode}")
 
 

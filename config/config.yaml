@@ -73,6 +73,7 @@ backtest:
   rs_rank_min: 40
   rs_rank_max: 100.0
   sector_alpha_enabled: false
+  skip_months: [1]           # January has 18.9% win rate — structural drain
 
 alerts:
   max_alerts_per_day: 50
@@ -95,7 +96,7 @@ portfolio:
   drawdown_half_pct: 0.50    # effectively off
   drawdown_stop_pct: 0.60
   drawdown_close_pct: 0.70
-  regime_gate_enabled: false
+  regime_gate_enabled: true
   pyramid_max_adds: 0        # no pyramiding in baseline
 
 watchlist:

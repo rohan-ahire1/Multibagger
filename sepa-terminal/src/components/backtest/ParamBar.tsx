@@ -118,6 +118,18 @@ export function ParamBar() {
         />
       </div>
 
+      <div className="flex items-center gap-1.5">
+        <label className="text-[10px] uppercase tracking-wider text-zinc-500">Exit</label>
+        <select
+          value={params.exitEngine}
+          onChange={(e) => setParams({ exitEngine: e.target.value as 'minervini_phased' | 'advanced_sepa' })}
+          className="text-xs bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-zinc-200 font-mono focus:outline-none focus:border-zinc-500 appearance-none cursor-pointer"
+        >
+          <option value="minervini_phased">Phased</option>
+          <option value="advanced_sepa">Advanced (75x)</option>
+        </select>
+      </div>
+
       <button
         onClick={handleRun}
         disabled={isRunning || !latestScanDate}

@@ -12,13 +12,13 @@ export const DATA_START_DATE = '2010-01-01'
 function defaultParams(): BacktestParams {
   return {
     startDate: DATA_START_DATE,
-    endDate: DATA_START_DATE,
-    exitMode: 'minervini_phased',
+    endDate: '2026-03-24', // Full period to match 75x benchmark
+    exitMode: 'advanced_sepa',
     targetR: null,
-    pendingDays: 8,
-    maxHoldDays: 150,
+    pendingDays: 2,
+    maxHoldDays: 21,
     trailActivationR: 1.5,
-    exitEngine: 'minervini_phased',
+    exitEngine: 'advanced_sepa',
   }
 }
 

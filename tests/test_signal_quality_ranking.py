@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 import polars as pl
 
@@ -12,6 +13,18 @@ from scripts.portfolio_diagnostics import filter_signals, simulate_portfolio_pyt
 from sepa_scanner.backtest.models import BacktestParams, ExitMode
 from sepa_scanner.backtest.signal_scorecard import compute_scorecard
 from sepa_scanner.strategy.ranking import add_signal_score, add_signal_size_multiplier
+
+
+def _settings() -> SimpleNamespace:
+    return SimpleNamespace(
+        backtest=SimpleNamespace(
+            sector_alpha_enabled=False,
+            sector_alpha_threshold_high=85.0,
+            sector_alpha_threshold_low=60.0,
+            sector_alpha_mult_high=1.2,
+            sector_alpha_mult_low=0.8,
+        )
+    )
 
 
 def test_offense_v2_ranking_prefers_richer_setup_quality() -> None:
@@ -61,6 +74,7 @@ def test_offense_v2_ranking_prefers_richer_setup_quality() -> None:
 
     ranked = filter_signals(
         signals,
+        settings=_settings(),
         diagnostics=diagnostics,
         ranking_mode="offense_v2",
         max_signals_per_day=1,
@@ -118,6 +132,7 @@ def test_offense_v2_score_threshold_filters_using_diagnostics() -> None:
 
     ranked = filter_signals(
         signals,
+        settings=_settings(),
         diagnostics=diagnostics,
         ranking_mode="offense_v2",
         quality_overrides={"offense_score_min": 7.0},
@@ -173,6 +188,7 @@ def test_offense_v2_size_tilt_assigns_larger_multiplier_to_better_setups() -> No
 
     ranked = filter_signals(
         signals,
+        settings=_settings(),
         diagnostics=diagnostics,
         ranking_mode="offense_v2",
         quality_overrides={

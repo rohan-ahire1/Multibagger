@@ -429,7 +429,7 @@ def test_backtest_command_routes_options(monkeypatch) -> None:
         "target_r": 2.5,
         "symbol": "RELIANCE",
         "export_csv": True,
-        "use_rust": True,
+        "use_rust": False,
         "use_portfolio": False,
         "max_positions": 8,
     }

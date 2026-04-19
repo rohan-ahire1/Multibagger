@@ -1,6 +1,17 @@
 from __future__ import annotations
 
+from pathlib import Path
 import polars as pl
+
+
+def load_sector_map(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    df = pl.read_csv(path).rename({"Industry": "sector", "Symbol": "symbol"})
+    return {
+        str(row["symbol"]): str(row["sector"])
+        for row in df.select("symbol", "sector").to_dicts()
+    }
 
 
 def _clamp01(expr: pl.Expr) -> pl.Expr:

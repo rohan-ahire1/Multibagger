@@ -19,6 +19,8 @@ def finalize_regime_gate(
     high_volatility_threshold: float,
 ) -> pl.DataFrame:
     """Convert raw regime features into a daily entry gate."""
+    if "is_macro_bull" not in features.columns:
+        features = features.with_columns(pl.lit(True).alias("is_macro_bull"))
     return (
         features.sort("date")
         .with_columns(

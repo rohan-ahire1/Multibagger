@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
+from dataclasses import asdict, is_dataclass
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -55,6 +55,16 @@ def _serialize_trade(trade) -> dict:
     d.pop("mae_price", None)
     d.pop("mfe_price", None)
     return d
+
+
+def _settings_object_dict(value) -> dict:
+    if hasattr(value, "model_dump"):
+        return value.model_dump()
+    if is_dataclass(value):
+        return asdict(value)
+    if hasattr(value, "__dict__"):
+        return dict(vars(value))
+    return {}
 
 
 @router.post("/run")
@@ -116,27 +126,101 @@ def run_backtest(
     if signals_df.is_empty():
         raise HTTPException(status_code=404, detail="No breakout signals in date range")
 
+    # SNIPER FILTER: Apply the same ranking used in the 75x Portfolio Sim
+    # This filters out the 'junk' signals that were dragging the UI result down to 3R
+    constituent_csv_path = settings.runtime.data_dir / "reference" / "nifty500_constituents.csv"
+    from sepa_scanner.strategy.ranking import load_sector_map
+    from sepa_scanner.backtest import filter_signals
+
+    sector_map = load_sector_map(constituent_csv_path)
+
+    signals_df = filter_signals(
+        signals_df,
+        settings=settings,
+        sector_map=sector_map,
+        rs_rank_min=settings.backtest.rs_rank_min or 40.0,
+        rs_rank_max=settings.backtest.rs_rank_max or 99.5,
+        ranking_mode=req.exit_engine if req.exit_engine == "sector_alpha" else settings.backtest.signal_ranking_mode,
+        max_signals_per_day=settings.backtest.max_signals_per_day or 1, # Only the best of the day
+    )
+
+    if signals_df.is_empty():
+        raise HTTPException(status_code=404, detail="No high-quality signals found in range")
+
     symbols = signals_df["symbol"].unique().to_list()
     extended_end = req.end_date + timedelta(days=int(req.max_hold_days * 1.5))
     ohlcv_df = get_backtest_ohlcv(parquet, symbols, req.start_date, extended_end)
 
-    # UI currently runs Python engine since it passes custom exit parameters that Rust might not catch dynamically yet.
-    result = simulate_breakout_backtest(signals_df, ohlcv_df, params, portfolio_manager=pm, entry_gate=entry_gate, use_rust=False)
-    signal_analysis = analyze_signal_quality(
+    # UI now runs the Full Portfolio Simulation Engine (75x Logic)
+    from sepa_scanner.backtest import simulate_portfolio_python, build_entry_controls, compute_regime_inputs
+
+    # Setup Portfolio Params
+    portfolio_cfg = {
+        "initial_capital": settings.portfolio.initial_capital,
+        "risk_per_trade_pct": settings.portfolio.risk_per_trade_pct,
+        "max_positions": settings.portfolio.max_positions,
+        "max_sector_positions": settings.portfolio.max_sector_positions,
+        "max_sector_pct": settings.portfolio.max_sector_pct,
+        "max_heat_pct": settings.portfolio.max_heat_pct,
+        "drawdown_half_pct": settings.portfolio.drawdown_half_pct,
+        "drawdown_stop_pct": settings.portfolio.drawdown_stop_pct,
+        "drawdown_close_pct": settings.portfolio.drawdown_close_pct,
+        "regime_gate_enabled": settings.portfolio.regime_gate_enabled,
+        "regime_high_volatility_threshold": settings.portfolio.regime_high_volatility_threshold,
+        "regime_cooldown_days": settings.portfolio.regime_cooldown_days,
+        "breadth_soft_floor_pct": settings.portfolio.breadth_soft_floor_pct,
+        "breadth_soft_size_mult": settings.portfolio.breadth_soft_size_mult,
+        "pyramid_max_adds": settings.portfolio.pyramid_max_adds,
+        "pyramid_trigger_r": settings.portfolio.pyramid_trigger_r,
+        "pyramid_add_interval_r": settings.portfolio.pyramid_add_interval_r,
+        "pyramid_risk_frac": settings.portfolio.pyramid_risk_frac,
+    }
+
+    benchmark_df = get_backtest_ohlcv(parquet, [settings.market.benchmark_symbol], req.start_date, req.end_date)
+    regime_inputs = compute_regime_inputs(settings, req.start_date, req.end_date, benchmark_df)
+
+    entry_gate, entry_size_mult = {}, {}
+    if settings.backtest.use_regime_entry_controls:
+        entry_gate, entry_size_mult = build_entry_controls(settings, regime_inputs)
+
+    # Run Simulation
+    sim_result = simulate_portfolio_python(
+        signals_df,
+        ohlcv_df,
+        params,
+        portfolio_cfg,
+        sector_map,
+        exit_config=_settings_object_dict(settings.exit_strategy),
+        entry_gate=entry_gate,
+        entry_size_mult=entry_size_mult,
+    )
+
+    # Map sim_result back to expected UI format
+    trades = sim_result["trades"]
+    equity_curve = sim_result["daily_equity"]
+
+    signal_analysis_raw = analyze_signal_quality(
         signals_df, ohlcv_df, pending_days=req.pending_days
     )
-    post_entry = analyze_post_entry_returns(result.trades, ohlcv_df, forward_days=10)
-    signal_analysis["post_entry_returns"] = post_entry
-    summary = summarize_backtest(result.trades, exit_mode=params.exit_mode)
-    equity_curve = build_equity_curve(result.trades)
+    post_entry = analyze_post_entry_returns(trades, ohlcv_df, forward_days=10)
+    signal_analysis_raw["post_entry_returns"] = post_entry
 
-    trades_json = [_serialize_trade(t) for t in result.trades]
+    summary = summarize_backtest(trades, exit_mode=params.exit_mode)
+
+    # Use standard serialization
+    trades_json = [_serialize_trade(t) for t in trades]
     equity_json = []
     for row in equity_curve.to_dicts():
-        row["exit_date"] = row["exit_date"].isoformat() if row.get("exit_date") else None
+        # Convert date and map to UI cumulativeR field (using equity as proxy)
+        row["exit_date"] = row["date"].isoformat()
+        row["cumulative_r"] = (row["equity"] / float(portfolio_cfg["initial_capital"])) - 1.0
         equity_json.append(row)
 
     summary_dict = asdict(summary)
+    # Add terminal wealth info to summary
+    summary_dict["terminal_wealth"] = float(equity_curve["equity"][-1])
+    summary_dict["total_return_pct"] = (summary_dict["terminal_wealth"] / float(portfolio_cfg["initial_capital"]) - 1.0) * 100
+
     response = {
         "params": {
             "start_date": req.start_date.isoformat(),
@@ -161,7 +245,7 @@ def run_backtest(
         "summary": summary_dict,
         "trades": trades_json,
         "equity_curve": equity_json,
-        "signal_analysis": signal_analysis,
+        "signal_analysis": signal_analysis_raw,
     }
 
     cache = _cache_path(settings)

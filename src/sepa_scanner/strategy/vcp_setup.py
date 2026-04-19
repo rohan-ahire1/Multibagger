@@ -30,11 +30,18 @@ def add_setup_columns(frame: pl.DataFrame, cfg: SetupVcpSettings) -> pl.DataFram
         "base_depth_ok",
     ]
 
-    if cfg.contraction_min_count > 0 and "contraction_count" in result.columns:
-        result = result.with_columns(
-            (pl.col("contraction_count") >= cfg.contraction_min_count).alias("contraction_ok"),
-        )
-        gate_cols.append("contraction_ok")
+    if "contraction_count" in result.columns:
+        conds = []
+        if cfg.contraction_min_count > 0:
+            conds.append(pl.col("contraction_count") >= cfg.contraction_min_count)
+        if cfg.contraction_max_count < 99:
+            conds.append(pl.col("contraction_count") <= cfg.contraction_max_count)
+            
+        if conds:
+            result = result.with_columns(
+                pl.all_horizontal(*conds).alias("contraction_ok")
+            )
+            gate_cols.append("contraction_ok")
 
     result = result.with_columns(
         pl.all_horizontal(*gate_cols).alias("setup_pass")

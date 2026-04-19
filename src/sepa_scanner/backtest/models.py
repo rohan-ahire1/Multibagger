@@ -138,6 +138,8 @@ class BacktestSummary:
     pct_reaching_partial: float = 0.0
     pct_reaching_trail: float = 0.0
     exit_engine: str = "minervini_phased"
+    final_equity_multiple: float | None = None
+    cagr_pct: float | None = None
 
 
 @dataclass(slots=True)

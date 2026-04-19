@@ -110,12 +110,12 @@ export interface ChartOverlays {
 export interface BacktestParams {
   startDate: string
   endDate: string
-  exitMode: 'minervini_phased'
+  exitMode: 'minervini_phased' | 'advanced_sepa'
   targetR: number | null
   pendingDays: number
   maxHoldDays: number
   trailActivationR: number
-  exitEngine: 'minervini_phased'
+  exitEngine: 'minervini_phased' | 'advanced_sepa'
 }
 
 export interface BacktestTrade {

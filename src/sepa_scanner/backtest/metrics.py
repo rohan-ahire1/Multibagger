@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from math import prod
 from statistics import median
 
 import polars as pl
@@ -50,6 +51,36 @@ def build_equity_curve(
             }
         )
     return pl.DataFrame(rows)
+
+
+def estimate_compounded_cagr(
+    trades: list[BacktestTrade],
+    *,
+    start_date: date,
+    end_date: date,
+    risk_per_trade_pct: float,
+) -> tuple[float | None, float | None]:
+    """Estimate capital CAGR by compounding closed trade R results.
+
+    The backtest engine reports R-multiple results. This converts those R
+    results into an equity multiple using the configured fixed risk per trade.
+    """
+    closed_trades = sorted(
+        _closed_trades(trades),
+        key=lambda trade: (trade.exit_date, trade.symbol, trade.signal_date),
+    )
+    years = (end_date - start_date).days / 365.25
+    if years <= 0 or risk_per_trade_pct <= 0:
+        return None, None
+
+    final_multiple = prod(
+        1.0 + risk_per_trade_pct * float(trade.r_multiple)
+        for trade in closed_trades
+    ) if closed_trades else 1.0
+    if final_multiple <= 0:
+        return final_multiple, None
+    cagr_pct = ((final_multiple ** (1.0 / years)) - 1.0) * 100.0
+    return final_multiple, cagr_pct
 
 
 def summarize_backtest(

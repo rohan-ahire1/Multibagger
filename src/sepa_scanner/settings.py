@@ -70,6 +70,7 @@ class SetupVcpSettings(BaseModel):
     contraction_smooth_window: int = 5
     contraction_min_peak_pct: float = 0.02
     contraction_min_count: int = 2
+    contraction_max_count: int = 99  # New: Filter out exhaustion
     contraction_standard_count: int = 3  # for high-conviction signals
 
 
@@ -91,8 +92,8 @@ class RiskSettings(BaseModel):
 
 
 class BacktestSettings(BaseModel):
-    pending_days: int = 11
-    max_hold_days: int = 132
+    pending_days: int = 2
+    max_hold_days: int = 21
     exit_mode: str = "advanced_sepa"
     rs_rank_min: float | None = None
     rs_rank_max: float | None = None
@@ -117,6 +118,7 @@ class BacktestSettings(BaseModel):
     use_extended_exit_model: bool = False
     use_regime_entry_controls: bool = False
     sector_alpha_enabled: bool = True
+    skip_months: list[int] = []  # months to skip entirely, e.g. [1] for January
     sector_alpha_threshold_high: float = 85.0
     sector_alpha_threshold_low: float = 60.0
     sector_alpha_mult_high: float = 1.2

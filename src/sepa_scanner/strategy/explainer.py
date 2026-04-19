@@ -234,22 +234,27 @@ def explain_vcp_setup(
     ]
 
     contraction_count = int(_safe_float(diag, "contraction_count"))
-    if cfg.contraction_min_count > 0:
-        conditions.append(ConditionResult(
-            name="Contraction count",
-            passed=contraction_count >= cfg.contraction_min_count,
-            actual=str(contraction_count),
-            threshold=f">= {cfg.contraction_min_count}",
-            explanation="Successive narrowing contractions — the hallmark of a true VCP.",
-        ))
+    
+    passed_min = True if cfg.contraction_min_count == 0 else contraction_count >= cfg.contraction_min_count
+    passed_max = True if cfg.contraction_max_count >= 99 else contraction_count <= cfg.contraction_max_count
+    
+    threshold_str = ""
+    if cfg.contraction_min_count > 0 and cfg.contraction_max_count < 99:
+        threshold_str = f"{cfg.contraction_min_count} - {cfg.contraction_max_count}"
+    elif cfg.contraction_min_count > 0:
+        threshold_str = f">= {cfg.contraction_min_count}"
+    elif cfg.contraction_max_count < 99:
+        threshold_str = f"<= {cfg.contraction_max_count}"
     else:
-        conditions.append(ConditionResult(
-            name="Contraction count",
-            passed=True,
-            actual=str(contraction_count),
-            threshold="informational",
-            explanation="Successive narrowing contractions detected in the base (higher = better quality VCP).",
-        ))
+        threshold_str = "informational"
+
+    conditions.append(ConditionResult(
+        name="Contraction count",
+        passed=passed_min and passed_max,
+        actual=str(contraction_count),
+        threshold=threshold_str,
+        explanation="Successive narrowing contractions — the hallmark of a true VCP.",
+    ))
 
     passed = sum(1 for c in conditions if c.passed)
     return GateResult("VCP Setup", passed, len(conditions), conditions)
