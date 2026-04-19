@@ -417,11 +417,11 @@ def simulate_portfolio_python(
                             pos.partial_exit_date = today
                             pos.partial_exit_r = (close_price - pos.entry_price) / pos.initial_risk if pos.initial_risk > 0 else 0.0
 
-                # --- Hard max hold cap ---
+                # --- Hard max hold cap — unconditional capital release ---
                 if exit_price is None and holding_days >= params.max_hold_days:
                     exit_price = close_price
-                    status = "max_hold"
-                    exit_reason = "max_hold"
+                    status = "time_stop"
+                    exit_reason = "time_stop"
 
                 if exit_price is not None:
                     cash += pos.shares * exit_price

@@ -23,12 +23,20 @@ from sepa_scanner.backtest.exit_engine import (
     ExitConfig,
     TradeState,
     evaluate_exit,
+    evaluate_exit_baseline,
 )
 from sepa_scanner.backtest.models import BacktestParams, BacktestResult, BacktestTrade, ExitMode
 
 _MIN_SYMBOLS_FOR_PARALLEL = 8
+_EMA10_ALPHA = 2.0 / (10 + 1)
 _EMA21_ALPHA = 2.0 / (21 + 1)
 _EMA50_ALPHA = 2.0 / (50 + 1)
+_PYTHON_ONLY_EXIT_MODES = {
+    ExitMode.MINERVINI_PHASED,
+    ExitMode.BASELINE_HARD,
+    ExitMode.BASELINE_EMA10,
+    ExitMode.BASELINE_EMA21,
+}
 
 
 def _risk_per_share(entry_price: float, stop: float) -> float | None:
@@ -115,7 +123,7 @@ def _simulate_signal(
     params: BacktestParams,
     entry_filter: Callable[[date], bool] | None = None,
 ) -> BacktestTrade:
-    if params.exit_mode == ExitMode.MINERVINI_PHASED:
+    if params.exit_mode in _PYTHON_ONLY_EXIT_MODES:
         return _simulate_signal_phased(signal, symbol_prices, params, entry_filter=entry_filter)
     future_bars = [row for row in symbol_prices if row["date"] > signal["signal_date"]]
     if not future_bars:
@@ -396,6 +404,7 @@ def _simulate_signal_phased(
     low_buffer: list[float] = []
     volume_buffer: list[float] = []
     range_buffer: list[float] = []
+    ema10: float | None = None
     ema21: float | None = None
     ema50: float | None = None
     mae_price = entry_price
@@ -410,6 +419,10 @@ def _simulate_signal_phased(
         volume_buffer.append(float(pb.get("volume", 0)))
         h, l = float(pb["high"]), float(pb["low"])
         range_buffer.append((h - l) / l if l > 0 else 0)
+        if ema10 is None:
+            ema10 = c
+        else:
+            ema10 = _EMA10_ALPHA * c + (1 - _EMA10_ALPHA) * ema10
         if ema21 is None:
             ema21 = c
         else:
@@ -458,6 +471,10 @@ def _simulate_signal_phased(
             ema21 = close_price
         else:
             ema21 = _EMA21_ALPHA * close_price + (1 - _EMA21_ALPHA) * ema21
+        if ema10 is None:
+            ema10 = close_price
+        else:
+            ema10 = _EMA10_ALPHA * close_price + (1 - _EMA10_ALPHA) * ema10
         if ema50 is None:
             ema50 = close_price
         else:
@@ -477,6 +494,7 @@ def _simulate_signal_phased(
             volume=volume,
             sma_50=sma_50,
             sma_200=sma_200,
+            ema_10=ema10 or 0,
             ema_21=ema21 or 0,
             ema_50=ema50 or 0,
             low_10d=low_10d,
@@ -485,13 +503,24 @@ def _simulate_signal_phased(
             avg_volume_50=avg_volume_50,
         )
 
-        actions = evaluate_exit(
-            trade_state,
-            bar=bar_data,
-            config=exit_config,
-            market_regime=market_regime,
-            rs_rank=rs_rank,
-        )
+        if params.exit_mode in {
+            ExitMode.BASELINE_HARD,
+            ExitMode.BASELINE_EMA10,
+            ExitMode.BASELINE_EMA21,
+        }:
+            actions = evaluate_exit_baseline(
+                trade_state,
+                bar=bar_data,
+                exit_mode=params.exit_mode.value,
+            )
+        else:
+            actions = evaluate_exit(
+                trade_state,
+                bar=bar_data,
+                config=exit_config,
+                market_regime=market_regime,
+                rs_rank=rs_rank,
+            )
 
         for action in actions:
             if action.action == "SELL_ALL":
@@ -508,7 +537,7 @@ def _simulate_signal_phased(
         if final_exit_price is not None:
             break
 
-        # Max hold days
+        # Max hold days — unconditional capital release
         if holding_days >= params.max_hold_days:
             final_exit_price = close_price
             final_exit_date = bar["date"]
@@ -613,7 +642,7 @@ def simulate_breakout_backtest(
     ohlcv_df: pl.DataFrame,
     params: BacktestParams,
     portfolio_manager: PortfolioManager | None = None,
-    use_rust: bool = True,
+    use_rust: bool = False,
     entry_gate: Mapping[date, bool] | None = None,
 ) -> BacktestResult:
     signals = (
@@ -624,11 +653,18 @@ def simulate_breakout_backtest(
     if not signals:
         return BacktestResult(trades=[])
 
-    if use_rust and multibagger_core is not None:
+    if (
+        use_rust
+        and multibagger_core is not None
+        and params.exit_mode not in _PYTHON_ONLY_EXIT_MODES
+    ):
         try:
             return _simulate_with_rust(signals_df, ohlcv_df, params, portfolio_manager, entry_gate=entry_gate)
         except Exception as e:
             logger.warning(f"Rust backtest failed, falling back to Python: {e}")
+
+    if "volume" not in ohlcv_df.columns:
+        ohlcv_df = ohlcv_df.with_columns(pl.lit(0, dtype=pl.Int64).alias("volume"))
 
     ohlcv_rows = (
         ohlcv_df.sort(["symbol", "date"])
