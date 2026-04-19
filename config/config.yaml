@@ -76,6 +76,7 @@ backtest:
   skip_months: [1]
   signal_quality_range10_max: 0.08
   signal_quality_voldry_max: 1.0
+  signal_quality_setup_streak_max: 0   # fresh setups only — streak decays WR fast
 
 alerts:
   max_alerts_per_day: 50

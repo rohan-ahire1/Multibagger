@@ -1332,7 +1332,10 @@ def resolve_signal_quality_overrides(settings: Any) -> dict[str, Any]:
         "contraction_count_min": settings.backtest.signal_quality_contraction_min,
         "contraction_count_max": settings.backtest.signal_quality_contraction_max,
         "setup_active_streak_min": settings.backtest.signal_quality_setup_streak_min,
+        "setup_active_streak_max": settings.backtest.signal_quality_setup_streak_max,
+        "pivot_age_days_min": settings.backtest.signal_quality_pivot_age_min,
         "pivot_age_days_max": settings.backtest.signal_quality_pivot_age_max,
+        "vol_mult_min": settings.backtest.signal_quality_vol_mult_min,
         "offense_score_min": settings.backtest.signal_quality_offense_score_min,
         "offense_score_max": settings.backtest.signal_quality_offense_score_max,
         "size_tilt_mode": settings.backtest.signal_quality_size_tilt_mode,
@@ -1394,6 +1397,12 @@ def apply_signal_quality_filters(
         merged = merged.filter(
             pl.col("setup_active_streak") >= int(quality_filters["setup_active_streak_min"])
         )
+    if quality_filters.get("setup_active_streak_max") is not None:
+        merged = merged.filter(
+            pl.col("setup_active_streak") <= int(quality_filters["setup_active_streak_max"])
+        )
+    if quality_filters.get("pivot_age_days_min") is not None:
+        merged = merged.filter(pl.col("pivot_age_days") >= int(quality_filters["pivot_age_days_min"]))
     if quality_filters.get("pivot_age_days_max") is not None:
         merged = merged.filter(pl.col("pivot_age_days") <= int(quality_filters["pivot_age_days_max"]))
     offense_score_min = quality_filters.get("offense_score_min")
@@ -1515,14 +1524,20 @@ def filter_signals(
             .alias("signal_size_mult")
         )
 
+    vol_mult_min = quality_filters.pop("vol_mult_min", None)
+
     filtered = signals
     if rs_rank_min is not None and "rs_rank" in filtered.columns:
         filtered = filtered.filter(pl.col("rs_rank") >= float(rs_rank_min))
     print(f"Signals after RS rank filter ({rs_rank_min}): {filtered.height}")
-    
+
     if rs_rank_max is not None and "rs_rank" in filtered.columns:
         filtered = filtered.filter(pl.col("rs_rank") <= float(rs_rank_max))
-    
+
+    if vol_mult_min is not None and "vol_mult" in filtered.columns:
+        filtered = filtered.filter(pl.col("vol_mult") >= float(vol_mult_min))
+    print(f"Signals after vol_mult filter ({vol_mult_min}): {filtered.height}")
+
     filtered = apply_signal_quality_filters(
         filtered,
         diagnostics,

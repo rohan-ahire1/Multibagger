@@ -107,7 +107,10 @@ class BacktestSettings(BaseModel):
     signal_quality_contraction_min: int | None = None
     signal_quality_contraction_max: int | None = None
     signal_quality_setup_streak_min: int | None = None
+    signal_quality_setup_streak_max: int | None = None
+    signal_quality_pivot_age_min: int | None = None
     signal_quality_pivot_age_max: int | None = None
+    signal_quality_vol_mult_min: float | None = None
     signal_quality_offense_score_min: float | None = None
     signal_quality_offense_score_max: float | None = None
     signal_quality_size_tilt_mode: str = "off"
