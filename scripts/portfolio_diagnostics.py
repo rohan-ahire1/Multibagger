@@ -455,6 +455,8 @@ def simulate_portfolio_python(
     exit_config: dict[str, Any] | None = None,
     entry_gate: dict[date, bool] | None = None,
     entry_size_mult: dict[date, float] | None = None,
+    breakeven_activation_r: float = 1.0,
+    time_stop_days: int | None = None,
 ) -> dict[str, Any]:
     symbols = build_signal_rows(signals)
     symbol_data, unique_dates = build_symbol_data(ohlcv)
@@ -466,6 +468,9 @@ def simulate_portfolio_python(
     # (e.g. time_stop_days=2), so we use ExitConfig defaults and only override
     # fields that are compatible with the phased exit approach.
     phased_exit_config = ExitConfig()
+    phased_exit_config.breakeven_activation_r = breakeven_activation_r
+    if time_stop_days is not None:
+        phased_exit_config.time_stop_days = time_stop_days
     if exit_config:
         safe_overrides = {
             "breakeven_activation_r", "partial_profit_r", "partial_profit_pct",
@@ -1762,6 +1767,8 @@ def main() -> None:
         exit_config=bundle["exit_config"] if bundle["settings"].backtest.use_extended_exit_model else None,
         entry_gate=entry_gate,
         entry_size_mult=entry_size_mult,
+        breakeven_activation_r=bundle["settings"].exit_strategy.breakeven_activation_r,
+        time_stop_days=bundle["settings"].exit_strategy.time_stop_days,
     )
     verify_rust = False
     rust_result: dict[str, Any] | None = None

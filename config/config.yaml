@@ -93,7 +93,7 @@ portfolio:
   max_positions: 20
   max_sector_positions: 4
   initial_capital: 1000000
-  risk_per_trade_pct: 0.010
+  risk_per_trade_pct: 0.020
   max_heat_pct: 1.0
   max_sector_pct: 1.0
   drawdown_half_pct: 0.50
@@ -108,3 +108,5 @@ watchlist:
 exit_strategy:
   max_loss_pct: 0.07
   absolute_max_loss_pct: 0.07
+  breakeven_activation_r: 1.0
+  time_stop_days: 5
