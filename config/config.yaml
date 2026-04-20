@@ -109,4 +109,5 @@ exit_strategy:
   max_loss_pct: 0.07
   absolute_max_loss_pct: 0.07
   breakeven_activation_r: 1.0
+  partial_profit_r: 1.8
   time_stop_days: 5
