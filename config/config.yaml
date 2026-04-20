@@ -111,3 +111,6 @@ exit_strategy:
   breakeven_activation_r: 0.75
   partial_profit_r: 1.2
   time_stop_days: 5
+  trail_pct_bull: 0.30
+  trail_pct_bear: 0.15
+  trail_widen_r: 3.0

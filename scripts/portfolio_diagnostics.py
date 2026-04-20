@@ -458,6 +458,9 @@ def simulate_portfolio_python(
     breakeven_activation_r: float = 1.0,
     time_stop_days: int | None = None,
     partial_profit_r: float = 2.0,
+    trail_pct_bull: float = 0.25,
+    trail_pct_bear: float = 0.15,
+    trail_widen_r: float = 3.0,
 ) -> dict[str, Any]:
     symbols = build_signal_rows(signals)
     symbol_data, unique_dates = build_symbol_data(ohlcv)
@@ -471,6 +474,9 @@ def simulate_portfolio_python(
     phased_exit_config = ExitConfig()
     phased_exit_config.breakeven_activation_r = breakeven_activation_r
     phased_exit_config.partial_profit_r = partial_profit_r
+    phased_exit_config.trail_pct_bull = trail_pct_bull
+    phased_exit_config.trail_pct_bear = trail_pct_bear
+    phased_exit_config.trail_widen_r = trail_widen_r
     if time_stop_days is not None:
         phased_exit_config.time_stop_days = time_stop_days
     if exit_config:
@@ -1772,6 +1778,8 @@ def main() -> None:
         breakeven_activation_r=bundle["settings"].exit_strategy.breakeven_activation_r,
         time_stop_days=bundle["settings"].exit_strategy.time_stop_days,
         partial_profit_r=bundle["settings"].exit_strategy.partial_profit_r,
+        trail_pct_bull=bundle["settings"].exit_strategy.trail_pct_bull,
+        trail_pct_bear=bundle["settings"].exit_strategy.trail_pct_bear,
     )
     verify_rust = False
     rust_result: dict[str, Any] | None = None
