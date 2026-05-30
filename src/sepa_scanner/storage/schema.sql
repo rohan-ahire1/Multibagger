@@ -123,3 +123,10 @@ CREATE TABLE IF NOT EXISTS daily_diagnostics (
     created_at TIMESTAMP NOT NULL,
     UNIQUE(diag_date, symbol)
 );
+
+-- Speed up symbol-specific history charts and lookups
+CREATE INDEX IF NOT EXISTS idx_diagnostics_symbol_date ON daily_diagnostics(symbol, diag_date);
+CREATE INDEX IF NOT EXISTS idx_signals_symbol_date ON signals(symbol, signal_date);
+
+-- Speed up watchlist reviews lookup
+CREATE INDEX IF NOT EXISTS idx_reviews_symbol_date ON setup_reviews(symbol, scan_date);

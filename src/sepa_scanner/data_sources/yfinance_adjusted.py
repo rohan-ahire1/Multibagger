@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import math
 import logging
+import time
+import random
 from datetime import date
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 import polars as pl
@@ -112,12 +115,74 @@ def _extract_download_frames(
     return frames, failed
 
 
+def _download_with_retry(
+    tickers: list[str],
+    start_str: str,
+    end_str: str | None,
+    max_retries: int = 3,
+) -> pd.DataFrame:
+    delay = 1.0  # Initial retry delay in seconds
+    for attempt in range(max_retries):
+        try:
+            raw = yf.download(
+                tickers,
+                start=start_str,
+                end=end_str,
+                auto_adjust=False,
+                actions=True,
+                progress=False,
+                threads=len(tickers) > 1,
+            )
+            if not raw.empty:
+                return raw
+        except Exception as exc:
+            exc_str = str(exc)
+            if "429" in exc_str or "Too Many Requests" in exc_str:
+                LOGGER.warning("HTTP 429 encountered for %s. Backing off...", tickers)
+            else:
+                LOGGER.warning("Error downloading %s: %s", tickers, exc)
+
+        if attempt < max_retries - 1:
+            sleep_time = delay * (2 ** attempt) + random.uniform(0.1, 0.5)
+            time.sleep(sleep_time)
+
+    # One final synchronous attempt
+    try:
+        return yf.download(
+            tickers,
+            start=start_str,
+            end=end_str,
+            auto_adjust=False,
+            actions=True,
+            progress=False,
+            threads=len(tickers) > 1,
+        )
+    except Exception:
+        return pd.DataFrame()
+
+
+def _download_worker(
+    batch: list[str],
+    start_str: str,
+    end_str: str | None,
+) -> tuple[list[pl.DataFrame], list[str]]:
+    # Sleep 100-500ms between batches to throttle requests and avoid rate limits
+    time.sleep(random.uniform(0.1, 0.5))
+
+    raw = _download_with_retry(batch, start_str, end_str)
+    if raw.empty:
+        return [], [t.removesuffix(".NS") for t in batch]
+
+    frames, failed = _extract_download_frames(raw, batch)
+    return frames, failed
+
+
 def download_adjusted_history(
     symbols: list[str],
     *,
     start: date,
     end: date | None = None,
-    batch_size: int = 50,
+    batch_size: int = 100,
 ) -> tuple[pl.DataFrame, list[str]]:
     tickers = [f"{symbol}.NS" for symbol in sorted(set(symbols))]
     if not tickers:
@@ -128,49 +193,47 @@ def download_adjusted_history(
     start_str = start.isoformat()
     end_str = end.isoformat() if end is not None else None
 
-    for batch_idx in range(0, len(tickers), batch_size):
-        batch = tickers[batch_idx : batch_idx + batch_size]
-        try:
-            raw = yf.download(
-                batch,
-                start=start_str,
-                end=end_str,
-                auto_adjust=False,
-                actions=True,
-                progress=False,
-                threads=True,
-            )
-            if raw.empty:
-                all_failed.extend(ticker.removesuffix(".NS") for ticker in batch)
-                continue
-            frames, failed = _extract_download_frames(raw, batch)
-            all_frames.extend(frames)
-            all_failed.extend(failed)
-        except Exception as exc:
-            LOGGER.warning("Batch download failed for %s: %s", ",".join(batch), exc)
-            all_failed.extend(ticker.removesuffix(".NS") for ticker in batch)
+    # Group tickers into chunks of 100 (batch_size defaults to 100 now)
+    batches = [tickers[i : i + batch_size] for i in range(0, len(tickers), batch_size)]
 
-    if all_failed:
-        retried_failed: list[str] = []
-        for symbol in all_failed:
+    # Use ThreadPoolExecutor to download batches concurrently
+    max_workers = min(4, len(batches)) if batches else 1
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(_download_worker, batch, start_str, end_str): batch
+            for batch in batches
+        }
+        for future in as_completed(futures):
             try:
-                raw = yf.download(
-                    f"{symbol}.NS",
-                    start=start_str,
-                    end=end_str,
-                    auto_adjust=False,
-                    actions=True,
-                    progress=False,
-                    threads=False,
-                )
-                if raw.empty:
-                    retried_failed.append(symbol)
-                    continue
-                frames, failed = _extract_download_frames(raw, [f"{symbol}.NS"])
+                frames, failed = future.result()
                 all_frames.extend(frames)
-                retried_failed.extend(failed)
-            except Exception:
-                retried_failed.append(symbol)
+                all_failed.extend(failed)
+            except Exception as exc:
+                batch = futures[future]
+                LOGGER.error("Batch download failed in thread pool for %s: %s", batch, exc)
+                all_failed.extend(t.removesuffix(".NS") for t in batch)
+
+    # Retry failed symbols individually with exponential backoff retry logic
+    if all_failed:
+        LOGGER.info("Retrying %d failed symbols individually...", len(all_failed))
+        retried_failed: list[str] = []
+        max_retry_workers = min(2, len(all_failed))
+        with ThreadPoolExecutor(max_workers=max_retry_workers) as executor:
+            futures = {
+                executor.submit(_download_worker, [f"{symbol}.NS"], start_str, end_str): symbol
+                for symbol in all_failed
+            }
+            for future in as_completed(futures):
+                symbol = futures[future]
+                try:
+                    frames, failed = future.result()
+                    if frames:
+                        all_frames.extend(frames)
+                    if failed:
+                        retried_failed.extend(failed)
+                except Exception as exc:
+                    LOGGER.error("Retry worker failed for %s: %s", symbol, exc)
+                    retried_failed.append(symbol)
         all_failed = retried_failed
 
     if not all_frames:
