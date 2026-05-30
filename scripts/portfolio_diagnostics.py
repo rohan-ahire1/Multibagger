@@ -492,6 +492,9 @@ def simulate_portfolio_python(
     entry_gate = entry_gate or {}
     entry_size_mult = entry_size_mult or {}
 
+    def sector_cap_applies(sector: str) -> bool:
+        return sector != "ETF"
+
     signals_by_date: dict[date, list[dict[str, Any]]] = defaultdict(list)
     for signal in symbols:
         signals_by_date[signal["signal_date"]].append(signal)
@@ -783,6 +786,8 @@ def simulate_portfolio_python(
                 sector = analysis_sector_map.get(pos.symbol, "UNKNOWN")
                 max_sector_pct = float(portfolio.get("max_sector_pct", 1.0) or 1.0)
                 if (
+                    sector_cap_applies(sector)
+                    and
                     current_equity > 0.0
                     and max_sector_pct < 1.0
                     and ((marked_sector_values.get(sector, 0.0) + add_cost) / current_equity) > max_sector_pct
@@ -894,20 +899,27 @@ def simulate_portfolio_python(
                         if shares > 0:
                             sector = analysis_sector_map.get(pending.symbol, "UNKNOWN")
                             max_sector_positions = int(portfolio.get("max_sector_positions", 0) or 0)
-                            if max_sector_positions > 0 and open_sector_counts.get(sector, 0) >= max_sector_positions:
+                            if (
+                                sector_cap_applies(sector)
+                                and max_sector_positions > 0
+                                and open_sector_counts.get(sector, 0) >= max_sector_positions
+                            ):
                                 closed_trades.append(
                                     empty_trade_dict(
                                         symbol=pending.symbol,
                                         signal_date=pending.signal_date,
-                                        status="skipped_portfolio",
+                                        status="skipped_sector_positions",
                                         entry_ref=pending.entry_ref,
                                         stop=pending.stop,
+                                        sector=sector,
                                     )
                                 )
                                 pending_signals.pop(j)
                                 continue
                             max_sector_pct = float(portfolio.get("max_sector_pct", 1.0) or 1.0)
                             if (
+                                sector_cap_applies(sector)
+                                and
                                 current_equity > 0.0
                                 and max_sector_pct < 1.0
                                 and ((marked_sector_values.get(sector, 0.0) + cost) / current_equity) > max_sector_pct
@@ -916,9 +928,10 @@ def simulate_portfolio_python(
                                     empty_trade_dict(
                                         symbol=pending.symbol,
                                         signal_date=pending.signal_date,
-                                        status="skipped_portfolio",
+                                        status="skipped_sector_pct",
                                         entry_ref=pending.entry_ref,
                                         stop=pending.stop,
+                                        sector=sector,
                                     )
                                 )
                                 pending_signals.pop(j)
@@ -1085,7 +1098,14 @@ def build_signal_rows(signals: pl.DataFrame) -> list[dict[str, Any]]:
     return rows
 
 
-def empty_trade_dict(symbol: str, signal_date: date, status: str, entry_ref: float, stop: float) -> dict[str, Any]:
+def empty_trade_dict(
+    symbol: str,
+    signal_date: date,
+    status: str,
+    entry_ref: float,
+    stop: float,
+    sector: str = "UNKNOWN",
+) -> dict[str, Any]:
     return {
         "symbol": symbol,
         "signal_date": signal_date,
@@ -1104,7 +1124,7 @@ def empty_trade_dict(symbol: str, signal_date: date, status: str, entry_ref: flo
         "mfe_price": None,
         "shares": None,
         "pnl": 0.0,
-        "sector": "UNKNOWN",
+        "sector": sector,
     }
 
 
@@ -1591,7 +1611,8 @@ def build_entry_controls(
 ) -> tuple[dict[date, bool], dict[date, float]]:
     overrides = portfolio_overrides or {}
     regime_gate_enabled = bool(overrides.get("regime_gate_enabled", settings.portfolio.regime_gate_enabled))
-    if not regime_gate_enabled or regime_df.is_empty():
+    breadth_soft_floor = overrides.get("breadth_soft_floor_pct", settings.portfolio.breadth_soft_floor_pct)
+    if regime_df.is_empty() or (not regime_gate_enabled and breadth_soft_floor is None):
         return {}, {}
 
     high_volatility_threshold = float(
@@ -1601,10 +1622,10 @@ def build_entry_controls(
         )
     )
     cooldown_days = int(overrides.get("regime_cooldown_days", settings.portfolio.regime_cooldown_days))
-    breadth_soft_floor = overrides.get("breadth_soft_floor_pct", settings.portfolio.breadth_soft_floor_pct)
     breadth_soft_size_mult = float(
         overrides.get("breadth_soft_size_mult", settings.portfolio.breadth_soft_size_mult)
     )
+    breadth_strong = float(settings.market_filter.breadth_strong_pct)
     gate: dict[date, bool] = {}
     size_mult: dict[date, float] = {}
     cooldown_remaining = 0
@@ -1616,13 +1637,29 @@ def build_entry_controls(
             high_vol = bool(row.get("high_vol_market") or False)
         else:
             high_vol = float(vol_20_ann) > high_volatility_threshold
-        entries_allowed = (not high_vol) and cooldown_remaining == 0
-        gate[today] = entries_allowed
 
         breadth = row.get("breadth_pct")
-        if breadth_soft_floor is not None and breadth is not None and float(breadth) < float(breadth_soft_floor):
+        breadth_value = float(breadth) if breadth is not None else None
+        strong_breadth = breadth_value is None or breadth_value >= breadth_strong
+        above_soft_floor = (
+            breadth_soft_floor is not None
+            and breadth_value is not None
+            and breadth_value >= float(breadth_soft_floor)
+        )
+
+        if regime_gate_enabled:
+            entries_allowed = (not high_vol) and cooldown_remaining == 0 and strong_breadth
+            if not entries_allowed and above_soft_floor and (not high_vol) and cooldown_remaining == 0:
+                gate[today] = True
+                size_mult[today] = breadth_soft_size_mult
+            else:
+                gate[today] = entries_allowed
+                size_mult[today] = 1.0
+        elif breadth_soft_floor is not None and breadth_value is not None and not strong_breadth:
+            gate[today] = True
             size_mult[today] = breadth_soft_size_mult
         else:
+            gate[today] = True
             size_mult[today] = 1.0
 
         if high_vol:
@@ -1742,8 +1779,10 @@ def main() -> None:
         else:
             raise RuntimeError(f"Benchmark {settings.market.benchmark_symbol} not found in OHLCV or local ref")
     
-    constituent_csv_path = Path(args.reference_dir) / "nifty500_constituents.csv"
-    sector_map = load_sector_map(constituent_csv_path)
+    reference_dir = Path(args.reference_dir)
+    full_map_path = reference_dir / "full_sector_map.csv"
+    fallback_path = reference_dir / "nifty500_constituents.csv"
+    sector_map = load_sector_map(full_map_path if full_map_path.exists() else fallback_path)
     print(f"Loaded RS rank min: {bundle['settings'].backtest.rs_rank_min}")
     print(f"Loaded max positions: {bundle['portfolio']['max_positions']}")
     print(f"Loaded risk per trade: {bundle['portfolio']['risk_per_trade_pct']}")

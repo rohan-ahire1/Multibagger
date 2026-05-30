@@ -7,7 +7,13 @@
 *.py[cod]
 .DS_Store
 
-data/
+data/*
+!data/live/
+data/live/*
+!data/live/.gitkeep
+data/live/mr_portfolio.json
+data/live/mr_paper_portfolio.json
+data/live/mr_paper_trades.csv
 mean_reversion_rankings.csv
 
 # Rust & Maturin build artifacts

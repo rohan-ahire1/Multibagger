@@ -89,8 +89,8 @@ def get_backtest_ohlcv(
             start_date=start_date,
             end_date=end_date,
             columns=["date", "symbol", "open", "high", "low", "close", "volume"],
+            symbols=symbols,
         )
-        .filter(pl.col("symbol").is_in(symbols))
         .sort(["symbol", "date"])
     )
 

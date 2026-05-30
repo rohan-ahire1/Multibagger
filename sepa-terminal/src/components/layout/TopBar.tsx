@@ -1,6 +1,7 @@
 import { useBacktestStore } from '@/stores/backtest'
 import { useUIStore } from '@/stores/ui'
 import { formatDate } from '@/lib/formatters'
+import { useMarketBreadth } from '@/api/useScannerData'
 
 const WORKSPACES = [
   { id: 1 as const, label: 'Scanner' },
@@ -30,6 +31,25 @@ export function TopBar() {
     backtestParams.startDate,
     backtestParams.endDate,
   )
+
+  const { data: breadthData } = useMarketBreadth(
+    activeWorkspace === 1 ? scanDate : ''
+  )
+
+  let breadthIndicator = null
+  if (activeWorkspace === 1 && breadthData) {
+    const colorClass =
+      breadthData.regime === 'Strong'
+        ? 'text-green border-green/30 bg-green-bg'
+        : breadthData.regime === 'Weak'
+        ? 'text-red border-red/30 bg-red-bg'
+        : 'text-amber border-amber/30 bg-amber-bg'
+    breadthIndicator = (
+      <span className={`text-[10px] uppercase font-mono border px-1.5 py-0.5 rounded ${colorClass}`}>
+        Breadth: {(breadthData.breadth * 100).toFixed(0)}% ({breadthData.regime})
+      </span>
+    )
+  }
 
   return (
     <div className="h-10 bg-bg-secondary border-b border-border-default px-4 flex items-center justify-between shrink-0">
@@ -62,6 +82,7 @@ export function TopBar() {
       </div>
 
       <div className="flex items-center gap-3">
+        {breadthIndicator}
         <span className="text-xs text-text-muted">
           {activeRange}
         </span>

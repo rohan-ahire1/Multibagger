@@ -9,8 +9,6 @@ import { useScannerStore } from '@/stores/scanner'
 import { useReviewsStore } from '@/stores/reviews'
 import { useSignals, useWatchlist, useScanDates } from '@/api/useScannerData'
 import { useOHLCV } from '@/api/useOHLCV'
-import { useSymbolSignalHistory } from '@/api/useSignalHistory'
-import { buildChartMarkers } from '@/lib/chart-markers'
 import { ScanDatePicker } from '@/components/scanner/ScanDatePicker'
 import { QueueTabs } from '@/components/scanner/QueueTabs'
 import { ScannerTable } from '@/components/scanner/ScannerTable'
@@ -172,15 +170,7 @@ export function MarketScanner() {
   const { data: ohlcvData = [], isLoading: ohlcvLoading } =
     useOHLCV(selectedSymbol)
 
-  // Signal history + chart markers for selected symbol
-  const { data: signalHistory } = useSymbolSignalHistory(selectedSymbol ?? undefined)
-  const markers = useMemo(
-    () =>
-      signalHistory
-        ? buildChartMarkers(signalHistory.signals, signalHistory.trades)
-        : [],
-    [signalHistory]
-  )
+
 
   // Wire keyboard triage
   useKeyboardTriage(setupIds)
@@ -216,7 +206,6 @@ export function MarketScanner() {
             setup={selectedSetup}
             ohlcvData={ohlcvData}
             isLoading={ohlcvLoading}
-            markers={markers}
           />
         </Panel>
       </Group>

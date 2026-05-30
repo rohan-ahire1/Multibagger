@@ -4,6 +4,7 @@ import { useBacktestStore } from '@/stores/backtest'
 import { useBacktestLast } from '@/api/useBacktest'
 import { useOHLCV } from '@/api/useOHLCV'
 import { useSymbolSignalHistory } from '@/api/useSignalHistory'
+import { useSetupExplanation } from '@/api/useDiagnostics'
 import { buildChartMarkers } from '@/lib/chart-markers'
 import { useUIStore } from '@/stores/ui'
 import { ParamBar } from '@/components/backtest/ParamBar'
@@ -54,13 +55,24 @@ export function Backtest() {
   // Fetch data for selected trade
   const { data: ohlcvData } = useOHLCV(activeTrade?.symbol ?? null)
   const { data: signalHistory } = useSymbolSignalHistory(activeTrade?.symbol)
+  const { data: explanation } = useSetupExplanation(
+    activeTrade?.symbol ?? null,
+    activeTrade?.signalDate ?? null
+  )
 
   const markers = useMemo(
     () =>
       signalHistory
-        ? buildChartMarkers(signalHistory.signals, signalHistory.trades)
+        ? buildChartMarkers(
+            signalHistory.signals,
+            signalHistory.trades,
+            explanation?.contractionDates,
+            explanation?.contractionSequence,
+            explanation?.contractionHighs,
+            explanation?.contractionLows
+          )
         : [],
-    [signalHistory]
+    [signalHistory, explanation]
   )
 
   // Keyboard nav: j = next trade, k = prev trade
@@ -161,6 +173,7 @@ export function Backtest() {
                   overlays={chartOverlays}
                   timeframe={chartTimeframe}
                   markers={markers}
+                  contractionSwings={explanation?.contractionSwings}
                 />
               </div>
             </div>

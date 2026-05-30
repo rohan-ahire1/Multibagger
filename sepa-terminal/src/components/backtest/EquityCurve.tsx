@@ -38,8 +38,8 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   )
 }
 
-export function EquityCurve({ data }: EquityCurveProps) {
-  if (data.length === 0) return null
+export function EquityCurve({ data = [] }: EquityCurveProps) {
+  if (!data || data.length === 0) return null
 
   return (
     <div className="flex flex-col border-b border-zinc-800 bg-[#0F1117]">

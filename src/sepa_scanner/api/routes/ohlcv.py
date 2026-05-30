@@ -18,15 +18,12 @@ def get_ohlcv(
     end: date | None = Query(None),
     store: ParquetOhlcvStore = Depends(get_parquet_store),
 ) -> list[dict]:
-    df = (
-        store.read_frame(
-            start_date=start,
-            end_date=end,
-            columns=["date", "symbol", "open", "high", "low", "close", "volume"],
-        )
-        .filter(pl.col("symbol") == symbol)
-        .sort("date")
-    )
+    df = store.read_frame(
+        start_date=start,
+        end_date=end,
+        columns=["date", "symbol", "open", "high", "low", "close", "volume"],
+        symbols=symbol,
+    ).sort("date")
     rows = df.to_dicts()
     for row in rows:
         row["date"] = row["date"].isoformat()

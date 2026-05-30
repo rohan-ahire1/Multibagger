@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from pathlib import Path
+import threading
 
 import duckdb
 import polars as pl
@@ -16,19 +17,19 @@ class DuckDbStore:
         self.read_only = read_only
         if not read_only:
             ensure_directory(db_path.parent)
-        self._conn: duckdb.DuckDBPyConnection | None = None
+        self._local = threading.local()
         self._initialized = False
 
     def _connect(self) -> duckdb.DuckDBPyConnection:
-        if self._conn is None:
-            self._conn = duckdb.connect(str(self.db_path), read_only=self.read_only)
-        return self._conn
+        if not hasattr(self._local, "conn") or self._local.conn is None:
+            self._local.conn = duckdb.connect(str(self.db_path), read_only=self.read_only)
+        return self._local.conn
 
     def close(self) -> None:
-        if self._conn is not None:
-            self._conn.close()
-            self._conn = None
-            self._initialized = False
+        if hasattr(self._local, "conn") and self._local.conn is not None:
+            self._local.conn.close()
+            self._local.conn = None
+        self._initialized = False
 
     def initialize(self) -> None:
         if self._initialized:

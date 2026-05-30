@@ -41,3 +41,10 @@ def test_price_chart_uses_full_history_instead_of_signal_window() -> None:
 
     assert "setVisibleRange" not in chart_source
     assert "fitContent()" in chart_source
+
+
+def test_scan_date_picker_uses_successful_diagnostic_dates() -> None:
+    scanner_routes = _read("src/sepa_scanner/api/routes/scanner.py")
+
+    assert "WHERE r.status = 'success'" in scanner_routes
+    assert "INNER JOIN daily_diagnostics" in scanner_routes

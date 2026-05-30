@@ -1,4 +1,4 @@
-import type { SeriesMarker, Time } from 'lightweight-charts'
+import { useMemo } from 'react'
 import { Panel, Group, Separator } from 'react-resizable-panels'
 import type { SetupRow, OHLCVBar } from '@/lib/types'
 import { formatPrice, formatPct } from '@/lib/formatters'
@@ -8,12 +8,15 @@ import { ChartToolbar } from '@/components/chart/ChartToolbar'
 import { PriceChart } from '@/components/chart/PriceChart'
 import { QualificationPanel } from '@/components/shared/QualificationPanel'
 import { TradePlanCard } from '@/components/analysis/TradePlanCard'
+import { useSetupExplanation } from '@/api/useDiagnostics'
+import { useSymbolSignalHistory } from '@/api/useSignalHistory'
+import { buildChartMarkers } from '@/lib/chart-markers'
+
 
 interface SetupDetailCardProps {
   setup: SetupRow | null
   ohlcvData: OHLCVBar[]
   isLoading: boolean
-  markers?: SeriesMarker<Time>[]
 }
 
 function ShimmerPlaceholder() {
@@ -32,7 +35,6 @@ export function SetupDetailCard({
   setup,
   ohlcvData,
   isLoading,
-  markers,
 }: SetupDetailCardProps) {
   const chartTimeframe = useUIStore((s) => s.chartTimeframe)
   const chartOverlays = useUIStore((s) => s.chartOverlays)
@@ -43,6 +45,25 @@ export function SetupDetailCard({
   const watch = useReviewsStore((s) => s.watch)
   const setNote = useReviewsStore((s) => s.setNote)
   const getReview = useReviewsStore((s) => s.getReview)
+
+  const { data: explanation } = useSetupExplanation(
+    setup?.symbol ?? null,
+    setup?.scanDate ?? null
+  )
+
+  const { data: signalHistory } = useSymbolSignalHistory(setup?.symbol ?? undefined)
+
+  const markers = useMemo(() => {
+    if (!signalHistory) return []
+    return buildChartMarkers(
+      signalHistory.signals,
+      signalHistory.trades,
+      explanation?.contractionDates,
+      explanation?.contractionSequence,
+      explanation?.contractionHighs,
+      explanation?.contractionLows
+    )
+  }, [signalHistory, explanation])
 
   if (!setup) {
     return (
@@ -67,30 +88,23 @@ export function SetupDetailCard({
         100
       : 0
 
-  // Build qualification items
-  const passItems: Array<{ text: string }> = []
-  if (setup.rsRank >= 80)
-    passItems.push({ text: `RS Rank ${Math.round(setup.rsRank)} — top decile` })
-  else if (setup.rsRank >= 70)
-    passItems.push({ text: `RS Rank ${Math.round(setup.rsRank)} — strong` })
-  if (setup.volMult >= 1.5)
-    passItems.push({
-      text: `Volume ${setup.volMult.toFixed(1)}x average — institutional interest`,
-    })
-  if (setup.signalType === 'BREAKOUT')
-    passItems.push({ text: 'Breaking out of base — Multibagger trigger' })
-  else if (setup.signalType === 'WATCH')
-    passItems.push({ text: 'Near pivot — tightening for breakout' })
-  if (setup.contractionCount != null && setup.contractionCount >= 2)
-    passItems.push({
-      text: `${setup.contractionCount} contractions — VCP pattern`,
-    })
-
-  const warnItems: Array<{ text: string }> = []
-  if (setup.rsRank < 70)
-    warnItems.push({ text: `RS Rank only ${Math.round(setup.rsRank)} — below threshold` })
-  if (setup.volMult < 1.0)
-    warnItems.push({ text: 'Volume below average — lack of conviction' })
+  const fallbackStrengths = [
+    {
+      text: `${setup.signalType ?? 'WATCH'} candidate near pivot`,
+      detail: `${setup.symbol} is ${(setup.nearPivot * 100).toFixed(1)}% below pivot ${formatPrice(setup.pivot)}.`,
+    },
+    {
+      text: `RS rank ${Math.round(setup.rsRank)}`,
+      detail: 'Fallback summary; detailed diagnostics are not available yet.',
+    },
+  ]
+  const fallbackRisks = [
+    {
+      text: 'Detailed risk model unavailable',
+      detail: 'The row is loaded, but the explanation endpoint did not return diagnostics.',
+      severity: 'warning' as const,
+    },
+  ]
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -156,6 +170,7 @@ export function SetupDetailCard({
                   overlays={chartOverlays}
                   timeframe={chartTimeframe}
                   markers={markers}
+                  contractionSwings={explanation?.contractionSwings}
                 />
               </div>
             </div>
@@ -167,7 +182,13 @@ export function SetupDetailCard({
           <Panel defaultSize="45" minSize="20">
             <div className="h-full overflow-y-auto">
               <div className="px-4 py-3 border-b border-border-default">
-                <QualificationPanel passItems={passItems} warnItems={warnItems} />
+                <QualificationPanel
+                  narrative={explanation?.narrative}
+                  strengths={explanation?.strengths ?? fallbackStrengths}
+                  risks={explanation?.risks ?? fallbackRisks}
+                  nextActions={explanation?.nextActions}
+                  metrics={explanation?.metrics}
+                />
               </div>
               <div className="px-4 py-3 border-b border-border-default">
                 <TradePlanCard

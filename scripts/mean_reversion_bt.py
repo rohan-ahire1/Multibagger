@@ -127,6 +127,17 @@ def compute_ibs(high: np.ndarray, low: np.ndarray, close: np.ndarray) -> np.ndar
     )
 
 
+def compute_atr(high: np.ndarray, low: np.ndarray, close: np.ndarray, period: int = 14) -> np.ndarray:
+    """Wilder's ATR."""
+    tr = np.maximum(high - low, np.maximum(np.abs(high - np.roll(close, 1)), np.abs(low - np.roll(close, 1))))
+    tr[0] = high[0] - low[0]
+    atr = np.zeros_like(close)
+    atr[period - 1] = tr[:period].mean()
+    for i in range(period, len(close)):
+        atr[i] = (atr[i - 1] * (period - 1) + tr[i]) / period
+    return atr
+
+
 def rolling_min(arr: np.ndarray, period: int) -> np.ndarray:
     out = np.full_like(arr, np.nan)
     for i in range(period - 1, len(arr)):
@@ -212,7 +223,7 @@ def precompute_rs_percentiles(df: pl.DataFrame) -> pl.DataFrame:
     bm_cols: list[pl.Expr] = []
     rs_terms: list[pl.Expr] = []
 
-    for lb, w in zip(RS_LOOKBACKS, RS_WEIGHTS, strict=True):
+    for lb, w in zip(RS_LOOKBACKS, RS_WEIGHTS):
         if RS_SKIP_RECENT > 0:
             ret = (
                 (pl.col("close").shift(RS_SKIP_RECENT) / pl.col("close").shift(lb + RS_SKIP_RECENT)) - 1.0
@@ -339,17 +350,35 @@ def run_strategy(
 
     if strategy == "rsi2":
         rsi = compute_rsi(close, period=2)
-        entry_thresh = params.get("entry_threshold", 10)
+        sma3 = compute_sma(close, 3)
+        atr = compute_atr(high, low, close, period=14)
+        entry_thresh = params.get("entry_threshold", 25)
         exit_thresh = params.get("exit_threshold", 70)
+        exit_mode = params.get("exit_mode", "sma3")
+        stop_atr_mult = params.get("stop_atr_mult", 3.0)
+        stop_price = 0.0
 
         for i in range(warmup, n):
             if not in_trade:
                 if rsi[i] < entry_thresh and entry_filter[i]:
                     in_trade, entry_price, entry_idx = True, close[i], i
+                    stop_price = entry_price - stop_atr_mult * atr[i]
             else:
                 hold = i - entry_idx
-                if rsi[i] > exit_thresh or hold >= max_hold:
-                    reason = "rsi_exit" if rsi[i] > exit_thresh else "time_exit"
+                stopped = close[i] <= stop_price
+                if exit_mode == "sma3":
+                    signal_exit = close[i] > sma3[i]
+                    exit_label = "sma3_exit"
+                else:
+                    signal_exit = rsi[i] > exit_thresh
+                    exit_label = "rsi_exit"
+                if stopped or signal_exit or hold >= max_hold:
+                    if stopped:
+                        reason = "stopped"
+                    elif signal_exit:
+                        reason = exit_label
+                    else:
+                        reason = "time_exit"
                     trades.append(_make_trade(dates, close, entry_idx, i, entry_price, reason))
                     in_trade = False
 
@@ -698,7 +727,7 @@ def print_portfolio_summary(
 STRATEGIES = {
     "rsi2": {
         "name": "RSI(2) Pullback",
-        "params": {"entry_threshold": 10, "exit_threshold": 70, "max_hold": 15},
+        "params": {"entry_threshold": 25, "exit_mode": "sma3", "stop_atr_mult": 3.0, "max_hold": 5},
     },
     "williams_r": {
         "name": "Williams %R",

@@ -1760,3 +1760,51 @@ class IndiaFilterSettings(BaseModel):
 ```
 
 The `india_filter` section is `None` by default in `AppSettings` — these filters only activate when explicitly configured.
+
+---
+
+## 24. Research Strategy: Connors RSI2 Mean Reversion
+
+This repository also contains an independent research backtester for a Connors-style RSI(2) mean reversion strategy. It does not replace or modify the canonical SEPA scanner flow.
+
+**Location:** `strategies/mean_reversion/`
+
+**Purpose:** Data-only evaluation of short-term mean reversion on a static Nifty 100 universe.
+
+### 24.1 Entry Rules
+
+The mean reversion scanner emits an entry signal when all conditions are true on the signal date:
+
+- `close > SMA(200)`
+- `RSI(2) < threshold`
+- `ADV(50) > 10 Cr INR`
+- `close > 50 INR`
+
+Entry is modeled at the next available trading day's open. Signals are one-trading-day only.
+
+### 24.2 Exit Rules
+
+The exit engine is deliberately simple and separate from the SEPA phased exit engine:
+
+- Fixed initial stop at `close - ATR(14) * stop_atr_mult`
+- Mean reversion exits: `close > SMA(5)` or `close > SMA(3)`
+- RSI exits: `RSI(2) > 70` or `RSI(2) > 50`
+- Time stops: 1, 2, 3, 5, 7, or 10 days in diagnostics sweeps
+- Combined mode: `close > SMA(5)` or configured time stop, whichever comes first
+- Safety max hold: 20 calendar days
+
+### 24.3 Portfolio Rules
+
+- Initial capital: 1,000,000 INR
+- R-based sizing: `(capital * risk_per_trade_pct) / (entry_price - stop)`
+- Risk sweep: 1%, 2%, 3%, 5%
+- Max positions: 10
+- Max sector positions: 3
+- No pyramiding
+- No regime gate
+
+### 24.4 Data and Bias Notes
+
+The strategy uses the same yfinance adjusted OHLCV parquet data as the SEPA backtester. Signals are generated fresh per diagnostics run and are not stored in DuckDB.
+
+The current implementation uses a static current Nifty 100 universe or a local `nifty100_constituents.csv` if present. This introduces survivorship bias and is acceptable only for first-pass research diagnostics, not final point-in-time validation.

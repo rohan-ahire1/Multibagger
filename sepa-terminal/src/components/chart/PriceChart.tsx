@@ -20,6 +20,7 @@ interface PriceChartProps {
   overlays: ChartOverlays
   timeframe: ChartTimeframe
   markers?: SeriesMarker<Time>[]
+  contractionSwings?: { date: string; price: number; type: 'high' | 'low' }[]
 }
 
 function computeSMA(data: OHLCVBar[], period: number) {
@@ -90,9 +91,11 @@ function resample(data: OHLCVBar[], timeframe: ChartTimeframe): OHLCVBar[] {
 }
 
 /** Map a daily date string to its weekly/monthly bucket key */
-function toBucketKey(dateStr: string, timeframe: ChartTimeframe): string {
+function toBucketKey(dateStr: string | undefined | null, timeframe: ChartTimeframe): string {
+  if (!dateStr) return ''
   if (timeframe === 'W') {
     const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return ''
     const day = d.getDay()
     const diff = d.getDate() - day + (day === 0 ? -6 : 1)
     const monday = new Date(d)
@@ -110,13 +113,16 @@ function deduplicateMarkers(
   markers: SeriesMarker<Time>[],
   timeframe: ChartTimeframe,
 ): SeriesMarker<Time>[] {
+  if (!markers) return []
   if (timeframe === 'D') return markers
 
   const seen = new Set<string>()
   const result: SeriesMarker<Time>[] = []
 
   for (const m of markers) {
+    if (!m || !m.time) continue
     const bucket = toBucketKey(m.time as string, timeframe)
+    if (!bucket) continue
     const key = `${bucket}:${m.text ?? ''}:${m.color}`
     if (seen.has(key)) continue
     seen.add(key)
@@ -135,6 +141,7 @@ export function PriceChart({
   overlays,
   timeframe,
   markers,
+  contractionSwings,
 }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -303,6 +310,51 @@ export function PriceChart({
       }
     }
 
+    // Contraction zig-zag lines
+    if (contractionSwings && Array.isArray(contractionSwings) && contractionSwings.length > 0) {
+      const contractionLineSeries = chart.addSeries(LineSeries, {
+        color: '#e8b03e', // Gold/amber
+        lineWidth: 2,     // Must be integer for LineWidth
+        lineStyle: LineStyle.Dashed,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      })
+
+      // Map date buckets for timeframe if active with explicit types
+      const lineData = contractionSwings
+        .map((pt) => {
+          if (!pt || !pt.date || pt.price == null) return null
+          const time = toBucketKey(pt.date, timeframe)
+          if (!time) return null
+          return { time, value: pt.price, originalDate: pt.date }
+        })
+        .filter((pt): pt is { time: string; value: number; originalDate: string } => pt !== null)
+
+      // Sort chronologically based on their original dates first, then by bucketed time
+      lineData.sort((a, b) => {
+        const cmp = a.originalDate.localeCompare(b.originalDate)
+        if (cmp !== 0) return cmp
+        return a.time.localeCompare(b.time)
+      })
+
+      // Deduplicate by bucketed time so that only one point per time index is kept
+      const uniqueLineData: { time: string; value: number }[] = []
+      const seenTimes = new Set<string>()
+      for (const pt of lineData) {
+        if (!seenTimes.has(pt.time)) {
+          seenTimes.add(pt.time)
+          uniqueLineData.push({ time: pt.time, value: pt.value })
+        }
+      }
+
+      // Sort the final unique list strictly by bucket time
+      uniqueLineData.sort((a, b) => a.time.localeCompare(b.time))
+
+      if (uniqueLineData.length > 0) {
+        contractionLineSeries.setData(uniqueLineData)
+      }
+    }
+
     chart.timeScale().fitContent()
 
     // Resize observer — tracks both width and height
@@ -321,7 +373,7 @@ export function PriceChart({
       chart.remove()
       chartRef.current = null
     }
-  }, [data, overlays, timeframe, entryRef, stop, pivot, markers])
+  }, [data, overlays, timeframe, entryRef, stop, pivot, markers, contractionSwings])
 
   return (
     <div

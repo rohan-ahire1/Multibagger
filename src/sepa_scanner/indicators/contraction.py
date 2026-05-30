@@ -14,15 +14,15 @@ def _count_contractions(
     range10: np.ndarray,
     smooth_window: int,
     min_peak_pct: float,
-) -> tuple[int, float | None, bool]:
+) -> tuple[int, float | None, bool, list[float]]:
     """Count successive narrowing peaks in a range10 series.
 
-    Returns (contraction_count, contraction_quality, is_progressive).
+    Returns (contraction_count, contraction_quality, is_progressive, contraction_sequence).
     contraction_quality is the average T(n+1)/T(n) ratio, or None if count < 2.
     is_progressive is True if every successive peak is at least 20% smaller.
     """
     if len(range10) < smooth_window + 2:
-        return 0, None, False
+        return 0, None, False, []
 
     # Step 1: smooth range10 with a simple moving average (valid mode to avoid edge artifacts)
     kernel = np.ones(smooth_window) / smooth_window
@@ -50,18 +50,18 @@ def _count_contractions(
                 peaks.append((i, peak_val))
 
     if not peaks:
-        return 0, None, False
+        return 0, None, False, []
 
     if len(peaks) == 1:
-        return 1, None, True
+        return 1, None, True, [float(peaks[0][1] * 100)]
 
-    # Step 3: count successive narrowing peaks
+    # Step 3: count successive narrowing peaks working backwards from the most recent peak
     progressive = True
     count = 1
     ratios: list[float] = []
-    for j in range(1, len(peaks)):
-        if peaks[j][1] < peaks[j - 1][1]:
-            ratio = peaks[j][1] / peaks[j - 1][1]
+    for j in range(len(peaks) - 2, -1, -1):
+        if peaks[j + 1][1] < peaks[j][1]:
+            ratio = peaks[j + 1][1] / peaks[j][1]
             count += 1
             ratios.append(ratio)
             if ratio > 0.80:  # Less than 20% smaller -- not truly progressive
@@ -72,7 +72,10 @@ def _count_contractions(
     # Step 4: compute quality (average ratio)
     quality = sum(ratios) / len(ratios) if ratios else None
 
-    return count, quality, progressive
+    # Step 5: extract the sequence of peaks in the contracting chain (as percentages)
+    sequence = [float(p[1] * 100) for p in peaks[len(peaks) - count:]]
+
+    return count, quality, progressive, sequence
 
 
 def add_contraction_columns(
@@ -100,7 +103,7 @@ def add_contraction_columns(
             # Skip windows with nulls
             if np.any(np.isnan(window)):
                 continue
-            c, q, prog = _count_contractions(window, smooth_window, min_peak_pct)
+            c, q, prog, _seq = _count_contractions(window, smooth_window, min_peak_pct)
             counts[i] = c
             if q is not None:
                 qualities[i] = q

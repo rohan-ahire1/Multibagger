@@ -68,6 +68,7 @@ class ParquetOhlcvStore:
         start_date: date | None = None,
         end_date: date | None = None,
         columns: Iterable[str] | None = None,
+        symbols: Iterable[str] | str | None = None,
     ) -> pl.LazyFrame:
         if self.flat_path.exists():
             scan = pl.scan_parquet(self.flat_path)
@@ -75,6 +76,11 @@ class ParquetOhlcvStore:
             scan = pl.scan_parquet(str(self.root / "**/*.parquet"), hive_partitioning=True)
         else:
             return pl.DataFrame(schema={column: pl.String for column in CORE_COLUMNS}).lazy()
+        if symbols is not None:
+            if isinstance(symbols, str):
+                scan = scan.filter(pl.col("symbol") == symbols)
+            else:
+                scan = scan.filter(pl.col("symbol").is_in(list(symbols)))
         if start_date is not None:
             scan = scan.filter(pl.col("date") >= pl.lit(start_date))
         if end_date is not None:
@@ -88,8 +94,14 @@ class ParquetOhlcvStore:
         start_date: date | None = None,
         end_date: date | None = None,
         columns: Iterable[str] | None = None,
+        symbols: Iterable[str] | str | None = None,
     ) -> pl.DataFrame:
-        return self.scan_lazy(start_date=start_date, end_date=end_date, columns=columns).collect()
+        return self.scan_lazy(
+            start_date=start_date,
+            end_date=end_date,
+            columns=columns,
+            symbols=symbols,
+        ).collect()
 
     def latest_date(self) -> date | None:
         if not any(self.root.rglob("*.parquet")):

@@ -10,7 +10,7 @@ from sepa_scanner.main import run_scan_command, run_update_command
 def main(
     config_dir: Path | None = typer.Option(None, help="Override config directory"),
 ) -> None:
-    latest_date = run_update_command(
+    latest_date, _failed = run_update_command(
         config_dir=config_dir,
         days=5,
         target_date=None,

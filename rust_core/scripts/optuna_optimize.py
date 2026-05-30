@@ -254,16 +254,17 @@ def _evaluate_trial_result(
 
     ex_2023_spread = float(ex_2023["cagr_ex_2023"] - benchmark_cagr)
     
-    score = (100.0 * cagr) + (10.0 * calmar) + (5.0 * ex_2023_spread)
+    # Apex Objective: High CAGR + High Calmar
+    score = (100.0 * cagr) + (50.0 * calmar)
     
-    if calmar < 0.25:
-        score -= 5000.0
-    if filled_trades < 60:
+    if calmar < 1.0:
         score -= 2000.0
-    if max_drawdown_pct < -0.40:
-        score -= 3000.0
-    if ex_2023_spread < -0.05:
+    if cagr < 0.20:
         score -= 1000.0
+    if filled_trades < 100:
+        score -= 1000.0
+    if max_drawdown_pct < -0.25:
+        score -= 2000.0
 
     ex_2023_ok = ex_2023["cagr_ex_2023"] > benchmark_cagr if thresholds.require_ex_2023_above_benchmark else True
     beat_rate_ok = rolling_summary["strategy_beat_rate"] >= thresholds.min_rolling_beat_rate

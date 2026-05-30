@@ -26,23 +26,29 @@ function Metric({ label, value, color }: MetricItem) {
 }
 
 export function StatsSummary({ summary }: StatsSummaryProps) {
-  const winRateColor = summary.winRate > 0.40 ? '#22c55e' : '#f87171'
+  if (!summary) return null
+
+  const winRate = summary.winRate ?? 0
+  const cumulativeR = summary.cumulativeR ?? 0
+  const longestLosingStreak = summary.longestLosingStreak ?? 0
+
+  const winRateColor = winRate > 0.40 ? '#22c55e' : '#f87171'
   const avgRColor =
     summary.averageR != null ? (summary.averageR >= 0 ? '#22c55e' : '#f87171') : undefined
-  const cumRColor = summary.cumulativeR >= 0 ? '#22c55e' : '#f87171'
+  const cumRColor = cumulativeR >= 0 ? '#22c55e' : '#f87171'
 
   const metrics: MetricItem[] = [
     {
       label: 'Signals',
-      value: String(summary.totalSignals),
+      value: String(summary.totalSignals ?? 0),
     },
     {
       label: 'Filled',
-      value: String(summary.filledTrades),
+      value: String(summary.filledTrades ?? 0),
     },
     {
       label: 'Win Rate',
-      value: formatPct(summary.winRate * 100),
+      value: formatPct(winRate * 100),
       color: winRateColor,
     },
     {
@@ -52,12 +58,12 @@ export function StatsSummary({ summary }: StatsSummaryProps) {
     },
     {
       label: 'Cum R',
-      value: formatR(summary.cumulativeR),
+      value: formatR(cumulativeR),
       color: cumRColor,
     },
     {
       label: 'Max DD',
-      value: summary.maxDrawdown !== 0 ? formatR(summary.maxDrawdown) : '—',
+      value: summary.maxDrawdown != null && summary.maxDrawdown !== 0 ? formatR(summary.maxDrawdown) : '—',
       color: '#f87171',
     },
     {
@@ -66,8 +72,8 @@ export function StatsSummary({ summary }: StatsSummaryProps) {
     },
     {
       label: 'Lose Streak',
-      value: String(summary.longestLosingStreak),
-      color: summary.longestLosingStreak >= 5 ? '#f87171' : undefined,
+      value: String(longestLosingStreak),
+      color: longestLosingStreak >= 5 ? '#f87171' : undefined,
     },
     {
       label: 'Avg MFE',
@@ -89,17 +95,17 @@ export function StatsSummary({ summary }: StatsSummaryProps) {
     metrics.push(
       {
         label: 'BE%',
-        value: formatPct(summary.pctReachingBreakeven * 100),
+        value: formatPct((summary.pctReachingBreakeven ?? 0) * 100),
         color: '#22c55e',
       },
       {
         label: 'Partial%',
-        value: formatPct(summary.pctReachingPartial * 100),
+        value: formatPct((summary.pctReachingPartial ?? 0) * 100),
         color: '#22c55e',
       },
       {
         label: 'Trail%',
-        value: formatPct(summary.pctReachingTrail * 100),
+        value: formatPct((summary.pctReachingTrail ?? 0) * 100),
         color: '#22c55e',
       },
       {
@@ -109,7 +115,7 @@ export function StatsSummary({ summary }: StatsSummaryProps) {
       },
       {
         label: 'Climax Sells',
-        value: String(summary.climaxSells),
+        value: String(summary.climaxSells ?? 0),
       },
     )
   }

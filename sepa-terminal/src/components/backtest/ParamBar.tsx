@@ -12,8 +12,12 @@ const RANGE_PRESETS = [
 ] as const
 
 function subtractYears(isoDate: string, years: number): string {
-  const [year, month, day] = isoDate.split('-').map(Number)
+  if (!isoDate || typeof isoDate !== 'string') return DATA_START_DATE
+  const parts = isoDate.split('-').map(Number)
+  if (parts.length !== 3 || parts.some(isNaN)) return DATA_START_DATE
+  const [year, month, day] = parts
   const start = new Date(year - years, month - 1, day)
+  if (isNaN(start.getTime())) return DATA_START_DATE
   return start.toISOString().slice(0, 10)
 }
 

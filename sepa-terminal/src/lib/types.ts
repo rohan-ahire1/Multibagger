@@ -255,3 +255,69 @@ export interface SymbolSignalHistory {
   signals: Signal[]
   trades: BacktestTrade[]
 }
+
+export interface DailyDiagnostics {
+  diagDate: string
+  symbol: string
+  eligible: boolean
+  ttPass: boolean
+  tt1CloseAboveSma150: boolean
+  tt2CloseAboveSma200: boolean
+  tt3Sma150AboveSma200: boolean
+  tt4Sma200Rising: boolean
+  tt5Sma50AboveSma150: boolean
+  tt6Sma50AboveSma200: boolean
+  tt7CloseAboveSma50: boolean
+  tt8Above52wLow: boolean
+  tt9Near52wHigh: boolean
+  rsRank: number
+  rsPass: boolean
+  setupPass: boolean
+  vcp1Range10Ok: boolean
+  vcp2VoldryOk: boolean
+  vcp3AtrTrendOk: boolean
+  vcp4AtrContractOk: boolean
+  vcp5ExtensionOk: boolean
+  vcp6BaseDepthOk: boolean
+  contractionCount: number
+  contractionQuality: number
+  pivot: number
+  nearPivot: number
+  setupActiveStreak: number
+  pivotAgeDays: number
+  watchFailMask: number
+  breakoutFailMask: number
+  contractionSequence?: number[]
+  contractionDates?: string[]
+  contractionHighs?: number[]
+  contractionLows?: number[]
+  contractionSwings?: { date: string; price: number; type: 'high' | 'low' }[]
+}
+
+export interface ExplanationItem {
+  text: string
+  detail: string
+  severity?: 'info' | 'warning'
+}
+
+export interface ExplanationMetric {
+  label: string
+  value: string
+  context: string
+}
+
+export interface SetupExplanation {
+  symbol: string
+  date: string
+  signalType: 'BREAKOUT' | 'WATCH'
+  narrative: string
+  strengths: ExplanationItem[]
+  risks: ExplanationItem[]
+  nextActions: ExplanationItem[]
+  metrics: ExplanationMetric[]
+  contractionSequence?: number[]
+  contractionDates?: string[]
+  contractionHighs?: number[]
+  contractionLows?: number[]
+  contractionSwings?: { date: string; price: number; type: 'high' | 'low' }[]
+}

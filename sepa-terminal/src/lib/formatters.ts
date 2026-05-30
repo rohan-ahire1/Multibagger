@@ -20,12 +20,14 @@ export const formatPrice = (value: number | null | undefined): string => {
     : value.toFixed(2)
 }
 
-export const formatPct = (value: number): string => {
+export const formatPct = (value: number | null | undefined): string => {
+  if (value == null || isNaN(value)) return '\u2014'
   const sign = value >= 0 ? '+' : ''
   return `${sign}${value.toFixed(1)}%`
 }
 
-export const formatR = (value: number): string => {
+export const formatR = (value: number | null | undefined): string => {
+  if (value == null || isNaN(value)) return '\u2014'
   const sign = value >= 0 ? '+' : ''
   return `${sign}${value.toFixed(1)}R`
 }
@@ -35,12 +37,22 @@ export const formatVolMult = (value: number | null | undefined): string => {
   return `${value.toFixed(1)}x`
 }
 
-export const formatDate = (dateStr: string): string => {
-  const [year, month, day] = dateStr.split('-').map(Number)
-  const d =
-    Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)
-      ? new Date(year, month - 1, day)
-      : new Date(dateStr)
+export const formatDate = (dateStr: string | null | undefined): string => {
+  if (!dateStr || typeof dateStr !== 'string') return '\u2014'
+  const parts = dateStr.split('-').map(Number)
+  if (parts.length === 3) {
+    const [year, month, day] = parts
+    if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)) {
+      const d = new Date(year, month - 1, day)
+      return d.toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      })
+    }
+  }
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return dateStr
   return d.toLocaleDateString('en-IN', {
     day: '2-digit',
     month: 'short',

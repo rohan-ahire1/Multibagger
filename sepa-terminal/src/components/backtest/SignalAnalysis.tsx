@@ -30,8 +30,23 @@ function Metric({
 
 export function SignalAnalysis({ data }: SignalAnalysisProps) {
   const [expanded, setExpanded] = useState(false)
-  const { pivotReached, pivotReachedPct, totalWithData } = data
+  if (!data) return null
+
+  const { pivotReached = 0, pivotReachedPct = 0, totalWithData = 0 } = data
   const reachedWidth = totalWithData > 0 ? (pivotReached / totalWithData) * 100 : 0
+
+  const dayReachedBreakdown = data.dayReachedBreakdown ?? []
+  const gapAnalysis = data.gapAnalysis ?? {
+    gapUpPct: 0,
+    avgGapPct: 0,
+    bigGapUpCount: 0,
+    bigGapDownCount: 0,
+  }
+  const unfilledAnalysis = data.unfilledAnalysis ?? {
+    count: 0,
+    avgMaxGainPct: 0,
+    profitableAtLastDayPct: 0,
+  }
 
   return (
     <div className="border-b border-zinc-800 bg-[#0F1117]">
@@ -78,9 +93,9 @@ export function SignalAnalysis({ data }: SignalAnalysisProps) {
                 style={{ width: `${100 - reachedWidth}%` }}
               />
             </div>
-            {data.dayReachedBreakdown.length > 0 && (
+            {dayReachedBreakdown.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-1.5">
-                {data.dayReachedBreakdown.map((d) => (
+                {dayReachedBreakdown.map((d) => (
                   <span
                     key={d.day}
                     className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono"
@@ -138,18 +153,18 @@ export function SignalAnalysis({ data }: SignalAnalysisProps) {
             <div className="grid grid-cols-2 gap-x-4 gap-y-1">
               <Metric
                 label="Gap up"
-                value={formatPct(data.gapAnalysis.gapUpPct)}
+                value={formatPct(gapAnalysis.gapUpPct)}
                 color="#22c55e"
               />
               <Metric
                 label="Avg gap"
-                value={formatPct(data.gapAnalysis.avgGapPct)}
+                value={formatPct(gapAnalysis.avgGapPct)}
                 color={
-                  data.gapAnalysis.avgGapPct >= 0 ? '#22c55e' : '#f87171'
+                  gapAnalysis.avgGapPct >= 0 ? '#22c55e' : '#f87171'
                 }
               />
-              <Metric label="Big gaps up" value={String(data.gapAnalysis.bigGapUpCount)} />
-              <Metric label="Big gaps down" value={String(data.gapAnalysis.bigGapDownCount)} />
+              <Metric label="Big gaps up" value={String(gapAnalysis.bigGapUpCount)} />
+              <Metric label="Big gaps down" value={String(gapAnalysis.bigGapDownCount)} />
             </div>
           </div>
 
@@ -160,16 +175,16 @@ export function SignalAnalysis({ data }: SignalAnalysisProps) {
             <div className="grid grid-cols-2 gap-x-4 gap-y-1">
               <Metric
                 label="Never reached pivot"
-                value={String(data.unfilledAnalysis.count)}
+                value={String(unfilledAnalysis.count)}
               />
               <Metric
                 label="Avg max gain"
-                value={formatPct(data.unfilledAnalysis.avgMaxGainPct)}
+                value={formatPct(unfilledAnalysis.avgMaxGainPct)}
                 color="#22c55e"
               />
               <Metric
                 label="Profitable at day 5"
-                value={formatPct(data.unfilledAnalysis.profitableAtLastDayPct)}
+                value={formatPct(unfilledAnalysis.profitableAtLastDayPct)}
                 color="#22c55e"
               />
             </div>
