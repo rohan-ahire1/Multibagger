@@ -156,3 +156,47 @@ def test_rust_portfolio_entry_gate_matches_python_when_extension_available() -> 
     assert python_result.trades[0].entry_date == rust_result.trades[0].entry_date == date(2026, 3, 5)
     assert python_result.trades[0].entry_price == pytest.approx(101.1)
     assert rust_result.trades[0].entry_price == pytest.approx(101.1)
+
+
+def test_rust_portfolio_parity_with_friction() -> None:
+    pytest.importorskip("multibagger_core")
+
+    signals = _signal(signal_date=date(2026, 3, 3))
+    prices = _ohlcv(
+        [
+            {"date": date(2026, 3, 3), "symbol": "ABC", "open": 100.5, "high": 100.9, "low": 99.8, "close": 100.8},
+            {"date": date(2026, 3, 4), "symbol": "ABC", "open": 101.5, "high": 102.0, "low": 100.0, "close": 101.2},
+            {"date": date(2026, 3, 5), "symbol": "ABC", "open": 101.1, "high": 102.0, "low": 100.5, "close": 101.4},
+            {"date": date(2026, 3, 6), "symbol": "ABC", "open": 101.0, "high": 102.0, "low": 100.0, "close": 101.3},
+        ]
+    )
+    params = BacktestParams(pending_days=2, max_hold_days=2, friction_enabled=True)
+    python_pm = PortfolioManager(max_positions=5, initial_capital=1_000_000.0, risk_per_trade_pct=0.01)
+    rust_pm = PortfolioManager(max_positions=5, initial_capital=1_000_000.0, risk_per_trade_pct=0.01)
+
+    python_result = simulate_breakout_backtest(
+        signals,
+        prices,
+        params,
+        portfolio_manager=python_pm,
+        use_rust=False,
+    )
+    rust_result = simulate_breakout_backtest(
+        signals,
+        prices,
+        params,
+        portfolio_manager=rust_pm,
+        use_rust=True,
+    )
+
+    assert python_result.trades[0].entry_date == rust_result.trades[0].entry_date == date(2026, 3, 4)
+    # Entry price is raw open_p (101.5) adjusted by 1.001 (slippage) and 1.00118658 (tax)
+    expected_entry = 101.5 * 1.001 * 1.00118658
+    assert python_result.trades[0].entry_price == pytest.approx(expected_entry)
+    assert rust_result.trades[0].entry_price == pytest.approx(expected_entry)
+
+    # Exit price is close on day 2 (101.4) adjusted by 0.999 (slippage) and 0.99896342 (tax)
+    expected_exit = 101.4 * 0.999 * 0.99896342
+    assert python_result.trades[0].exit_price == pytest.approx(expected_exit)
+    assert rust_result.trades[0].exit_price == pytest.approx(expected_exit)
+

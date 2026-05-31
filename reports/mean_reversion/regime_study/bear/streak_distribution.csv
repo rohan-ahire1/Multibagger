@@ -1,0 +1,7 @@
+type,length,count
+loss,1,2
+loss,2,1
+loss,4,1
+win,1,1
+win,2,1
+win,5,3

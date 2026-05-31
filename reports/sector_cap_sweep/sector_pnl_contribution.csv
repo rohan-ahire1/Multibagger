@@ -1,0 +1,59 @@
+sector,pnl,fills,variant
+Automobile and Auto Components,8827584.282095693,30,baseline
+Financial Services,8549609.570601288,63,baseline
+Capital Goods,5593983.456748035,32,baseline
+Fast Moving Consumer Goods,5342279.210682301,43,baseline
+Information Technology,3452787.523383172,33,baseline
+Oil Gas & Consumable Fuels,3190853.4965418526,18,baseline
+Metals & Mining,2718026.5231525414,19,baseline
+Healthcare,2674257.922668216,43,baseline
+Power,1582977.054129602,7,baseline
+Chemicals,1152393.1742353397,22,baseline
+Consumer Services,1032006.3869140506,10,baseline
+Realty,917009.7716846799,4,baseline
+Construction,857160.92035169,11,baseline
+Consumer Durables,436076.9220549237,29,baseline
+Forest Materials,251555.6388784104,7,baseline
+ETF,174728.13999764487,5,baseline
+Telecommunication,49378.62310888998,1,baseline
+Media Entertainment & Publication,43515.3512056666,3,baseline
+Textiles,16318.479945937013,1,baseline
+Diversified,1455.6346361824233,1,baseline
+Services,-122416.60085108387,4,baseline
+Construction Materials,-160536.7626045281,9,baseline
+Chemicals,171017.22833920806,12,sector_cap_30
+Automobile and Auto Components,136998.46702090595,6,sector_cap_30
+Capital Goods,132496.32054899947,12,sector_cap_30
+Fast Moving Consumer Goods,129568.39492835346,10,sector_cap_30
+Power,72375.634652579,4,sector_cap_30
+Information Technology,67886.90149226398,4,sector_cap_30
+Financial Services,60034.81890840202,10,sector_cap_30
+Realty,55314.25462759168,1,sector_cap_30
+Healthcare,54548.326263037765,8,sector_cap_30
+Consumer Services,46741.627168112886,2,sector_cap_30
+Oil Gas & Consumable Fuels,21843.520203369135,4,sector_cap_30
+ETF,8300.34320747552,5,sector_cap_30
+Telecommunication,5687.772981851184,1,sector_cap_30
+Construction Materials,2207.2452744678526,1,sector_cap_30
+Diversified,1432.3632370461823,1,sector_cap_30
+Construction,475.396727991191,1,sector_cap_30
+Forest Materials,344.57141527886813,1,sector_cap_30
+Consumer Durables,-9893.107125205348,2,sector_cap_30
+Services,-15889.49819305642,1,sector_cap_30
+Metals & Mining,-25788.647505549834,5,sector_cap_30
+Capital Goods,143188.334143495,3,sector_cap_25
+Financial Services,59957.33772000326,4,sector_cap_25
+Fast Moving Consumer Goods,34221.878640666066,5,sector_cap_25
+Automobile and Auto Components,14260.7500377015,1,sector_cap_25
+Chemicals,11699.726328211005,3,sector_cap_25
+ETF,5450.522309604238,5,sector_cap_25
+Telecommunication,4218.305665721519,1,sector_cap_25
+Consumer Services,3194.2539802899814,1,sector_cap_25
+Consumer Durables,1241.0237686336807,1,sector_cap_25
+Forest Materials,255.5495020554535,1,sector_cap_25
+Oil Gas & Consumable Fuels,-875.3210419279144,1,sector_cap_25
+Power,-2810.996485795228,1,sector_cap_25
+Services,-11327.146183034825,1,sector_cap_25
+Healthcare,-18173.971962823267,1,sector_cap_25
+Metals & Mining,-20300.49247329436,2,sector_cap_25
+ETF,4675.01071800442,5,sector_cap_20

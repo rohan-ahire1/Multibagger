@@ -398,6 +398,19 @@ def test_backtest_command_routes_options(monkeypatch) -> None:
         )
 
     monkeypatch.setattr("sepa_scanner.main.run_backtest_command", fake_run_backtest_command, raising=False)
+    monkeypatch.setattr(
+        "sepa_scanner.main.resolve_settings",
+        lambda config_dir: SimpleNamespace(
+            risk=SimpleNamespace(target_r=2.0),
+            backtest=SimpleNamespace(pending_days=5, max_hold_days=60, exit_mode="minervini_phased"),
+            exit_strategy=SimpleNamespace(
+                trail_activation_r=2.0,
+                trail_pct=0.20,
+                dead_money_days=15,
+            ),
+            portfolio=SimpleNamespace(max_positions=8),
+        ),
+    )
 
     result = runner.invoke(
         app,

@@ -66,21 +66,33 @@ def _close_trade(
     holding_days: int,
     mae_price: float | None = None,
     mfe_price: float | None = None,
+    friction_enabled: bool = True,
 ) -> BacktestTrade:
     if trade.entry_price is None:
         return trade
-    risk = _risk_per_share(trade.entry_price, trade.stop)
-    return_pct = ((exit_price - trade.entry_price) / trade.entry_price) * 100.0
-    r_multiple = ((exit_price - trade.entry_price) / risk) if risk else None
+    
+    if friction_enabled:
+        net_entry = trade.entry_price * 1.001 * 1.00118658
+        net_exit = exit_price * 0.999 * 0.99896342
+        net_stop = trade.stop * 0.999 * 0.99896342
+    else:
+        net_entry = trade.entry_price
+        net_exit = exit_price
+        net_stop = trade.stop
+        
+    net_risk = net_entry - net_stop
+    
+    return_pct = ((net_exit - net_entry) / net_entry) * 100.0 if net_entry > 0 else 0.0
+    r_multiple = ((net_exit - net_entry) / net_risk) if (net_risk is not None and net_risk > 0) else None
 
     mae_r: float | None = None
     mfe_r: float | None = None
     giveback_pct: float | None = None
-    if risk:
+    if net_risk is not None and net_risk > 0:
         if mae_price is not None:
-            mae_r = (trade.entry_price - mae_price) / risk
+            mae_r = (net_entry - mae_price) / net_risk
         if mfe_price is not None:
-            mfe_r = (mfe_price - trade.entry_price) / risk
+            mfe_r = (mfe_price - net_entry) / net_risk
         if mfe_r is not None and r_multiple is not None and mfe_r > 1e-9:
             giveback_pct = (mfe_r - r_multiple) / mfe_r
 
@@ -92,9 +104,9 @@ def _close_trade(
         stop=trade.stop,
         pivot=trade.pivot,
         entry_date=trade.entry_date,
-        entry_price=trade.entry_price,
+        entry_price=net_entry,
         exit_date=exit_date,
-        exit_price=exit_price,
+        exit_price=net_exit,
         holding_days=holding_days,
         return_pct=return_pct,
         r_multiple=r_multiple,
@@ -178,6 +190,13 @@ def _simulate_signal(
         voldry=float(signal["voldry"]) if signal.get("voldry") is not None else None,
     )
 
+    def _close(status: str, exit_date: date, exit_p: float, h_days: int, mae: float | None = None, mfe: float | None = None) -> BacktestTrade:
+        return _close_trade(
+            trade, status=status, exit_date=exit_date, exit_price=exit_p,
+            holding_days=h_days, mae_price=mae, mfe_price=mfe,
+            friction_enabled=params.friction_enabled
+        )
+
     risk = _risk_per_share(entry_price, initial_stop)
     target_price = entry_price + (risk * params.target_r) if (risk and params.target_r is not None) else None
     exit_bars = future_bars[entry_index : entry_index + params.max_hold_days]
@@ -204,17 +223,17 @@ def _simulate_signal(
 
         if not is_entry_day and open_price <= active_stop:
             mae_price, mfe_price = _update_excursions(mae_price, mfe_price, open_price)
-            return _close_trade(
-                trade, status="stopped", exit_date=bar["date"],
-                exit_price=open_price, holding_days=holding_days,
-                mae_price=mae_price, mfe_price=mfe_price,
+            return _close(
+                status="stopped", exit_date=bar["date"],
+                exit_p=open_price, h_days=holding_days,
+                mae=mae_price, mfe=mfe_price,
             )
         if target_price is not None and not is_entry_day and open_price >= target_price:
             mae_price, mfe_price = _update_excursions(mae_price, mfe_price, open_price)
-            return _close_trade(
-                trade, status="target", exit_date=bar["date"],
-                exit_price=open_price, holding_days=holding_days,
-                mae_price=mae_price, mfe_price=mfe_price,
+            return _close(
+                status="target", exit_date=bar["date"],
+                exit_p=open_price, h_days=holding_days,
+                mae=mae_price, mfe=mfe_price,
             )
 
         mae_price, mfe_price = _update_excursions(mae_price, mfe_price, low_price, high_price)
@@ -222,28 +241,28 @@ def _simulate_signal(
         hit_stop = low_price <= active_stop
         hit_target = target_price is not None and high_price >= target_price
         if hit_stop and hit_target:
-            return _close_trade(
-                trade, status="stopped", exit_date=bar["date"],
-                exit_price=active_stop, holding_days=holding_days,
-                mae_price=mae_price, mfe_price=mfe_price,
+            return _close(
+                status="stopped", exit_date=bar["date"],
+                exit_p=active_stop, h_days=holding_days,
+                mae=mae_price, mfe=mfe_price,
             )
         if hit_stop:
-            return _close_trade(
-                trade, status="stopped", exit_date=bar["date"],
-                exit_price=active_stop, holding_days=holding_days,
-                mae_price=mae_price, mfe_price=mfe_price,
+            return _close(
+                status="stopped", exit_date=bar["date"],
+                exit_p=active_stop, h_days=holding_days,
+                mae=mae_price, mfe=mfe_price,
             )
         if hit_target and target_price is not None:
-            return _close_trade(
-                trade, status="target", exit_date=bar["date"],
-                exit_price=target_price, holding_days=holding_days,
-                mae_price=mae_price, mfe_price=mfe_price,
+            return _close(
+                status="target", exit_date=bar["date"],
+                exit_p=target_price, h_days=holding_days,
+                mae=mae_price, mfe=mfe_price,
             )
         if holding_days == params.max_hold_days:
-            return _close_trade(
-                trade, status="time_stop", exit_date=bar["date"],
-                exit_price=close_price, holding_days=holding_days,
-                mae_price=mae_price, mfe_price=mfe_price,
+            return _close(
+                status="time_stop", exit_date=bar["date"],
+                exit_p=close_price, h_days=holding_days,
+                mae=mae_price, mfe=mfe_price,
             )
 
         # --- Dead money check: exit if not at +1R within dead_money_days ---
@@ -272,10 +291,10 @@ def _simulate_signal(
                     active_stop = max(active_stop, entry_price)
                     breakeven_activated = True
             else:
-                return _close_trade(
-                    trade, status="dead_money", exit_date=bar["date"],
-                    exit_price=close_price, holding_days=holding_days,
-                    mae_price=mae_price, mfe_price=mfe_price,
+                return _close(
+                    status="dead_money", exit_date=bar["date"],
+                    exit_p=close_price, h_days=holding_days,
+                    mae=mae_price, mfe=mfe_price,
                 )
 
         # --- Trailing stop update + same-bar trigger check ---
@@ -326,22 +345,21 @@ def _simulate_signal(
             # Trigger check: if the trail ratcheted up above close on this
             # bar, exit immediately instead of waiting for next bar's open.
             if not is_entry_day and active_stop > prev_stop and close_price <= active_stop:
-                return _close_trade(
-                    trade, status="stopped", exit_date=bar["date"],
-                    exit_price=active_stop, holding_days=holding_days,
-                    mae_price=mae_price, mfe_price=mfe_price,
+                return _close(
+                    status="stopped", exit_date=bar["date"],
+                    exit_p=active_stop, h_days=holding_days,
+                    mae=mae_price, mfe=mfe_price,
                 )
 
     if incomplete_after_entry:
         last_bar = exit_bars[-1]
-        return _close_trade(
-            trade,
+        return _close(
             status="incomplete_data",
             exit_date=last_bar["date"],
-            exit_price=float(last_bar["close"]),
-            holding_days=len(exit_bars),
-            mae_price=mae_price,
-            mfe_price=mfe_price,
+            exit_p=float(last_bar["close"]),
+            h_days=len(exit_bars),
+            mae=mae_price,
+            mfe=mfe_price,
         )
 
     return trade
@@ -574,27 +592,42 @@ def _simulate_signal_phased(
     mfe_r: float | None = None
     giveback_pct: float | None = None
 
-    if final_exit_price is not None and risk:
-        return_pct = ((final_exit_price - entry_price) / entry_price) * 100.0
-        r_multiple = (final_exit_price - entry_price) / risk
-        mae_r = (entry_price - mae_price) / risk
-        mfe_r = (mfe_price - entry_price) / risk
-        if mfe_r > 1e-9 and r_multiple is not None:
+    friction_enabled = getattr(params, "friction_enabled", False)
+    if friction_enabled:
+        net_entry = (entry_price * 1.001 * 1.00118658) if entry_price is not None else None
+        net_exit = (final_exit_price * 0.999 * 0.99896342) if final_exit_price is not None else None
+        net_stop = (initial_stop * 0.999 * 0.99896342) if initial_stop is not None else None
+    else:
+        net_entry = entry_price
+        net_exit = final_exit_price
+        net_stop = initial_stop
+        
+    net_risk = (net_entry - net_stop) if (net_entry is not None and net_stop is not None) else None
+
+    if net_exit is not None and net_entry is not None and net_risk is not None and net_risk > 0:
+        return_pct = ((net_exit - net_entry) / net_entry) * 100.0
+        r_multiple = (net_exit - net_entry) / net_risk
+        mae_r = (net_entry - mae_price) / net_risk if mae_price is not None else None
+        mfe_r = (mfe_price - net_entry) / net_risk if mfe_price is not None else None
+        if mfe_r is not None and mfe_r > 1e-9 and r_multiple is not None:
             giveback_pct = (mfe_r - r_multiple) / mfe_r
 
     # Weighted R for partial exits
-    if trade_state.partial_taken and r_multiple is not None:
+    if trade_state.partial_taken and r_multiple is not None and net_entry is not None and net_risk is not None and net_risk > 0:
         partial_pct = exit_config.partial_profit_pct
         remaining_pct = 1.0 - partial_pct
-        r_multiple = partial_pct * trade_state.partial_r + remaining_pct * r_multiple
+        net_partial_exit = (trade_state.partial_exit_price * 0.999 * 0.99896342) if friction_enabled else trade_state.partial_exit_price
+        
+        partial_r = (net_partial_exit - net_entry) / net_risk
+        r_multiple = partial_pct * partial_r + remaining_pct * r_multiple
+        
         if return_pct is not None:
-            partial_return = (
-                (trade_state.partial_exit_price - entry_price) / entry_price
-            ) * 100.0
-            final_return = (
-                (final_exit_price - entry_price) / entry_price
-            ) * 100.0
-            return_pct = partial_pct * partial_return + remaining_pct * final_return
+            partial_return = ((net_partial_exit - net_entry) / net_entry) * 100.0
+            remaining_return = return_pct
+            return_pct = partial_pct * partial_return + remaining_pct * remaining_return
+            
+        trade_state.partial_exit_price = net_partial_exit
+        trade_state.partial_r = partial_r
 
     return BacktestTrade(
         symbol=str(signal["symbol"]),
@@ -604,9 +637,9 @@ def _simulate_signal_phased(
         stop=initial_stop,
         pivot=float(signal["pivot"]) if signal.get("pivot") is not None else None,
         entry_date=entry_date,
-        entry_price=entry_price,
+        entry_price=net_entry,
         exit_date=final_exit_date,
-        exit_price=final_exit_price,
+        exit_price=net_exit,
         holding_days=final_holding_days if final_holding_days > 0 else None,
         return_pct=return_pct,
         r_multiple=r_multiple,

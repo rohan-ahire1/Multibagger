@@ -1,0 +1,71 @@
+{
+  "date_range": {
+    "start": "2010-01-04",
+    "end": "2026-03-17"
+  },
+  "variants": [
+    {
+      "variant": "baseline",
+      "max_sector_pct": 1.0,
+      "fills": 395,
+      "cagr": 0.2677152045026374,
+      "max_drawdown": -0.12489091439081168,
+      "calmar": 2.1435923166107704,
+      "win_rate": 0.6253164556962025,
+      "avg_r": 0.8543352605355182,
+      "payoff_ratio": 2.5243895814180015,
+      "total_pnl": 46581004.71956052,
+      "final_equity": 47581004.71956052
+    },
+    {
+      "variant": "sector_cap_30",
+      "max_sector_pct": 0.3,
+      "fills": 91,
+      "cagr": 0.04073348057072246,
+      "max_drawdown": -0.05578465549094591,
+      "calmar": 0.7301914874661846,
+      "win_rate": 0.6153846153846154,
+      "avg_r": 0.37267928262678324,
+      "payoff_ratio": 2.4429439242464475,
+      "total_pnl": 915701.9341731234,
+      "final_equity": 1915701.9341731234
+    },
+    {
+      "variant": "sector_cap_25",
+      "max_sector_pct": 0.25,
+      "fills": 31,
+      "cagr": 0.012501228848895929,
+      "max_drawdown": -0.05177007854463256,
+      "calmar": 0.24147594904879735,
+      "win_rate": 0.6451612903225806,
+      "avg_r": 0.3494586320774532,
+      "payoff_ratio": 1.7726620111894553,
+      "total_pnl": 224199.7539495062,
+      "final_equity": 1224199.7539495062
+    },
+    {
+      "variant": "sector_cap_20",
+      "max_sector_pct": 0.2,
+      "fills": 5,
+      "cagr": 0.0002864936426154596,
+      "max_drawdown": -0.033544601167679766,
+      "calmar": 0.008540678161095454,
+      "win_rate": 0.4,
+      "avg_r": 0.05205223205262037,
+      "payoff_ratio": 1.7913682232591743,
+      "total_pnl": 4675.010718004429,
+      "final_equity": 1004675.0107180044
+    }
+  ],
+  "output_files": {
+    "variant_summary": "reports/sector_cap_sweep/variant_summary.csv",
+    "yearly_cagr_by_variant": "reports/sector_cap_sweep/yearly_cagr_by_variant.csv",
+    "monthly_returns": "reports/sector_cap_sweep/monthly_returns.csv",
+    "sector_distribution": "reports/sector_cap_sweep/sector_distribution.csv",
+    "blocked_entries": "reports/sector_cap_sweep/blocked_entries_by_sector_year.csv",
+    "sector_pnl_contribution": "reports/sector_cap_sweep/sector_pnl_contribution.csv",
+    "sector_concentration_by_year": "reports/sector_cap_sweep/sector_concentration_by_year.csv",
+    "months_above_50pct_sector_capital": "reports/sector_cap_sweep/months_above_50pct_sector_capital.csv",
+    "same_sector_drawdown": "reports/sector_cap_sweep/same_sector_drawdown.csv"
+  }
+}

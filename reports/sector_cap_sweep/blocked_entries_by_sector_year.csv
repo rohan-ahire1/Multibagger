@@ -1,0 +1,458 @@
+year,sector,blocked_entries,variant
+2010,Automobile and Auto Components,3,sector_cap_30
+2010,Consumer Durables,4,sector_cap_30
+2010,Financial Services,3,sector_cap_30
+2010,Healthcare,2,sector_cap_30
+2010,Information Technology,2,sector_cap_30
+2010,Metals & Mining,1,sector_cap_30
+2010,Oil Gas & Consumable Fuels,1,sector_cap_30
+2010,Services,1,sector_cap_30
+2011,Automobile and Auto Components,1,sector_cap_30
+2011,Construction Materials,2,sector_cap_30
+2011,Consumer Durables,2,sector_cap_30
+2011,Fast Moving Consumer Goods,2,sector_cap_30
+2012,Fast Moving Consumer Goods,4,sector_cap_30
+2012,Financial Services,1,sector_cap_30
+2012,Healthcare,2,sector_cap_30
+2012,Oil Gas & Consumable Fuels,1,sector_cap_30
+2013,Consumer Durables,1,sector_cap_30
+2013,Fast Moving Consumer Goods,2,sector_cap_30
+2013,Financial Services,2,sector_cap_30
+2013,Healthcare,4,sector_cap_30
+2013,Information Technology,3,sector_cap_30
+2013,Media Entertainment & Publication,2,sector_cap_30
+2013,Oil Gas & Consumable Fuels,1,sector_cap_30
+2014,Automobile and Auto Components,2,sector_cap_30
+2014,Capital Goods,1,sector_cap_30
+2014,Chemicals,2,sector_cap_30
+2014,Consumer Durables,1,sector_cap_30
+2014,Consumer Services,1,sector_cap_30
+2014,Fast Moving Consumer Goods,1,sector_cap_30
+2014,Financial Services,7,sector_cap_30
+2014,Healthcare,3,sector_cap_30
+2015,Automobile and Auto Components,1,sector_cap_30
+2015,Construction,1,sector_cap_30
+2015,Fast Moving Consumer Goods,1,sector_cap_30
+2015,Financial Services,2,sector_cap_30
+2015,Healthcare,1,sector_cap_30
+2015,Information Technology,1,sector_cap_30
+2015,Oil Gas & Consumable Fuels,1,sector_cap_30
+2016,Automobile and Auto Components,2,sector_cap_30
+2016,Construction,1,sector_cap_30
+2016,Construction Materials,2,sector_cap_30
+2016,Consumer Durables,2,sector_cap_30
+2016,Fast Moving Consumer Goods,1,sector_cap_30
+2016,Financial Services,2,sector_cap_30
+2016,Forest Materials,1,sector_cap_30
+2016,Healthcare,2,sector_cap_30
+2016,Information Technology,2,sector_cap_30
+2017,Automobile and Auto Components,4,sector_cap_30
+2017,Capital Goods,4,sector_cap_30
+2017,Chemicals,3,sector_cap_30
+2017,Construction,2,sector_cap_30
+2017,Consumer Durables,4,sector_cap_30
+2017,Fast Moving Consumer Goods,3,sector_cap_30
+2017,Financial Services,7,sector_cap_30
+2017,Forest Materials,2,sector_cap_30
+2017,Media Entertainment & Publication,1,sector_cap_30
+2017,Metals & Mining,3,sector_cap_30
+2017,Oil Gas & Consumable Fuels,2,sector_cap_30
+2017,Realty,1,sector_cap_30
+2017,Services,1,sector_cap_30
+2018,Consumer Durables,1,sector_cap_30
+2018,Consumer Services,1,sector_cap_30
+2018,Fast Moving Consumer Goods,3,sector_cap_30
+2018,Financial Services,2,sector_cap_30
+2018,Information Technology,5,sector_cap_30
+2018,Metals & Mining,1,sector_cap_30
+2019,Consumer Durables,4,sector_cap_30
+2019,Consumer Services,1,sector_cap_30
+2019,Fast Moving Consumer Goods,1,sector_cap_30
+2019,Financial Services,2,sector_cap_30
+2019,Healthcare,2,sector_cap_30
+2019,Oil Gas & Consumable Fuels,3,sector_cap_30
+2020,Capital Goods,1,sector_cap_30
+2020,Chemicals,1,sector_cap_30
+2020,Construction Materials,1,sector_cap_30
+2020,Fast Moving Consumer Goods,3,sector_cap_30
+2020,Healthcare,2,sector_cap_30
+2020,Information Technology,1,sector_cap_30
+2020,Metals & Mining,2,sector_cap_30
+2020,Oil Gas & Consumable Fuels,1,sector_cap_30
+2021,Capital Goods,1,sector_cap_30
+2021,Chemicals,3,sector_cap_30
+2021,Construction,1,sector_cap_30
+2021,Construction Materials,1,sector_cap_30
+2021,Consumer Durables,4,sector_cap_30
+2021,Consumer Services,1,sector_cap_30
+2021,Fast Moving Consumer Goods,2,sector_cap_30
+2021,Financial Services,2,sector_cap_30
+2021,Forest Materials,2,sector_cap_30
+2021,Healthcare,1,sector_cap_30
+2021,Information Technology,8,sector_cap_30
+2021,Metals & Mining,4,sector_cap_30
+2021,Realty,1,sector_cap_30
+2021,Textiles,1,sector_cap_30
+2022,Automobile and Auto Components,3,sector_cap_30
+2022,Capital Goods,2,sector_cap_30
+2022,Construction,2,sector_cap_30
+2022,Consumer Durables,1,sector_cap_30
+2022,Consumer Services,1,sector_cap_30
+2022,Fast Moving Consumer Goods,3,sector_cap_30
+2022,Financial Services,4,sector_cap_30
+2022,Forest Materials,1,sector_cap_30
+2022,Metals & Mining,1,sector_cap_30
+2022,Oil Gas & Consumable Fuels,1,sector_cap_30
+2022,Services,1,sector_cap_30
+2023,Automobile and Auto Components,6,sector_cap_30
+2023,Capital Goods,8,sector_cap_30
+2023,Construction,5,sector_cap_30
+2023,Construction Materials,1,sector_cap_30
+2023,Consumer Durables,2,sector_cap_30
+2023,Consumer Services,2,sector_cap_30
+2023,Fast Moving Consumer Goods,4,sector_cap_30
+2023,Financial Services,13,sector_cap_30
+2023,Healthcare,4,sector_cap_30
+2023,Information Technology,5,sector_cap_30
+2023,Metals & Mining,3,sector_cap_30
+2023,Oil Gas & Consumable Fuels,2,sector_cap_30
+2023,Power,3,sector_cap_30
+2023,Realty,2,sector_cap_30
+2023,Textiles,1,sector_cap_30
+2024,Automobile and Auto Components,3,sector_cap_30
+2024,Capital Goods,3,sector_cap_30
+2024,Construction,2,sector_cap_30
+2024,Consumer Durables,2,sector_cap_30
+2024,Consumer Services,1,sector_cap_30
+2024,Diversified,1,sector_cap_30
+2024,Fast Moving Consumer Goods,1,sector_cap_30
+2024,Financial Services,4,sector_cap_30
+2024,Healthcare,11,sector_cap_30
+2024,Information Technology,3,sector_cap_30
+2024,Oil Gas & Consumable Fuels,1,sector_cap_30
+2024,Power,1,sector_cap_30
+2025,Automobile and Auto Components,1,sector_cap_30
+2025,Capital Goods,1,sector_cap_30
+2025,Chemicals,1,sector_cap_30
+2025,Construction,1,sector_cap_30
+2025,Construction Materials,1,sector_cap_30
+2025,Fast Moving Consumer Goods,4,sector_cap_30
+2025,Financial Services,10,sector_cap_30
+2025,Healthcare,1,sector_cap_30
+2026,Capital Goods,1,sector_cap_30
+2026,Healthcare,1,sector_cap_30
+2010,Automobile and Auto Components,3,sector_cap_25
+2010,Consumer Durables,4,sector_cap_25
+2010,Financial Services,3,sector_cap_25
+2010,Healthcare,2,sector_cap_25
+2010,Information Technology,2,sector_cap_25
+2010,Metals & Mining,1,sector_cap_25
+2010,Oil Gas & Consumable Fuels,1,sector_cap_25
+2010,Services,1,sector_cap_25
+2011,Automobile and Auto Components,1,sector_cap_25
+2011,Construction Materials,2,sector_cap_25
+2011,Consumer Durables,2,sector_cap_25
+2011,Fast Moving Consumer Goods,2,sector_cap_25
+2012,Fast Moving Consumer Goods,4,sector_cap_25
+2012,Financial Services,1,sector_cap_25
+2012,Healthcare,2,sector_cap_25
+2012,Information Technology,1,sector_cap_25
+2012,Oil Gas & Consumable Fuels,1,sector_cap_25
+2013,Consumer Durables,1,sector_cap_25
+2013,Fast Moving Consumer Goods,2,sector_cap_25
+2013,Financial Services,2,sector_cap_25
+2013,Healthcare,4,sector_cap_25
+2013,Information Technology,3,sector_cap_25
+2013,Media Entertainment & Publication,2,sector_cap_25
+2013,Oil Gas & Consumable Fuels,1,sector_cap_25
+2014,Automobile and Auto Components,2,sector_cap_25
+2014,Capital Goods,2,sector_cap_25
+2014,Chemicals,2,sector_cap_25
+2014,Consumer Durables,1,sector_cap_25
+2014,Consumer Services,1,sector_cap_25
+2014,Fast Moving Consumer Goods,1,sector_cap_25
+2014,Financial Services,7,sector_cap_25
+2014,Healthcare,3,sector_cap_25
+2015,Automobile and Auto Components,1,sector_cap_25
+2015,Construction,1,sector_cap_25
+2015,Fast Moving Consumer Goods,1,sector_cap_25
+2015,Financial Services,2,sector_cap_25
+2015,Healthcare,1,sector_cap_25
+2015,Information Technology,1,sector_cap_25
+2015,Oil Gas & Consumable Fuels,1,sector_cap_25
+2016,Automobile and Auto Components,2,sector_cap_25
+2016,Chemicals,2,sector_cap_25
+2016,Construction,1,sector_cap_25
+2016,Construction Materials,2,sector_cap_25
+2016,Consumer Durables,2,sector_cap_25
+2016,Fast Moving Consumer Goods,2,sector_cap_25
+2016,Financial Services,2,sector_cap_25
+2016,Forest Materials,1,sector_cap_25
+2016,Healthcare,2,sector_cap_25
+2016,Information Technology,2,sector_cap_25
+2017,Automobile and Auto Components,6,sector_cap_25
+2017,Capital Goods,4,sector_cap_25
+2017,Chemicals,3,sector_cap_25
+2017,Construction,2,sector_cap_25
+2017,Consumer Durables,4,sector_cap_25
+2017,Diversified,1,sector_cap_25
+2017,Fast Moving Consumer Goods,3,sector_cap_25
+2017,Financial Services,7,sector_cap_25
+2017,Forest Materials,2,sector_cap_25
+2017,Healthcare,1,sector_cap_25
+2017,Media Entertainment & Publication,1,sector_cap_25
+2017,Metals & Mining,5,sector_cap_25
+2017,Oil Gas & Consumable Fuels,2,sector_cap_25
+2017,Power,1,sector_cap_25
+2017,Realty,2,sector_cap_25
+2017,Services,1,sector_cap_25
+2018,Chemicals,1,sector_cap_25
+2018,Consumer Durables,1,sector_cap_25
+2018,Consumer Services,1,sector_cap_25
+2018,Fast Moving Consumer Goods,3,sector_cap_25
+2018,Financial Services,3,sector_cap_25
+2018,Healthcare,2,sector_cap_25
+2018,Information Technology,6,sector_cap_25
+2018,Metals & Mining,1,sector_cap_25
+2019,Consumer Durables,4,sector_cap_25
+2019,Consumer Services,1,sector_cap_25
+2019,Fast Moving Consumer Goods,1,sector_cap_25
+2019,Financial Services,3,sector_cap_25
+2019,Healthcare,2,sector_cap_25
+2019,Oil Gas & Consumable Fuels,3,sector_cap_25
+2020,Capital Goods,1,sector_cap_25
+2020,Chemicals,5,sector_cap_25
+2020,Construction Materials,1,sector_cap_25
+2020,Consumer Services,1,sector_cap_25
+2020,Fast Moving Consumer Goods,3,sector_cap_25
+2020,Healthcare,3,sector_cap_25
+2020,Information Technology,1,sector_cap_25
+2020,Metals & Mining,2,sector_cap_25
+2020,Oil Gas & Consumable Fuels,1,sector_cap_25
+2021,Automobile and Auto Components,1,sector_cap_25
+2021,Capital Goods,2,sector_cap_25
+2021,Chemicals,4,sector_cap_25
+2021,Construction,1,sector_cap_25
+2021,Construction Materials,1,sector_cap_25
+2021,Consumer Durables,5,sector_cap_25
+2021,Consumer Services,1,sector_cap_25
+2021,Fast Moving Consumer Goods,2,sector_cap_25
+2021,Financial Services,3,sector_cap_25
+2021,Forest Materials,2,sector_cap_25
+2021,Healthcare,1,sector_cap_25
+2021,Information Technology,8,sector_cap_25
+2021,Metals & Mining,4,sector_cap_25
+2021,Power,1,sector_cap_25
+2021,Realty,1,sector_cap_25
+2021,Textiles,1,sector_cap_25
+2022,Automobile and Auto Components,4,sector_cap_25
+2022,Capital Goods,3,sector_cap_25
+2022,Construction,2,sector_cap_25
+2022,Consumer Durables,1,sector_cap_25
+2022,Consumer Services,1,sector_cap_25
+2022,Fast Moving Consumer Goods,4,sector_cap_25
+2022,Financial Services,4,sector_cap_25
+2022,Forest Materials,1,sector_cap_25
+2022,Metals & Mining,1,sector_cap_25
+2022,Oil Gas & Consumable Fuels,1,sector_cap_25
+2022,Services,1,sector_cap_25
+2023,Automobile and Auto Components,7,sector_cap_25
+2023,Capital Goods,12,sector_cap_25
+2023,Construction,6,sector_cap_25
+2023,Construction Materials,1,sector_cap_25
+2023,Consumer Durables,2,sector_cap_25
+2023,Consumer Services,2,sector_cap_25
+2023,Fast Moving Consumer Goods,5,sector_cap_25
+2023,Financial Services,14,sector_cap_25
+2023,Healthcare,4,sector_cap_25
+2023,Information Technology,7,sector_cap_25
+2023,Metals & Mining,3,sector_cap_25
+2023,Oil Gas & Consumable Fuels,2,sector_cap_25
+2023,Power,4,sector_cap_25
+2023,Realty,2,sector_cap_25
+2023,Textiles,1,sector_cap_25
+2024,Automobile and Auto Components,3,sector_cap_25
+2024,Capital Goods,3,sector_cap_25
+2024,Construction,2,sector_cap_25
+2024,Consumer Durables,2,sector_cap_25
+2024,Consumer Services,1,sector_cap_25
+2024,Diversified,1,sector_cap_25
+2024,Fast Moving Consumer Goods,2,sector_cap_25
+2024,Financial Services,5,sector_cap_25
+2024,Healthcare,13,sector_cap_25
+2024,Information Technology,3,sector_cap_25
+2024,Oil Gas & Consumable Fuels,2,sector_cap_25
+2024,Power,1,sector_cap_25
+2025,Automobile and Auto Components,1,sector_cap_25
+2025,Capital Goods,3,sector_cap_25
+2025,Chemicals,3,sector_cap_25
+2025,Construction,1,sector_cap_25
+2025,Construction Materials,2,sector_cap_25
+2025,Fast Moving Consumer Goods,5,sector_cap_25
+2025,Financial Services,11,sector_cap_25
+2025,Healthcare,2,sector_cap_25
+2025,Metals & Mining,1,sector_cap_25
+2025,Oil Gas & Consumable Fuels,1,sector_cap_25
+2026,Capital Goods,1,sector_cap_25
+2026,Healthcare,1,sector_cap_25
+2026,Oil Gas & Consumable Fuels,1,sector_cap_25
+2010,Automobile and Auto Components,3,sector_cap_20
+2010,Consumer Durables,4,sector_cap_20
+2010,Financial Services,3,sector_cap_20
+2010,Healthcare,2,sector_cap_20
+2010,Information Technology,2,sector_cap_20
+2010,Metals & Mining,1,sector_cap_20
+2010,Oil Gas & Consumable Fuels,1,sector_cap_20
+2010,Services,1,sector_cap_20
+2011,Automobile and Auto Components,1,sector_cap_20
+2011,Construction Materials,2,sector_cap_20
+2011,Consumer Durables,2,sector_cap_20
+2011,Fast Moving Consumer Goods,2,sector_cap_20
+2012,Consumer Services,1,sector_cap_20
+2012,Fast Moving Consumer Goods,4,sector_cap_20
+2012,Financial Services,1,sector_cap_20
+2012,Healthcare,3,sector_cap_20
+2012,Information Technology,1,sector_cap_20
+2012,Oil Gas & Consumable Fuels,1,sector_cap_20
+2013,Consumer Durables,1,sector_cap_20
+2013,Fast Moving Consumer Goods,2,sector_cap_20
+2013,Financial Services,2,sector_cap_20
+2013,Healthcare,4,sector_cap_20
+2013,Information Technology,3,sector_cap_20
+2013,Media Entertainment & Publication,2,sector_cap_20
+2013,Oil Gas & Consumable Fuels,1,sector_cap_20
+2014,Automobile and Auto Components,2,sector_cap_20
+2014,Capital Goods,2,sector_cap_20
+2014,Chemicals,2,sector_cap_20
+2014,Consumer Durables,1,sector_cap_20
+2014,Consumer Services,1,sector_cap_20
+2014,Fast Moving Consumer Goods,1,sector_cap_20
+2014,Financial Services,8,sector_cap_20
+2014,Healthcare,3,sector_cap_20
+2015,Automobile and Auto Components,1,sector_cap_20
+2015,Capital Goods,1,sector_cap_20
+2015,Construction,1,sector_cap_20
+2015,Fast Moving Consumer Goods,1,sector_cap_20
+2015,Financial Services,2,sector_cap_20
+2015,Healthcare,1,sector_cap_20
+2015,Information Technology,1,sector_cap_20
+2015,Oil Gas & Consumable Fuels,1,sector_cap_20
+2016,Automobile and Auto Components,2,sector_cap_20
+2016,Chemicals,2,sector_cap_20
+2016,Construction,1,sector_cap_20
+2016,Construction Materials,2,sector_cap_20
+2016,Consumer Durables,2,sector_cap_20
+2016,Fast Moving Consumer Goods,3,sector_cap_20
+2016,Financial Services,2,sector_cap_20
+2016,Forest Materials,1,sector_cap_20
+2016,Healthcare,2,sector_cap_20
+2016,Information Technology,2,sector_cap_20
+2017,Automobile and Auto Components,6,sector_cap_20
+2017,Capital Goods,4,sector_cap_20
+2017,Chemicals,3,sector_cap_20
+2017,Construction,2,sector_cap_20
+2017,Consumer Durables,4,sector_cap_20
+2017,Diversified,1,sector_cap_20
+2017,Fast Moving Consumer Goods,3,sector_cap_20
+2017,Financial Services,7,sector_cap_20
+2017,Forest Materials,2,sector_cap_20
+2017,Healthcare,1,sector_cap_20
+2017,Media Entertainment & Publication,1,sector_cap_20
+2017,Metals & Mining,6,sector_cap_20
+2017,Oil Gas & Consumable Fuels,2,sector_cap_20
+2017,Power,1,sector_cap_20
+2017,Realty,2,sector_cap_20
+2017,Services,1,sector_cap_20
+2018,Chemicals,1,sector_cap_20
+2018,Consumer Durables,1,sector_cap_20
+2018,Consumer Services,1,sector_cap_20
+2018,Fast Moving Consumer Goods,3,sector_cap_20
+2018,Financial Services,3,sector_cap_20
+2018,Healthcare,2,sector_cap_20
+2018,Information Technology,6,sector_cap_20
+2018,Metals & Mining,1,sector_cap_20
+2019,Consumer Durables,4,sector_cap_20
+2019,Consumer Services,1,sector_cap_20
+2019,Fast Moving Consumer Goods,1,sector_cap_20
+2019,Financial Services,3,sector_cap_20
+2019,Healthcare,2,sector_cap_20
+2019,Oil Gas & Consumable Fuels,3,sector_cap_20
+2020,Capital Goods,1,sector_cap_20
+2020,Chemicals,5,sector_cap_20
+2020,Construction Materials,1,sector_cap_20
+2020,Consumer Services,1,sector_cap_20
+2020,Fast Moving Consumer Goods,3,sector_cap_20
+2020,Healthcare,3,sector_cap_20
+2020,Information Technology,1,sector_cap_20
+2020,Metals & Mining,3,sector_cap_20
+2020,Oil Gas & Consumable Fuels,1,sector_cap_20
+2021,Automobile and Auto Components,1,sector_cap_20
+2021,Capital Goods,3,sector_cap_20
+2021,Chemicals,6,sector_cap_20
+2021,Construction,1,sector_cap_20
+2021,Construction Materials,1,sector_cap_20
+2021,Consumer Durables,5,sector_cap_20
+2021,Consumer Services,1,sector_cap_20
+2021,Fast Moving Consumer Goods,2,sector_cap_20
+2021,Financial Services,3,sector_cap_20
+2021,Forest Materials,2,sector_cap_20
+2021,Healthcare,1,sector_cap_20
+2021,Information Technology,8,sector_cap_20
+2021,Metals & Mining,4,sector_cap_20
+2021,Power,1,sector_cap_20
+2021,Realty,1,sector_cap_20
+2021,Textiles,1,sector_cap_20
+2022,Automobile and Auto Components,4,sector_cap_20
+2022,Capital Goods,3,sector_cap_20
+2022,Construction,2,sector_cap_20
+2022,Consumer Durables,1,sector_cap_20
+2022,Consumer Services,1,sector_cap_20
+2022,Fast Moving Consumer Goods,5,sector_cap_20
+2022,Financial Services,4,sector_cap_20
+2022,Forest Materials,2,sector_cap_20
+2022,Metals & Mining,1,sector_cap_20
+2022,Oil Gas & Consumable Fuels,1,sector_cap_20
+2022,Power,1,sector_cap_20
+2022,Services,1,sector_cap_20
+2022,Telecommunication,1,sector_cap_20
+2023,Automobile and Auto Components,7,sector_cap_20
+2023,Capital Goods,13,sector_cap_20
+2023,Construction,6,sector_cap_20
+2023,Construction Materials,1,sector_cap_20
+2023,Consumer Durables,3,sector_cap_20
+2023,Consumer Services,2,sector_cap_20
+2023,Fast Moving Consumer Goods,6,sector_cap_20
+2023,Financial Services,15,sector_cap_20
+2023,Healthcare,4,sector_cap_20
+2023,Information Technology,7,sector_cap_20
+2023,Metals & Mining,3,sector_cap_20
+2023,Oil Gas & Consumable Fuels,2,sector_cap_20
+2023,Power,4,sector_cap_20
+2023,Realty,2,sector_cap_20
+2023,Services,1,sector_cap_20
+2023,Textiles,1,sector_cap_20
+2024,Automobile and Auto Components,3,sector_cap_20
+2024,Capital Goods,3,sector_cap_20
+2024,Construction,2,sector_cap_20
+2024,Consumer Durables,2,sector_cap_20
+2024,Consumer Services,1,sector_cap_20
+2024,Diversified,1,sector_cap_20
+2024,Fast Moving Consumer Goods,3,sector_cap_20
+2024,Financial Services,6,sector_cap_20
+2024,Healthcare,13,sector_cap_20
+2024,Information Technology,3,sector_cap_20
+2024,Oil Gas & Consumable Fuels,3,sector_cap_20
+2024,Power,1,sector_cap_20
+2025,Automobile and Auto Components,2,sector_cap_20
+2025,Capital Goods,3,sector_cap_20
+2025,Chemicals,4,sector_cap_20
+2025,Construction,1,sector_cap_20
+2025,Construction Materials,2,sector_cap_20
+2025,Fast Moving Consumer Goods,6,sector_cap_20
+2025,Financial Services,12,sector_cap_20
+2025,Healthcare,2,sector_cap_20
+2025,Metals & Mining,1,sector_cap_20
+2025,Oil Gas & Consumable Fuels,1,sector_cap_20
+2026,Capital Goods,1,sector_cap_20
+2026,Healthcare,1,sector_cap_20
+2026,Oil Gas & Consumable Fuels,1,sector_cap_20

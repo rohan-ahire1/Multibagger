@@ -1,0 +1,4 @@
+regime,fills,cagr_pct,max_drawdown_pct,calmar,sharpe,win_rate,avg_holding_days,profit_factor
+all,1519,34.34,-47.29,0.726,1.204,65.4,3.7,1.33
+bull,1344,35.9,-32.13,1.117,1.377,65.4,3.7,1.331
+bear,185,-1.92,-40.45,-0.048,-0.086,63.8,3.6,0.883

@@ -12,9 +12,9 @@
   "strategy": {
     "start_value": 1009237.9991569697,
     "end_value": 47581004.71956052,
-    "cagr": 0.26923636397130535,
+    "cagr": 0.26710032781723125,
     "max_drawdown_pct": -0.12489091439081168,
-    "calmar": 2.1557722215789403,
+    "calmar": 2.1386690066293728,
     "total_return_pct": 46.58100471956052,
     "filled_trades": 395,
     "total_signals": 423
@@ -44,7 +44,7 @@
     "pnl_2023": 13814936.635949813,
     "pnl_2023_share": 0.296578760357837,
     "final_equity_ex_2023": 23775655.89735714,
-    "cagr_ex_2023": 0.21483392743831642
+    "cagr_ex_2023": 0.21317710914343913
   },
   "regime": {
     "daily": {
@@ -53,7 +53,7 @@
         "inactive_days": 1539,
         "active_pnl": 43085521.91737651,
         "inactive_pnl": 7336858.578009713,
-        "active_avg_daily_return": 0.0018007058382233756,
+        "active_avg_daily_return": 0.001800705838223376,
         "inactive_avg_daily_return": 0.0007276855952394653
       },
       "weak_breadth": {
@@ -70,15 +70,15 @@
         "active_pnl": 1221210.5631184503,
         "inactive_pnl": 49451859.6437555,
         "active_avg_daily_return": 0.0006884092177698941,
-        "inactive_avg_daily_return": 0.0013863622501850796
+        "inactive_avg_daily_return": 0.0013863622501850798
       },
       "sector_concentration": {
         "active_days": 2241,
-        "inactive_days": 1888,
+        "inactive_days": 1918,
         "active_pnl": 49955537.703140214,
         "inactive_pnl": -3374532.9835796915,
         "active_avg_daily_return": 0.001936751748645951,
-        "inactive_avg_daily_return": -0.00012485546180020536
+        "inactive_avg_daily_return": -0.00012290256093784553
       }
     },
     "trade_entries": {

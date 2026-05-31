@@ -1,0 +1,246 @@
+variant,month,sector,days_above_50_pct_capital,max_sector_capital_pct
+baseline,2010-02,Services,2,0.6030480196208765
+baseline,2010-03,Automobile and Auto Components,5,1.3321911796030792
+baseline,2010-04,Automobile and Auto Components,17,0.5265976749156612
+baseline,2010-04,Consumer Durables,12,0.6847091780390514
+baseline,2010-04,Oil Gas & Consumable Fuels,2,0.6621442255054834
+baseline,2010-05,Automobile and Auto Components,12,0.5223408428444629
+baseline,2010-05,Consumer Durables,17,0.7135252563260726
+baseline,2010-06,Automobile and Auto Components,20,0.5645851566810057
+baseline,2010-07,Financial Services,4,0.5906376651457892
+baseline,2010-07,Healthcare,15,0.8391704690652803
+baseline,2010-07,Metals & Mining,5,0.5227065775084391
+baseline,2010-08,Automobile and Auto Components,10,0.5969461480476504
+baseline,2010-08,Consumer Durables,6,0.5850373447505802
+baseline,2010-08,Healthcare,16,0.8412020276494558
+baseline,2010-09,Consumer Durables,3,0.6170186327528573
+baseline,2010-10,Consumer Durables,2,0.6185702865421242
+baseline,2010-10,Financial Services,10,0.8209978144814224
+baseline,2010-11,Financial Services,12,0.6000562299511968
+baseline,2010-12,Information Technology,11,1.408230535859885
+baseline,2011-01,Information Technology,7,1.4088429354968446
+baseline,2011-03,Consumer Durables,2,0.6749204957631039
+baseline,2011-04,Consumer Durables,1,0.6818788302507041
+baseline,2011-05,Consumer Durables,6,0.5727513216279234
+baseline,2011-06,Consumer Durables,12,0.5861176320792583
+baseline,2011-10,Construction Materials,3,1.130347410717942
+baseline,2011-11,Construction Materials,11,1.1339005136461038
+baseline,2012-07,Fast Moving Consumer Goods,3,1.2473262411941723
+baseline,2012-08,Fast Moving Consumer Goods,9,0.560279972636757
+baseline,2012-08,Oil Gas & Consumable Fuels,20,0.9322805749267663
+baseline,2012-09,Fast Moving Consumer Goods,15,0.5951931116701371
+baseline,2012-09,Healthcare,2,0.7139312043981766
+baseline,2012-09,Oil Gas & Consumable Fuels,2,0.8938163084800318
+baseline,2012-10,Fast Moving Consumer Goods,3,0.614604297842108
+baseline,2012-11,Financial Services,2,0.7171462476976149
+baseline,2012-11,Healthcare,19,0.5750343615825445
+baseline,2012-12,Financial Services,20,0.7348526776793411
+baseline,2012-12,Healthcare,20,0.5878117828813993
+baseline,2013-01,Financial Services,23,0.7867933575305146
+baseline,2013-01,Healthcare,22,0.5795815393966989
+baseline,2013-02,Financial Services,10,0.7960447374404993
+baseline,2013-03,Information Technology,15,0.8680539164110713
+baseline,2013-04,Information Technology,4,0.8642433883503445
+baseline,2013-05,Financial Services,13,0.5692631019394996
+baseline,2013-05,Healthcare,18,0.9105973723975996
+baseline,2013-06,Financial Services,6,0.5665997922915289
+baseline,2013-07,Healthcare,20,0.7463771624298217
+baseline,2013-10,Healthcare,15,0.7875175931100469
+baseline,2013-10,Information Technology,4,0.6313350094925249
+baseline,2013-11,Healthcare,19,0.59786923709747
+baseline,2013-12,Healthcare,21,0.60128475662704
+baseline,2013-12,Information Technology,7,0.7139583783928682
+baseline,2014-01,Healthcare,19,0.5704996650333665
+baseline,2014-01,Information Technology,2,0.7120142229546924
+baseline,2014-02,Healthcare,5,0.8689682750591354
+baseline,2014-03,Healthcare,4,0.8737680419991815
+baseline,2014-04,Automobile and Auto Components,3,0.6435901326382321
+baseline,2014-04,Healthcare,6,0.6166829393745914
+baseline,2014-05,Capital Goods,4,0.5709671149502463
+baseline,2014-05,Financial Services,16,1.2946327439919647
+baseline,2014-06,Financial Services,11,1.1697499775255666
+baseline,2014-07,Chemicals,20,0.7091311001317379
+baseline,2014-07,Financial Services,3,0.986514296932542
+baseline,2014-08,Automobile and Auto Components,12,0.733186325882709
+baseline,2014-08,Chemicals,19,0.7102899257107208
+baseline,2014-09,Automobile and Auto Components,22,0.7563625080240989
+baseline,2014-09,Chemicals,22,0.9703739395397465
+baseline,2014-10,Automobile and Auto Components,6,0.7503323310222529
+baseline,2014-10,Chemicals,1,0.641632594680426
+baseline,2014-12,Consumer Services,12,0.6436592269265893
+baseline,2014-12,Financial Services,3,0.699783458255827
+baseline,2015-02,Financial Services,2,0.7844200974985539
+baseline,2015-03,Fast Moving Consumer Goods,4,0.8097504647769597
+baseline,2015-07,Automobile and Auto Components,2,0.6944459892517683
+baseline,2015-07,Construction,4,0.8344059476516811
+baseline,2015-07,Financial Services,3,0.6713701110670949
+baseline,2015-12,Healthcare,6,0.5280360174700389
+baseline,2015-12,Information Technology,4,0.6273088333029123
+baseline,2016-03,Automobile and Auto Components,7,0.744963871420918
+baseline,2016-04,Automobile and Auto Components,17,0.7596772365590091
+baseline,2016-05,Fast Moving Consumer Goods,4,0.7373298553279678
+baseline,2016-07,Construction Materials,7,0.7995295634053792
+baseline,2016-07,Consumer Durables,2,0.6053840436190475
+baseline,2016-08,Construction Materials,8,0.7748019702875553
+baseline,2016-08,Consumer Durables,18,0.6228598677721617
+baseline,2016-09,Automobile and Auto Components,6,0.5414124430237681
+baseline,2016-09,Healthcare,8,0.7734466553106756
+baseline,2016-10,Construction,4,0.7248956229594795
+baseline,2016-11,Information Technology,5,0.5282591201089233
+baseline,2017-03,Financial Services,14,1.1102848345377907
+baseline,2017-04,Capital Goods,14,0.8969883746758855
+baseline,2017-04,Financial Services,5,1.111034262784701
+baseline,2017-04,Forest Materials,2,1.1184424072454375
+baseline,2017-05,Capital Goods,13,0.6670500253787617
+baseline,2017-05,Financial Services,2,0.6362123603240458
+baseline,2017-06,Automobile and Auto Components,10,0.933357681375627
+baseline,2017-06,Financial Services,2,0.5538100445501162
+baseline,2017-06,Services,11,0.5673598406282998
+baseline,2017-07,Automobile and Auto Components,8,0.8094880716178473
+baseline,2017-07,Capital Goods,5,0.5813488851422555
+baseline,2017-07,Chemicals,4,0.7669728835667101
+baseline,2017-08,Automobile and Auto Components,9,0.7682459069642252
+baseline,2017-08,Capital Goods,7,0.5813685566086848
+baseline,2017-08,Chemicals,1,0.7242798499912942
+baseline,2017-09,Chemicals,2,0.7112696322982335
+baseline,2017-09,Fast Moving Consumer Goods,2,0.5105282182184215
+baseline,2017-09,Realty,19,0.9262182478431632
+baseline,2017-10,Oil Gas & Consumable Fuels,8,0.5226468135637926
+baseline,2017-10,Realty,20,0.980068841617939
+baseline,2017-11,Oil Gas & Consumable Fuels,1,0.5011176674185878
+baseline,2017-11,Realty,22,0.9874672404406353
+baseline,2017-12,Oil Gas & Consumable Fuels,2,0.7818261006152775
+baseline,2017-12,Realty,2,0.7279573471268518
+baseline,2018-04,Information Technology,4,0.7547528031650801
+baseline,2018-05,Financial Services,22,1.3666903118478828
+baseline,2018-05,Information Technology,3,0.6299256764992278
+baseline,2018-06,Fast Moving Consumer Goods,3,0.510758574481257
+baseline,2018-06,Financial Services,13,0.7674063297275847
+baseline,2018-06,Information Technology,3,0.6198693457867658
+baseline,2018-07,Consumer Durables,5,0.814557371394826
+baseline,2018-07,Consumer Services,1,0.8801277235681574
+baseline,2018-07,Fast Moving Consumer Goods,1,0.5044551337116713
+baseline,2018-08,Consumer Services,4,0.879951764207435
+baseline,2018-08,Information Technology,4,0.8429966741688896
+baseline,2019-02,Healthcare,2,1.2985777050048166
+baseline,2019-03,Financial Services,17,0.6958964668117666
+baseline,2019-04,Financial Services,14,0.7096334340461513
+baseline,2019-08,Oil Gas & Consumable Fuels,4,0.79122782375733
+baseline,2019-09,Consumer Durables,6,0.9848472892418717
+baseline,2019-09,Oil Gas & Consumable Fuels,14,0.7931956358936039
+baseline,2019-10,Consumer Durables,20,0.5838715626842195
+baseline,2019-10,Financial Services,2,0.5935356949423644
+baseline,2019-11,Consumer Durables,2,0.5777721027612086
+baseline,2019-11,Financial Services,2,0.5913865130617442
+baseline,2019-11,Oil Gas & Consumable Fuels,11,1.115983866691759
+baseline,2020-02,Fast Moving Consumer Goods,19,0.6589508577588351
+baseline,2020-07,Chemicals,1,0.6015553924565975
+baseline,2020-07,Fast Moving Consumer Goods,3,0.6315380089429251
+baseline,2020-07,Metals & Mining,3,0.5491067323737385
+baseline,2020-08,Capital Goods,20,0.6453236227022856
+baseline,2020-09,Capital Goods,22,0.7316675259913514
+baseline,2020-09,Fast Moving Consumer Goods,2,0.535390154810415
+baseline,2020-09,Oil Gas & Consumable Fuels,9,0.5441726980328186
+baseline,2020-10,Capital Goods,21,0.7673862121560809
+baseline,2020-10,Healthcare,3,0.6278151061395522
+baseline,2020-11,Capital Goods,1,0.7624026565610915
+baseline,2020-11,Chemicals,2,0.7425664203124532
+baseline,2020-11,Metals & Mining,2,0.7598932233184935
+baseline,2020-12,Construction Materials,5,0.929517557856252
+baseline,2020-12,Information Technology,7,0.6322608346820282
+baseline,2020-12,Metals & Mining,1,0.7545474682518162
+baseline,2021-01,Information Technology,17,0.7128048852908838
+baseline,2021-03,Forest Materials,7,0.5763487248202108
+baseline,2021-05,Financial Services,11,0.6203350504116543
+baseline,2021-05,Healthcare,6,0.6636814902922771
+baseline,2021-06,Financial Services,22,0.6043971217455512
+baseline,2021-06,Healthcare,22,0.7273473532620157
+baseline,2021-07,Financial Services,21,0.7942035630512252
+baseline,2021-07,Healthcare,10,0.7159843773277911
+baseline,2021-08,Financial Services,7,0.6370218138930802
+baseline,2021-08,Information Technology,6,0.5123935602141632
+baseline,2021-09,Information Technology,19,0.7379198107726409
+baseline,2021-10,Fast Moving Consumer Goods,4,0.5397031315624002
+baseline,2021-10,Information Technology,11,0.6082670826881978
+baseline,2021-11,Capital Goods,6,0.6850974311323207
+baseline,2021-11,Fast Moving Consumer Goods,18,0.5688187387285039
+baseline,2021-12,Capital Goods,23,0.7006217589848603
+baseline,2021-12,Fast Moving Consumer Goods,1,0.5006334987451051
+baseline,2021-12,Information Technology,6,0.6811464422815967
+baseline,2022-01,Capital Goods,20,0.7616751055304084
+baseline,2022-01,Information Technology,4,0.6657311865047486
+baseline,2022-02,Capital Goods,6,0.7604109546688053
+baseline,2022-04,Consumer Durables,10,0.5723543366952963
+baseline,2022-04,Fast Moving Consumer Goods,3,0.7197942197471022
+baseline,2022-06,Automobile and Auto Components,5,0.823270871874345
+baseline,2022-07,Automobile and Auto Components,21,0.8236296478203987
+baseline,2022-07,Fast Moving Consumer Goods,21,0.6107811730894984
+baseline,2022-08,Automobile and Auto Components,15,0.8531351311091411
+baseline,2022-08,Fast Moving Consumer Goods,20,0.8208117585340825
+baseline,2022-08,Services,3,0.555103547918257
+baseline,2022-09,Automobile and Auto Components,17,0.5199785289152667
+baseline,2022-09,Fast Moving Consumer Goods,20,0.8671872680846343
+baseline,2022-11,Capital Goods,4,0.9504014055805285
+baseline,2022-11,Construction,5,0.665046844786611
+baseline,2022-12,Construction,12,0.7012702745349157
+baseline,2022-12,Financial Services,7,0.7793700743951966
+baseline,2023-03,Information Technology,3,0.7606028062428903
+baseline,2023-04,Power,2,1.0
+baseline,2023-05,Capital Goods,5,0.8578692168321803
+baseline,2023-05,Fast Moving Consumer Goods,10,0.9804056546321991
+baseline,2023-05,Oil Gas & Consumable Fuels,8,0.7898978874293785
+baseline,2023-05,Power,8,0.7307898967702904
+baseline,2023-06,Fast Moving Consumer Goods,8,0.9747954102147324
+baseline,2023-06,Power,21,0.7590861157592351
+baseline,2023-07,Power,21,0.7774063852020462
+baseline,2023-08,Metals & Mining,13,0.7216533160689973
+baseline,2023-09,Financial Services,3,0.6135221779258808
+baseline,2023-09,Metals & Mining,20,0.615062784222812
+baseline,2023-10,Financial Services,15,0.6512426499498798
+baseline,2023-10,Metals & Mining,20,0.8091590662873771
+baseline,2023-11,Financial Services,2,0.7036350122717708
+baseline,2023-11,Metals & Mining,9,0.7100041431820021
+baseline,2023-11,Oil Gas & Consumable Fuels,12,0.6638506293002996
+baseline,2023-12,Automobile and Auto Components,6,0.544921735294967
+baseline,2023-12,Financial Services,20,1.099316592795263
+baseline,2023-12,Oil Gas & Consumable Fuels,19,0.5908883777693491
+baseline,2024-01,Automobile and Auto Components,4,0.5444488713714276
+baseline,2024-01,Financial Services,21,1.1161727480825265
+baseline,2024-02,Automobile and Auto Components,4,0.8640049709504602
+baseline,2024-02,Financial Services,8,0.8543382316573509
+baseline,2024-03,Automobile and Auto Components,6,1.0105310314901241
+baseline,2024-04,Automobile and Auto Components,20,1.0129075059906352
+baseline,2024-04,Healthcare,5,0.5152544758835199
+baseline,2024-05,Automobile and Auto Components,13,0.9685037984090985
+baseline,2024-05,Healthcare,4,0.5013498197881874
+baseline,2024-06,Automobile and Auto Components,19,0.8590084011507678
+baseline,2024-07,Automobile and Auto Components,8,0.8442753345969924
+baseline,2024-07,Healthcare,9,0.7542910074293713
+baseline,2024-08,Healthcare,3,0.7539362557560328
+baseline,2024-08,Information Technology,1,0.7206062600670329
+baseline,2024-09,Financial Services,1,0.5000155383690296
+baseline,2024-09,Healthcare,4,0.8069729305692146
+baseline,2024-09,Information Technology,21,0.7251941934259062
+baseline,2024-10,Information Technology,3,0.7098756804510439
+baseline,2024-11,Healthcare,6,1.0
+baseline,2024-11,Information Technology,5,0.6907335920094221
+baseline,2024-12,Healthcare,21,0.9251012593586037
+baseline,2024-12,Information Technology,21,0.9610000571186564
+baseline,2025-01,Healthcare,8,0.8302496340111218
+baseline,2025-01,Information Technology,7,0.9466646732103435
+baseline,2025-03,Financial Services,6,1.0
+baseline,2025-04,Financial Services,5,0.9950240679554734
+baseline,2025-06,Chemicals,1,0.5896678788898247
+baseline,2025-06,Financial Services,5,0.6505151566248403
+baseline,2025-07,Chemicals,5,0.5971776132252673
+baseline,2025-10,Financial Services,4,0.9463703819651346
+baseline,2025-11,Financial Services,19,0.9725846598962701
+baseline,2025-12,ETF,6,0.606391394969291
+baseline,2025-12,Financial Services,10,0.6944758983052932
+baseline,2026-02,Capital Goods,3,0.8888583047393783
+baseline,2026-03,Capital Goods,5,0.8910993873142848
+baseline,2026-03,Healthcare,4,0.7904387156022833
+sector_cap_30,2020-07,Chemicals,1,0.6015384392068435
+sector_cap_30,2025-12,ETF,6,0.606391394969291
+sector_cap_25,2025-12,ETF,6,0.6063913949692908
+sector_cap_20,2025-12,ETF,6,0.6064339857734717

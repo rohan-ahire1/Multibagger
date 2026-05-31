@@ -1562,7 +1562,7 @@ def filter_signals(
     filtered = signals
 
     # Skip months filter
-    skip_months = list(settings.backtest.skip_months or [])
+    skip_months = list(getattr(settings.backtest, "skip_months", None) or [])
     if skip_months and "signal_date" in filtered.columns:
         filtered = filtered.filter(
             ~pl.col("signal_date").dt.month().is_in(skip_months)

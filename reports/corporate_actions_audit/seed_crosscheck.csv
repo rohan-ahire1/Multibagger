@@ -1,0 +1,7 @@
+symbol,ex_date,action_type,adjustment_factor,matched_yfinance_same_date_type
+IRCTC,2022-10-28,split,0.2,false
+BAJFINANCE,2022-09-15,split,0.5,false
+DMART,2023-08-04,split,0.1,false
+RELIANCE,2017-09-07,bonus,0.5,false
+TCS,2018-07-18,bonus,0.5,false
+HDFCBANK,2019-09-19,split,0.5,true

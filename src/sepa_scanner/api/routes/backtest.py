@@ -93,6 +93,7 @@ def run_backtest(
         dead_money_min_open_r=req.dead_money_min_open_r,
         dead_money_min_mfe_r=req.dead_money_min_mfe_r,
         dead_money_extend_to_breakeven=req.dead_money_extend_to_breakeven,
+        friction_enabled=True,
     )
     
     pm = None

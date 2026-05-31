@@ -566,6 +566,7 @@ def run_backtest_command(
         trail_activation_r=settings.exit_strategy.trail_activation_r,
         trail_pct=settings.exit_strategy.trail_pct,
         dead_money_days=settings.exit_strategy.dead_money_days,
+        friction_enabled=True,
     )
     
     pm = None
@@ -602,9 +603,10 @@ def run_backtest_command(
         symbol=symbol,
     )
 
-    if settings.backtest.skip_months:
+    skip_months = getattr(settings.backtest, "skip_months", None)
+    if skip_months:
         signals = signals.filter(
-            ~pl.col("signal_date").dt.month().is_in(settings.backtest.skip_months)
+            ~pl.col("signal_date").dt.month().is_in(skip_months)
         )
 
     if signals.is_empty():

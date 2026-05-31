@@ -29,6 +29,7 @@ pub struct RustBacktestParams {
     pub trail_activation_r: f64,
     pub trail_pct: f64,
     pub dead_money_days: Option<usize>,
+    pub friction_enabled: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -211,6 +212,11 @@ fn simulate_single_signal_fast(
     let entry_p = entry_price.unwrap();
     let entry_date = dates[entry_idx];
 
+    let friction = params.friction_enabled.unwrap_or(true);
+    let make_trade = |status: &str, exit_d: NaiveDate, exit_p: f64, h_days: usize, mae: f64, mfe: f64| {
+        make_single_signal_trade(signal, status, entry_date, entry_p, exit_d, exit_p, h_days, mae, mfe, friction, None)
+    };
+
     let exit_end = std::cmp::min(entry_idx + params.max_hold_days, dates.len());
     let mut exit_p = closes[exit_end - 1];
     let mut exit_d = dates[exit_end - 1];
@@ -239,12 +245,12 @@ fn simulate_single_signal_fast(
         mfe_price = f64::max(mfe_price, high);
 
         if !is_entry_day && open <= active_stop {
-            return RustBacktestTrade::close(signal, "stopped", entry_date, entry_p, bar_date, open, holding_days, mae_price, mfe_price, None);
+            return make_trade("stopped", bar_date, open, holding_days, mae_price, mfe_price);
         }
 
         if let Some(target) = target_price {
             if !is_entry_day && open >= target {
-                return RustBacktestTrade::close(signal, "target", entry_date, entry_p, bar_date, open, holding_days, mae_price, mfe_price, None);
+                return make_trade("target", bar_date, open, holding_days, mae_price, mfe_price);
             }
         }
 
@@ -252,13 +258,13 @@ fn simulate_single_signal_fast(
         let hit_target = target_price.map_or(false, |t| high >= t);
 
         if hit_stop && hit_target {
-            return RustBacktestTrade::close(signal, "stopped", entry_date, entry_p, bar_date, active_stop, holding_days, mae_price, mfe_price, None);
+            return make_trade("stopped", bar_date, active_stop, holding_days, mae_price, mfe_price);
         }
         if hit_stop {
-            return RustBacktestTrade::close(signal, "stopped", entry_date, entry_p, bar_date, active_stop, holding_days, mae_price, mfe_price, None);
+            return make_trade("stopped", bar_date, active_stop, holding_days, mae_price, mfe_price);
         }
         if hit_target {
-            return RustBacktestTrade::close(signal, "target", entry_date, entry_p, bar_date, target_price.unwrap(), holding_days, mae_price, mfe_price, None);
+            return make_trade("target", bar_date, target_price.unwrap(), holding_days, mae_price, mfe_price);
         }
 
         if risk > 0.0 {
@@ -309,7 +315,7 @@ fn simulate_single_signal_fast(
         if reached_1r { breakeven_activated = true; }
         if let Some(dm_days) = params.dead_money_days {
             if !breakeven_activated && holding_days >= dm_days {
-                return RustBacktestTrade::close(signal, "dead_money", entry_date, entry_p, bar_date, close, holding_days, mae_price, mfe_price, None);
+                return make_trade("dead_money", bar_date, close, holding_days, mae_price, mfe_price);
             }
         }
 
@@ -320,7 +326,7 @@ fn simulate_single_signal_fast(
         }
     }
 
-    RustBacktestTrade::close(signal, "time_stop", entry_date, entry_p, exit_d, exit_p, exit_end - entry_idx, mae_price, mfe_price, None)
+    make_trade("time_stop", exit_d, exit_p, exit_end - entry_idx, mae_price, mfe_price)
 }
 
 impl RustBacktestTrade {
@@ -345,10 +351,20 @@ impl RustBacktestTrade {
         }
     }
 
-    fn close(sig: &RustSignal, status: &str, entry_date: NaiveDate, entry_price: f64, exit_date: NaiveDate, exit_price: f64, holding_days: usize, mae: f64, mfe: f64, reason: Option<String>) -> Self {
-        let risk = entry_price - sig.stop;
-        let return_pct = (exit_price - entry_price) / entry_price * 100.0;
-        let r_multiple = if risk > 0.0 { Some((exit_price - entry_price) / risk) } else { None };
+    fn close(
+        sig: &RustSignal,
+        status: &str,
+        entry_date: NaiveDate,
+        entry_price: f64,
+        exit_date: NaiveDate,
+        exit_price: f64,
+        holding_days: usize,
+        mae: f64,
+        mfe: f64,
+        return_pct: f64,
+        r_multiple: Option<f64>,
+        reason: Option<String>,
+    ) -> Self {
         Self {
             symbol: sig.symbol.clone(),
             signal_date: sig.signal_date,
@@ -368,6 +384,44 @@ impl RustBacktestTrade {
             exit_reason: reason,
         }
     }
+}
+
+fn make_single_signal_trade(
+    signal: &RustSignal,
+    status: &str,
+    entry_date: NaiveDate,
+    raw_entry: f64,
+    exit_date: NaiveDate,
+    raw_exit: f64,
+    holding_days: usize,
+    mae: f64,
+    mfe: f64,
+    friction_enabled: bool,
+    reason: Option<String>,
+) -> RustBacktestTrade {
+    let (net_entry, net_exit, net_stop) = if friction_enabled {
+        (raw_entry * 1.001 * 1.00118658, raw_exit * 0.999 * 0.99896342, signal.stop * 0.999 * 0.99896342)
+    } else {
+        (raw_entry, raw_exit, signal.stop)
+    };
+    let net_risk = net_entry - net_stop;
+    let return_pct = if net_entry > 0.0 { (net_exit - net_entry) / net_entry * 100.0 } else { 0.0 };
+    let r_multiple = if net_risk > 0.0 { Some((net_exit - net_entry) / net_risk) } else { None };
+
+    RustBacktestTrade::close(
+        signal,
+        status,
+        entry_date,
+        net_entry,
+        exit_date,
+        net_exit,
+        holding_days,
+        mae,
+        mfe,
+        return_pct,
+        r_multiple,
+        reason,
+    )
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -436,6 +490,13 @@ fn run_portfolio_backtest_rust(
     let mut signals: Vec<RustSignal> = serde_json::from_str(&signals_json).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
     let params: RustBacktestParams = serde_json::from_str(&params_json).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
     let pf_settings: RustPortfolioSettings = serde_json::from_str(&portfolio_json).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+
+    let friction_enabled = params.friction_enabled.unwrap_or(true);
+    let slippage_buy = if friction_enabled { 1.001 } else { 1.0 };
+    let slippage_sell = if friction_enabled { 0.999 } else { 1.0 };
+    let tax_buy = if friction_enabled { 1.00118658 } else { 1.0 };
+    let tax_sell = if friction_enabled { 0.99896342 } else { 1.0 };
+    let dp_charge = if friction_enabled { 16.0 } else { 0.0 };
 
     signals.sort_by(|a, b| a.signal_date.cmp(&b.signal_date).then_with(|| a.symbol.cmp(&b.symbol)));
 
@@ -524,7 +585,15 @@ fn run_portfolio_backtest_rust(
                 }
                 
                 if let Some(ep) = exit_price {
-                    cash += pos.shares * ep;
+                    let net_entry = pos.entry_price * slippage_buy * tax_buy;
+                    let net_exit = ep * slippage_sell * tax_sell;
+                    let net_stop = pos.signal.stop * slippage_sell * tax_sell;
+                    let net_risk = net_entry - net_stop;
+                    let pnl = (pos.shares * net_exit - dp_charge) - (pos.shares * net_entry);
+                    let return_pct = if net_entry > 0.0 { (pnl / (pos.shares * net_entry)) * 100.0 } else { 0.0 };
+                    let r_multiple = if net_risk > 0.0 { Some(pnl / (pos.shares * net_risk)) } else { None };
+
+                    cash += pos.shares * net_exit - dp_charge;
                     if has_known_sector(&pos.sector) {
                         let should_remove = if let Some(count) = sector_position_counts.get_mut(&pos.sector) {
                             *count = count.saturating_sub(1);
@@ -536,7 +605,20 @@ fn run_portfolio_backtest_rust(
                             sector_position_counts.remove(&pos.sector);
                         }
                     }
-                    closed_trades.push(RustBacktestTrade::close(&pos.signal, status, pos.entry_date, pos.entry_price, today, ep, holding_days, pos.mae_price, pos.mfe_price, None));
+                    closed_trades.push(RustBacktestTrade::close(
+                        &pos.signal,
+                        status,
+                        pos.entry_date,
+                        net_entry,
+                        today,
+                        net_exit,
+                        holding_days,
+                        pos.mae_price,
+                        pos.mfe_price,
+                        return_pct,
+                        r_multiple,
+                        None,
+                    ));
                     open_positions.remove(i);
                     continue; 
                 }
@@ -571,7 +653,15 @@ fn run_portfolio_backtest_rust(
                 if reached_1r { pos.breakeven_activated = true; }
                 if let Some(dm_days) = params.dead_money_days {
                     if !pos.breakeven_activated && holding_days >= dm_days {
-                        cash += pos.shares * close;
+                        let net_entry = pos.entry_price * slippage_buy * tax_buy;
+                        let net_exit = close * slippage_sell * tax_sell;
+                        let net_stop = pos.signal.stop * slippage_sell * tax_sell;
+                        let net_risk = net_entry - net_stop;
+                        let pnl = (pos.shares * net_exit - dp_charge) - (pos.shares * net_entry);
+                        let return_pct = if net_entry > 0.0 { (pnl / (pos.shares * net_entry)) * 100.0 } else { 0.0 };
+                        let r_multiple = if net_risk > 0.0 { Some(pnl / (pos.shares * net_risk)) } else { None };
+
+                        cash += pos.shares * net_exit - dp_charge;
                         if has_known_sector(&pos.sector) {
                             let should_remove = if let Some(count) = sector_position_counts.get_mut(&pos.sector) {
                                 *count = count.saturating_sub(1);
@@ -583,7 +673,20 @@ fn run_portfolio_backtest_rust(
                                 sector_position_counts.remove(&pos.sector);
                             }
                         }
-                        closed_trades.push(RustBacktestTrade::close(&pos.signal, "dead_money", pos.entry_date, pos.entry_price, today, close, holding_days, pos.mae_price, pos.mfe_price, None));
+                        closed_trades.push(RustBacktestTrade::close(
+                            &pos.signal,
+                            "dead_money",
+                            pos.entry_date,
+                            net_entry,
+                            today,
+                            net_exit,
+                            holding_days,
+                            pos.mae_price,
+                            pos.mfe_price,
+                            return_pct,
+                            r_multiple,
+                            None,
+                        ));
                         open_positions.remove(i);
                         continue;
                     }
@@ -596,11 +699,12 @@ fn run_portfolio_backtest_rust(
         for pos in &open_positions {
             let (start, end) = *symbol_indices.get(&pos.signal.symbol).unwrap();
             let sym_dates = &parsed_dates[start..end];
-            if let Some(idx) = sym_dates.iter().position(|&d| d == today) {
-                pos_value += pos.shares * closes[start + idx];
+            let raw_price = if let Some(idx) = sym_dates.iter().position(|&d| d == today) {
+                closes[start + idx]
             } else {
-                pos_value += pos.shares * pos.entry_price;
-            }
+                pos.entry_price
+            };
+            pos_value += pos.shares * raw_price * slippage_sell * tax_sell;
         }
         let current_equity = cash + pos_value;
         equity_peak = f64::max(equity_peak, current_equity);
@@ -695,11 +799,13 @@ fn run_portfolio_backtest_rust(
                         continue;
                     }
 
-                    let risk_per_share = fill_price - p_sig.signal.stop;
+                    let net_entry = fill_price * slippage_buy * tax_buy;
+                    let net_stop = p_sig.signal.stop * slippage_sell * tax_sell;
+                    let net_risk = net_entry - net_stop;
 
-                    if risk_per_share > 0.0 {
-                        let shares = risk_budget / risk_per_share;
-                        let cost = shares * fill_price;
+                    if net_risk > 0.0 {
+                        let shares = risk_budget / net_risk;
+                        let cost = shares * net_entry;
 
                         if has_known_sector(&p_sig.signal.sector) {
                             let sector_count = sector_position_counts
@@ -729,7 +835,7 @@ fn run_portfolio_backtest_rust(
                         if cost <= cash {
                             cash -= cost;
                             let target_price = match params.target_r {
-                                Some(r) => Some(fill_price + (risk_per_share * r)),
+                                Some(r) => Some(fill_price + ((fill_price - p_sig.signal.stop) * r)),
                                 None => None,
                             };
 
@@ -741,7 +847,7 @@ fn run_portfolio_backtest_rust(
                                 shares,
                                 position_value: cost,
                                 active_stop: p_sig.signal.stop,
-                                initial_risk: risk_per_share,
+                                initial_risk: fill_price - p_sig.signal.stop,
                                 target_price,
                                 mae_price: fill_price,
                                 mfe_price: fill_price,
@@ -774,8 +880,30 @@ fn run_portfolio_backtest_rust(
                 final_price = closes[start + idx];
             }
             let holding_days = (last_date - pos.entry_date).num_days() as usize;
-            cash += pos.shares * final_price;
-            closed_trades.push(RustBacktestTrade::close(&pos.signal, "open", pos.entry_date, pos.entry_price, last_date, final_price, holding_days, pos.mae_price, pos.mfe_price, None));
+
+            let net_entry = pos.entry_price * slippage_buy * tax_buy;
+            let net_exit = final_price * slippage_sell * tax_sell;
+            let net_stop = pos.signal.stop * slippage_sell * tax_sell;
+            let net_risk = net_entry - net_stop;
+            let pnl = (pos.shares * net_exit - dp_charge) - (pos.shares * net_entry);
+            let return_pct = if net_entry > 0.0 { (pnl / (pos.shares * net_entry)) * 100.0 } else { 0.0 };
+            let r_multiple = if net_risk > 0.0 { Some(pnl / (pos.shares * net_risk)) } else { None };
+
+            cash += pos.shares * net_exit - dp_charge;
+            closed_trades.push(RustBacktestTrade::close(
+                &pos.signal,
+                "open",
+                pos.entry_date,
+                net_entry,
+                last_date,
+                net_exit,
+                holding_days,
+                pos.mae_price,
+                pos.mfe_price,
+                return_pct,
+                r_multiple,
+                None,
+            ));
         }
     }
 
