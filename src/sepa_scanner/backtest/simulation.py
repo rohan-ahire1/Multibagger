@@ -127,8 +127,8 @@ def close_trade_dict(
         "exit_date": exit_date,
         "exit_price": exit_price,
         "holding_days": holding_days,
-        "return_pct": ((pnl / (total_shares * entry_price)) * 100.0) if entry_price and total_shares > 0.0 else None,
-        "r_multiple": (pnl / (total_shares * risk)) if risk > 0.0 and total_shares > 0.0 else None,
+        "return_pct": ((pnl / (total_shares * entry_price)) * 100.0) if entry_price and total_shares > 1e-5 else None,
+        "r_multiple": (pnl / (total_shares * risk)) if risk > 0.0 and total_shares > 1e-5 else None,
         "mae_price": mae_price,
         "mfe_price": mfe_price,
         "shares": total_shares,
@@ -535,7 +535,7 @@ def simulate_portfolio_python(
                 if net_risk > 0:
                     shares = min(risk_budget / net_risk, cash / net_entry)
                     cost = shares * net_entry
-                    if shares > 0 and cost <= cash:
+                    if shares > 1e-5 and cost <= cash:
                         cash -= cost
                         open_positions.append(OpenPosition(
                             symbol=pending.symbol,

@@ -297,6 +297,7 @@ def load_inputs(start_date: date, end_date: date) -> tuple[dict[str, Any], pl.Da
         dead_money_min_open_r=settings.exit_strategy.dead_money_min_open_r,
         dead_money_min_mfe_r=settings.exit_strategy.dead_money_min_mfe_r,
         dead_money_extend_to_breakeven=settings.exit_strategy.dead_money_extend_to_breakeven,
+        friction_enabled=True,
     )
 
     portfolio = {
@@ -502,6 +503,14 @@ def simulate_portfolio_python(
     initial_capital = float(portfolio["initial_capital"])
     cash = initial_capital
     equity_peak = initial_capital
+    
+    friction_enabled = getattr(params, "friction_enabled", False)
+    slippage_buy = 1.0 if not friction_enabled else 1.001
+    slippage_sell = 1.0 if not friction_enabled else 0.999
+    tax_buy = 1.0 if not friction_enabled else 1.00118658
+    tax_sell = 1.0 if not friction_enabled else 0.99896342
+    dp_charge = 0.0 if not friction_enabled else 16.0
+    
     open_positions: list[OpenPosition] = []
     pending_signals: list[PendingSignal] = []
     closed_trades: list[dict[str, Any]] = []
@@ -532,19 +541,22 @@ def simulate_portfolio_python(
 
                 # --- Gap-down stop: if open gaps below stop, exit at open ---
                 if open_price <= pos.active_stop:
-                    cash += pos.shares * open_price
+                    net_entry = pos.entry_price * slippage_buy * tax_buy
+                    net_exit = open_price * slippage_sell * tax_sell
+                    cash += pos.shares * net_exit - dp_charge
                     closed_trades.append(
                         close_trade_dict(
                             symbol=pos.symbol, signal_date=pos.signal_date,
                             status="stopped", entry_ref=pos.entry_ref,
                             stop=pos.stop, pivot=pos.pivot,
-                            entry_date=pos.entry_date, entry_price=pos.entry_price,
-                            exit_date=today, exit_price=open_price,
+                            entry_date=pos.entry_date, entry_price=net_entry,
+                            exit_date=today, exit_price=net_exit,
                             holding_days=holding_days,
                             mae_price=pos.mae_price, mfe_price=pos.mfe_price,
                             shares=pos.shares, sector=analysis_sector_map.get(pos.symbol, "UNKNOWN"),
                             original_shares=pos.original_shares, realized_pnl=pos.realized_pnl,
                             rs_rank=pos.rs_rank, range10=pos.range10, voldry=pos.voldry,
+                            friction_enabled=friction_enabled,
                         )
                     )
                     open_positions.pop(i)
@@ -619,12 +631,18 @@ def simulate_portfolio_python(
                     elif action.action == "SELL_PARTIAL":
                         sell_shares = min(pos.shares, float(action.shares))
                         if sell_shares > 0:
-                            cash += sell_shares * close_price
-                            pos.realized_pnl += sell_shares * (close_price - pos.entry_price)
+                            net_entry = pos.entry_price * slippage_buy * tax_buy
+                            sell_p_slippage = close_price * slippage_sell
+                            net_sell = sell_p_slippage * tax_sell
+                            net_sell_val = (sell_shares * net_sell) - dp_charge
+                            pos.realized_pnl += net_sell_val - (sell_shares * net_entry)
+                            cash += net_sell_val
                             pos.shares -= sell_shares
-                            pos.partial_exit_price = close_price
+                            pos.partial_exit_price = net_sell
                             pos.partial_exit_date = today
-                            pos.partial_exit_r = (close_price - pos.entry_price) / pos.initial_risk if pos.initial_risk > 0 else 0.0
+                            net_stop = pos.stop * slippage_sell * tax_sell
+                            net_risk = net_entry - net_stop
+                            pos.partial_exit_r = (net_sell - net_entry) / net_risk if net_risk > 0 else 0.0
 
                 # --- Hard max hold cap ---
                 if exit_price is None and holding_days >= params.max_hold_days:
@@ -632,19 +650,22 @@ def simulate_portfolio_python(
                     status = "max_hold"
 
                 if exit_price is not None:
-                    cash += pos.shares * exit_price
+                    net_entry = pos.entry_price * slippage_buy * tax_buy
+                    net_exit = exit_price * slippage_sell * tax_sell
+                    cash += pos.shares * net_exit - dp_charge
                     closed_trades.append(
                         close_trade_dict(
                             symbol=pos.symbol, signal_date=pos.signal_date,
                             status=status, entry_ref=pos.entry_ref,
                             stop=pos.stop, pivot=pos.pivot,
-                            entry_date=pos.entry_date, entry_price=pos.entry_price,
-                            exit_date=today, exit_price=exit_price,
+                            entry_date=pos.entry_date, entry_price=net_entry,
+                            exit_date=today, exit_price=net_exit,
                             holding_days=holding_days,
                             mae_price=pos.mae_price, mfe_price=pos.mfe_price,
                             shares=pos.shares, sector=analysis_sector_map.get(pos.symbol, "UNKNOWN"),
                             original_shares=pos.original_shares, realized_pnl=pos.realized_pnl,
                             rs_rank=pos.rs_rank, range10=pos.range10, voldry=pos.voldry,
+                            friction_enabled=friction_enabled,
                         )
                     )
                     open_positions.pop(i)
@@ -658,7 +679,8 @@ def simulate_portfolio_python(
         for pos in open_positions:
             sym_prices = symbol_data[pos.symbol]
             idx = sym_prices["date_to_idx"].get(today)
-            marked_value = pos.shares * (sym_prices["closes"][idx] if idx is not None else pos.entry_price)
+            raw_price = sym_prices["closes"][idx] if idx is not None else pos.entry_price
+            marked_value = pos.shares * raw_price * slippage_sell * tax_sell
             invested_value += marked_value
             sector = analysis_sector_map.get(pos.symbol, "UNKNOWN")
             marked_sector_values[sector] += marked_value
@@ -677,7 +699,9 @@ def simulate_portfolio_python(
                 idx = sym_prices["date_to_idx"].get(today)
                 close_price = sym_prices["closes"][idx] if idx is not None else pos.entry_price
                 holding_days = (today - pos.entry_date).days
-                cash += pos.shares * close_price
+                net_entry = pos.entry_price * slippage_buy * tax_buy
+                net_exit = close_price * slippage_sell * tax_sell
+                cash += pos.shares * net_exit - dp_charge
                 closed_trades.append(
                     close_trade_dict(
                         symbol=pos.symbol,
@@ -687,9 +711,9 @@ def simulate_portfolio_python(
                         stop=pos.stop,
                         pivot=pos.pivot,
                         entry_date=pos.entry_date,
-                        entry_price=pos.entry_price,
+                        entry_price=net_entry,
                         exit_date=today,
-                        exit_price=close_price,
+                        exit_price=net_exit,
                         holding_days=holding_days,
                         mae_price=pos.mae_price,
                         mfe_price=pos.mfe_price,
@@ -698,6 +722,7 @@ def simulate_portfolio_python(
                         original_shares=pos.original_shares,
                         realized_pnl=pos.realized_pnl,
                         rs_rank=pos.rs_rank, range10=pos.range10, voldry=pos.voldry,
+                        friction_enabled=friction_enabled,
                     )
                 )
 
@@ -887,16 +912,25 @@ def simulate_portfolio_python(
                         continue
 
                     risk_per_share = fill_price - pending.stop
-                    if risk_per_share > 0.0:
+                    if friction_enabled:
+                        net_entry = fill_price * slippage_buy * tax_buy
+                        net_stop = pending.stop * slippage_sell * tax_sell
+                        net_risk = net_entry - net_stop
+                    else:
+                        net_entry = fill_price
+                        net_stop = pending.stop
+                        net_risk = risk_per_share
+
+                    if net_risk > 0.0:
                         # Size by risk budget
-                        shares_by_risk = risk_budget / risk_per_share
+                        shares_by_risk = risk_budget / net_risk
                         # Size by available cash
-                        shares_by_cash = cash / fill_price
+                        shares_by_cash = cash / net_entry
 
                         shares = min(shares_by_risk, shares_by_cash)
-                        cost = shares * fill_price
+                        cost = shares * net_entry
 
-                        if shares > 0:
+                        if shares > 1e-5:
                             sector = analysis_sector_map.get(pending.symbol, "UNKNOWN")
                             max_sector_positions = int(portfolio.get("max_sector_positions", 0) or 0)
                             if (
@@ -1035,7 +1069,9 @@ def simulate_portfolio_python(
             idx = sym_prices["date_to_idx"].get(last_date)
             final_price = sym_prices["closes"][idx] if idx is not None else pos.entry_price
             holding_days = (last_date - pos.entry_date).days
-            cash += pos.shares * final_price
+            net_entry = pos.entry_price * slippage_buy * tax_buy
+            net_exit = final_price * slippage_sell * tax_sell
+            cash += pos.shares * net_exit - dp_charge
             closed_trades.append(
                 close_trade_dict(
                     symbol=pos.symbol,
@@ -1045,9 +1081,9 @@ def simulate_portfolio_python(
                     stop=pos.stop,
                     pivot=pos.pivot,
                     entry_date=pos.entry_date,
-                    entry_price=pos.entry_price,
+                    entry_price=net_entry,
                     exit_date=last_date,
-                    exit_price=final_price,
+                    exit_price=net_exit,
                     holding_days=holding_days,
                     mae_price=pos.mae_price,
                     mfe_price=pos.mfe_price,
@@ -1056,6 +1092,7 @@ def simulate_portfolio_python(
                     original_shares=pos.original_shares,
                     realized_pnl=pos.realized_pnl,
                     rs_rank=pos.rs_rank, range10=pos.range10, voldry=pos.voldry,
+                    friction_enabled=friction_enabled,
                 )
             )
 
@@ -1150,10 +1187,13 @@ def close_trade_dict(
     rs_rank: float | None = None,
     range10: float | None = None,
     voldry: float | None = None,
+    friction_enabled: bool = False,
 ) -> dict[str, Any]:
-    risk = entry_price - stop
+    net_stop = stop * 0.999 * 0.99896342 if friction_enabled else stop
+    risk = entry_price - net_stop
     total_shares = original_shares if original_shares is not None else shares
-    pnl = realized_pnl + (shares * (exit_price - entry_price))
+    dp_charge = 16.0 if friction_enabled else 0.0
+    pnl = realized_pnl + (shares * (exit_price - entry_price)) - (dp_charge if shares > 0.0 else 0.0)
     return {
         "symbol": symbol,
         "signal_date": signal_date,
@@ -1166,8 +1206,8 @@ def close_trade_dict(
         "exit_date": exit_date,
         "exit_price": exit_price,
         "holding_days": holding_days,
-        "return_pct": ((pnl / (total_shares * entry_price)) * 100.0) if entry_price and total_shares > 0.0 else None,
-        "r_multiple": (pnl / (total_shares * risk)) if risk > 0.0 and total_shares > 0.0 else None,
+        "return_pct": ((pnl / (total_shares * entry_price)) * 100.0) if entry_price and total_shares > 1e-5 else None,
+        "r_multiple": (pnl / (total_shares * risk)) if risk > 0.0 and total_shares > 1e-5 else None,
         "mae_price": mae_price,
         "mfe_price": mfe_price,
         "shares": total_shares,
