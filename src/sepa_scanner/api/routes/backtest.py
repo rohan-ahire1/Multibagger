@@ -29,15 +29,13 @@ class BacktestRunRequest(BaseModel):
     end_date: date
     exit_mode: str = ExitMode.MINERVINI_PHASED.value
     target_r: float | None = None
-    pending_days: int = 8
-    max_hold_days: int = 150
-    trail_activation_r: float = 1.5
-    trail_pct: float = 0.20
-    dead_money_days: int | None = 20
-    dead_money_extend_days: int = 0
-    dead_money_min_open_r: float = 0.0
-    dead_money_min_mfe_r: float = 0.75
-    dead_money_extend_to_breakeven: bool = False
+    # None => fall back to config.yaml (settings.backtest) so the UI defaults
+    # track the single source of truth instead of hardcoded copies.
+    pending_days: int | None = None
+    max_hold_days: int | None = None
+    # Exit params are deliberately NOT exposed here. The portfolio sim sources
+    # them from config.yaml (exit_strategy) via exit_config — single source of
+    # truth. The old per-request trail/dead-money sliders were retired.
     exit_engine: str = "minervini_phased"
     use_portfolio: bool = True
 
@@ -81,18 +79,18 @@ def run_backtest(
     else:
         exit_mode = ExitMode(req.exit_mode)
 
+    # Single source of truth: fall back to config.yaml (settings.backtest) when
+    # the request doesn't override pending_days / max_hold_days.
+    pending_days = req.pending_days if req.pending_days is not None else settings.backtest.pending_days
+    max_hold_days = req.max_hold_days if req.max_hold_days is not None else settings.backtest.max_hold_days
+
+    # Exit params come from config (exit_strategy) via exit_config in the sim;
+    # BacktestParams keeps its own defaults for the unused trail/dead-money fields.
     params = BacktestParams(
-        pending_days=req.pending_days,
-        max_hold_days=req.max_hold_days,
+        pending_days=pending_days,
+        max_hold_days=max_hold_days,
         target_r=req.target_r,
         exit_mode=exit_mode,
-        trail_activation_r=req.trail_activation_r,
-        trail_pct=req.trail_pct,
-        dead_money_days=req.dead_money_days,
-        dead_money_extend_days=req.dead_money_extend_days,
-        dead_money_min_open_r=req.dead_money_min_open_r,
-        dead_money_min_mfe_r=req.dead_money_min_mfe_r,
-        dead_money_extend_to_breakeven=req.dead_money_extend_to_breakeven,
         friction_enabled=True,
     )
     
@@ -149,7 +147,7 @@ def run_backtest(
         raise HTTPException(status_code=404, detail="No high-quality signals found in range")
 
     symbols = signals_df["symbol"].unique().to_list()
-    extended_end = req.end_date + timedelta(days=int(req.max_hold_days * 1.5))
+    extended_end = req.end_date + timedelta(days=int(max_hold_days * 1.5))
     ohlcv_df = get_backtest_ohlcv(parquet, symbols, req.start_date, extended_end)
 
     # UI now runs the Full Portfolio Simulation Engine (75x Logic)
@@ -201,7 +199,7 @@ def run_backtest(
     equity_curve = sim_result["daily_equity"]
 
     signal_analysis_raw = analyze_signal_quality(
-        signals_df, ohlcv_df, pending_days=req.pending_days
+        signals_df, ohlcv_df, pending_days=pending_days
     )
     post_entry = analyze_post_entry_returns(trades, ohlcv_df, forward_days=10)
     signal_analysis_raw["post_entry_returns"] = post_entry
@@ -228,15 +226,13 @@ def run_backtest(
             "end_date": req.end_date.isoformat(),
             "exit_mode": exit_mode.value,
             "target_r": req.target_r,
-            "pending_days": req.pending_days,
-            "max_hold_days": req.max_hold_days,
-            "trail_activation_r": req.trail_activation_r,
-            "trail_pct": req.trail_pct,
-            "dead_money_days": req.dead_money_days,
-            "dead_money_extend_days": req.dead_money_extend_days,
-            "dead_money_min_open_r": req.dead_money_min_open_r,
-            "dead_money_min_mfe_r": req.dead_money_min_mfe_r,
-            "dead_money_extend_to_breakeven": req.dead_money_extend_to_breakeven,
+            "pending_days": pending_days,
+            "max_hold_days": max_hold_days,
+            "breakeven_activation_r": settings.exit_strategy.breakeven_activation_r,
+            "partial_profit_r": settings.exit_strategy.partial_profit_r,
+            "trail_pct_bull": settings.exit_strategy.trail_pct_bull,
+            "trail_pct_bear": settings.exit_strategy.trail_pct_bear,
+            "time_stop_days": settings.exit_strategy.time_stop_days,
             "exit_engine": (
                 "minervini_phased"
                 if exit_mode == ExitMode.MINERVINI_PHASED

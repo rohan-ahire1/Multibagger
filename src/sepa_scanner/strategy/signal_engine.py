@@ -261,7 +261,7 @@ def _build_diagnostics(
         # BREAKOUT fail mask
         (
             pl.when(~pl.col("trend_template_pass")).then(BREAKOUT_FAIL_TT).otherwise(0)
-            + pl.when(~pl.col("rs_pass").fill_null(False)).then(BREAKOUT_FAIL_RS).otherwise(0)
+            + pl.when(pl.col("rs_rank").fill_null(0.0) < (settings.backtest.rs_rank_min if settings.backtest.rs_rank_min is not None else settings.relative_strength.rs_rank_min)).then(BREAKOUT_FAIL_RS).otherwise(0)
             + pl.when(~pl.col("setup_pass_prev").fill_null(False)).then(BREAKOUT_FAIL_SETUP_PREV).otherwise(0)
             + pl.when(
                 pl.lit(settings.breakout.require_market_filter) & ~pl.lit(market_on)
@@ -477,7 +477,10 @@ def scan_for_date(
 
     breakout_mask = (
         pl.col("trend_template_pass")
-        & pl.col("rs_pass")
+        # Trade gate: breakouts require RS >= backtest.rs_rank_min (70), tighter
+        # than the watchlist's rs_pass (relative_strength.rs_rank_min, 40). Only
+        # validated-grade signals are emitted for trading; watch breadth is kept.
+        & (pl.col("rs_rank").fill_null(0.0) >= (settings.backtest.rs_rank_min if settings.backtest.rs_rank_min is not None else settings.relative_strength.rs_rank_min))
         & pl.col("setup_pass_prev").fill_null(False)
         & (
             pl.lit(not settings.breakout.require_market_filter)

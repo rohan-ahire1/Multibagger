@@ -24,11 +24,18 @@ def _settings(tmp_path: Path) -> SimpleNamespace:
             max_signals_per_day=None,
             use_regime_entry_controls=False,
             sector_alpha_enabled=False,
+            pending_days=8,
+            max_hold_days=150,
         ),
         exit_strategy=SimpleNamespace(
             trail_activation_r=2.0,
             trail_pct=0.20,
             dead_money_days=15,
+            breakeven_activation_r=1.0,
+            partial_profit_r=2.0,
+            trail_pct_bull=0.20,
+            trail_pct_bear=0.15,
+            time_stop_days=15,
         ),
         portfolio=SimpleNamespace(
             initial_capital=1_000_000.0,

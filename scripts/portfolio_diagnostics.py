@@ -1108,6 +1108,22 @@ def simulate_portfolio_python(
         "final_equity": cash,
         "daily_equity": daily_equity_df,
         "trades": pl.DataFrame(closed_trades, infer_schema_length=10000).sort(["signal_date", "symbol"]),
+        "open_positions": [
+            {
+                "symbol": pos.symbol,
+                "signal_date": pos.signal_date,
+                "entry_date": pos.entry_date,
+                "entry_price": pos.entry_price,
+                "shares": pos.shares,
+                "active_stop": pos.active_stop,
+                "initial_risk": pos.initial_risk,
+                "cost_basis": pos.cost_basis,
+                "realized_pnl": pos.realized_pnl,
+                "rs_rank": pos.rs_rank,
+                "sector": analysis_sector_map.get(pos.symbol, "UNKNOWN"),
+            }
+            for pos in open_positions
+        ],
     }
 
 
