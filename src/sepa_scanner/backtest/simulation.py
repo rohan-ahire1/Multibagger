@@ -533,7 +533,13 @@ def simulate_portfolio_python(
                 net_risk = net_entry - net_stop
 
                 if net_risk > 0:
-                    shares = min(risk_budget / net_risk, cash / net_entry)
+                    # Per-name concentration cap: <= max_name_pct of equity
+                    max_name_pct = float(portfolio.get("max_name_pct", 1.0) or 1.0)
+                    shares = min(
+                        risk_budget / net_risk,
+                        cash / net_entry,
+                        (max_name_pct * current_equity) / net_entry,
+                    )
                     cost = shares * net_entry
                     if shares > 1e-5 and cost <= cash:
                         cash -= cost

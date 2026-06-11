@@ -188,6 +188,7 @@ class PortfolioSettings(BaseModel):
     drawdown_close_pct: float = 0.35     # close all at -35%
     initial_capital: float = 1_000_000.0
     risk_per_trade_pct: float = 0.035    # 3.5% risk per trade
+    max_name_pct: float = 0.20           # hard cap: single position <= 20% of equity
     regime_gate_enabled: bool = True
     regime_high_volatility_threshold: float = 0.25  # 20D ann. realized vol on benchmark
     regime_cooldown_days: int = 0

@@ -305,6 +305,7 @@ def load_inputs(start_date: date, end_date: date) -> tuple[dict[str, Any], pl.Da
         "risk_per_trade_pct": settings.portfolio.risk_per_trade_pct,
         "max_positions": settings.portfolio.max_positions,
         "max_sector_positions": settings.portfolio.max_sector_positions,
+        "max_name_pct": settings.portfolio.max_name_pct,
         "max_sector_pct": settings.portfolio.max_sector_pct,
         "max_heat_pct": settings.portfolio.max_heat_pct,
         "drawdown_half_pct": settings.portfolio.drawdown_half_pct,
@@ -926,8 +927,11 @@ def simulate_portfolio_python(
                         shares_by_risk = risk_budget / net_risk
                         # Size by available cash
                         shares_by_cash = cash / net_entry
+                        # Per-name concentration cap: <= max_name_pct of equity
+                        max_name_pct = float(portfolio.get("max_name_pct", 1.0) or 1.0)
+                        shares_by_name_cap = (max_name_pct * current_equity) / net_entry
 
-                        shares = min(shares_by_risk, shares_by_cash)
+                        shares = min(shares_by_risk, shares_by_cash, shares_by_name_cap)
                         cost = shares * net_entry
 
                         if shares > 1e-5:
