@@ -30,6 +30,10 @@ _ap.add_argument("--ohlcv", default="data/us/ohlcv_all.parquet")
 _ap.add_argument("--universe", default="data/reference/sp500_constituents.csv")
 _ap.add_argument("--start", default="2010-01-04")
 _ap.add_argument("--benchmarks", default="SPY")  # comma list of B&H comparisons present in ohlcv
+_ap.add_argument("--min-price", default="10", dest="min_price")
+_ap.add_argument("--min-adv", default="5000000", dest="min_adv")    # $5M avg daily turnover
+_ap.add_argument("--min-vol", default="100000", dest="min_vol")
+_ap.add_argument("--conservative", action="store_true", help="use conservative exits (breakeven 1.5R, partial 2R, time-stop 15d, trail 0.20)")
 _AR = _ap.parse_args()
 OHLCV = _ROOT / _AR.ohlcv
 START, END = date.fromisoformat(_AR.start), date(2026, 5, 29)
@@ -48,6 +52,11 @@ def main() -> None:
     settings = copy.deepcopy(load_settings())
     settings.market.benchmark_symbol = "SPY"   # US benchmark for RS / regime
     settings.india_filter = None
+    # US-appropriate liquidity floors (config defaults are rupee-calibrated:
+    # $50 min price + $50M turnover would screen out most US small caps).
+    settings.universe.min_price_inr = float(_AR.min_price)
+    settings.universe.min_adv50_inr = float(_AR.min_adv)
+    settings.universe.min_avg_volume_shares = int(_AR.min_vol)
 
     ohlcv = pl.read_parquet(OHLCV).filter(pl.col("date") <= END)
     sectors = pl.read_csv(_ROOT / _AR.universe)
@@ -69,7 +78,13 @@ def main() -> None:
     signals = pl.concat(sig_frames, how="diagonal_relaxed").sort(["signal_date", "symbol"])
     print(f"BREAKOUT signals: {signals.height} over {signals['signal_date'].n_unique()} days")
 
-    # Portfolio params: locked aggressive exits, US-appropriate friction proxy on.
+    if _AR.conservative:
+        settings.exit_strategy.breakeven_activation_r = 1.5
+        settings.exit_strategy.partial_profit_r = 2.0
+        settings.exit_strategy.time_stop_days = 15
+        settings.exit_strategy.trail_pct_bull = 0.20
+
+    # Portfolio params: US-appropriate friction proxy on.
     es = settings.exit_strategy
     params = BacktestParams(
         pending_days=settings.backtest.pending_days,
@@ -118,7 +133,9 @@ def main() -> None:
 
     print(f"\n================ SEPA on US ({_AR.universe.split('/')[-1]}) ================")
     print(f"  period {dts[0]} -> {dts[-1]}")
+    rr = trades["r_multiple"].to_numpy()
     print(f"  STRATEGY   CAGR={c*100:6.2f}%  MaxDD={dd*100:7.2f}%  Calmar={cal:.2f}  trades={trades.height}  end=${eq[-1]:,.0f}")
+    print(f"             per-trade: win%={np.mean(rr>0)*100:.1f}  avgR={np.mean(rr):+.3f}  medR={np.median(rr):+.3f}")
     for bsym in _AR.benchmarks.split(","):
         bsym = bsym.strip()
         bdf = ohlcv.filter((pl.col("symbol") == bsym) & (pl.col("date") >= dts[0])).sort("date")
