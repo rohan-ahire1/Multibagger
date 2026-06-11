@@ -1640,6 +1640,20 @@ def filter_signals(
         filtered = filtered.filter(pl.col("vol_mult") >= float(vol_mult_min))
     print(f"Signals after vol_mult filter ({vol_mult_min}): {filtered.height}")
 
+    fg = getattr(settings, "fundamental_gate", None)
+    if fg is not None and getattr(fg, "enabled", False):
+        from sepa_scanner.data_sources.fundamentals import apply_fundamental_gate
+        before = filtered.height
+        filtered = apply_fundamental_gate(
+            filtered,
+            data_path=fg.data_path,
+            min_yoy_growth=fg.min_yoy_growth,
+            reporting_lag_days=fg.reporting_lag_days,
+            freq=fg.freq,
+            pass_if_missing=fg.pass_if_missing,
+        )
+        print(f"Signals after fundamental gate (>= {fg.min_yoy_growth:.0%} YoY): {filtered.height} (was {before})")
+
     filtered = apply_signal_quality_filters(
         filtered,
         diagnostics,

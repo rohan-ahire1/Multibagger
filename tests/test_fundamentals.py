@@ -80,3 +80,39 @@ def test_empty_earnings_returns_empty_result() -> None:
         "yoy_eps_growth": pl.Float64,
     }))
     assert result.is_empty()
+
+
+def test_apply_fundamental_gate_point_in_time(tmp_path) -> None:
+    import polars as pl
+    from sepa_scanner.data_sources.fundamentals import apply_fundamental_gate
+    # earnings: ABC strong (30%), DEF weak (5%); known 75d after period_end
+    earn = pl.DataFrame({
+        "symbol": ["ABC", "DEF"],
+        "period_end": [date(2023, 3, 31), date(2023, 3, 31)],
+        "freq": ["annual", "annual"],
+        "yoy_growth": [0.30, 0.05],
+    })
+    p = tmp_path / "earn.csv"
+    earn.write_csv(p)
+    signals = pl.DataFrame({
+        "signal_date": [date(2023, 9, 1), date(2023, 9, 1), date(2023, 9, 1)],
+        "symbol": ["ABC", "DEF", "GHI"],  # GHI has no data
+        "rs_rank": [80.0, 80.0, 80.0],
+    })
+    out = apply_fundamental_gate(signals, data_path=p, min_yoy_growth=0.25, freq="annual")
+    kept = set(out["symbol"].to_list())
+    assert kept == {"ABC", "GHI"}  # ABC passes, DEF dropped, GHI kept (no data)
+
+
+def test_apply_fundamental_gate_respects_reporting_lag(tmp_path) -> None:
+    import polars as pl
+    from sepa_scanner.data_sources.fundamentals import apply_fundamental_gate
+    earn = pl.DataFrame({
+        "symbol": ["ABC"], "period_end": [date(2023, 3, 31)],
+        "freq": ["annual"], "yoy_growth": [0.30],
+    })
+    p = tmp_path / "e.csv"; earn.write_csv(p)
+    # signal BEFORE results are known (Apr 2023, lag 75d -> known mid-Jun) -> no data -> kept
+    signals = pl.DataFrame({"signal_date": [date(2023, 4, 1)], "symbol": ["ABC"], "rs_rank": [80.0]})
+    out = apply_fundamental_gate(signals, data_path=p, min_yoy_growth=0.25, reporting_lag_days=75, freq="annual")
+    assert out.height == 1  # kept via pass_if_missing (results not yet public)

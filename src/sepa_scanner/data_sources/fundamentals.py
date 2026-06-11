@@ -23,6 +23,61 @@ def load_quarterly_results(path: Path | None = None) -> pl.DataFrame:
     return pl.read_csv(path, try_parse_dates=True)
 
 
+def apply_fundamental_gate(
+    signals: pl.DataFrame,
+    *,
+    data_path: str | Path,
+    min_yoy_growth: float = 0.25,
+    reporting_lag_days: int = 75,
+    freq: str | None = None,
+    pass_if_missing: bool = True,
+) -> pl.DataFrame:
+    """Filter breakout signals by point-in-time earnings growth (Minervini gate).
+
+    Point-in-time: a quarter/year only counts once its results would have been
+    announced (period_end + reporting_lag_days). For each signal it as-of joins
+    the latest known growth for that symbol and drops signals whose growth is
+    below ``min_yoy_growth``. Signals with no available data are kept iff
+    ``pass_if_missing`` (so the strategy degrades gracefully on partial data).
+
+    The data file may use either schema (annual: period_end/yoy_growth;
+    quarterly: quarter_end/yoy_eps_growth). Returns ``signals`` unchanged with a
+    no-op (and warning) if the file is missing, so enabling the gate without
+    data never silently empties the book.
+    """
+    path = Path(data_path)
+    if not path.exists():
+        print(f"⚠️  fundamental_gate enabled but {path} not found — gate skipped (no-op).")
+        return signals
+    if "signal_date" not in signals.columns or "symbol" not in signals.columns:
+        return signals
+
+    e = pl.read_csv(path, try_parse_dates=True)
+    date_col = "period_end" if "period_end" in e.columns else "quarter_end"
+    growth_col = "yoy_growth" if "yoy_growth" in e.columns else "yoy_eps_growth"
+    if freq and "freq" in e.columns:
+        e = e.filter(pl.col("freq") == freq)
+    e = (
+        e.select(["symbol", pl.col(date_col).alias("_pe"), pl.col(growth_col).alias("_g")])
+        .drop_nulls("_g")
+        .with_columns((pl.col("_pe") + pl.duration(days=reporting_lag_days)).alias("_known"))
+        .sort(["symbol", "_known"])
+    )
+
+    cols = signals.columns
+    joined = signals.sort("signal_date").join_asof(
+        e.select(["symbol", "_known", "_g"]),
+        left_on="signal_date",
+        right_on="_known",
+        by="symbol",
+        strategy="backward",
+    )
+    cond = pl.col("_g") >= min_yoy_growth
+    if pass_if_missing:
+        cond = pl.col("_g").is_null() | cond
+    return joined.filter(cond).select(cols)
+
+
 def compute_eps_growth_gate(
     earnings: pl.DataFrame, min_yoy_growth: float = 0.25
 ) -> pl.DataFrame:

@@ -103,6 +103,18 @@ portfolio:
   regime_gate_enabled: true
   pyramid_max_adds: 0
 
+# Minervini earnings-growth gate on breakouts. OFF until full survivorship-clean
+# data is sourced (current prototype data is partial/recent, survivorship-biased).
+# When on: drops breakouts whose point-in-time earnings YoY growth < min_yoy_growth;
+# symbols without data are kept (pass_if_missing). Validated to improve Calmar/DD.
+fundamental_gate:
+  enabled: false
+  data_path: data/reference/screener_annual.csv
+  freq: annual
+  min_yoy_growth: 0.25
+  reporting_lag_days: 75
+  pass_if_missing: true
+
 watchlist:
   max_candidates: 1000
 

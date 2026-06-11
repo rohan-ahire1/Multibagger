@@ -153,6 +153,22 @@ class ExitStrategySettings(BaseModel):
     soft_expiry_gain: float = 0.20
 
 
+class FundamentalGateSettings(BaseModel):
+    """Minervini earnings-growth gate on breakout signals (default off).
+
+    Validated via prototype (2026-06): gating breakouts on point-in-time
+    earnings growth improves realized Calmar/drawdown through the engine.
+    Off by default until full survivorship-clean data is sourced. Signals for
+    symbols without point-in-time data are kept (pass_if_missing).
+    """
+    enabled: bool = False
+    data_path: str = "data/reference/screener_annual.csv"
+    freq: str | None = "annual"          # filter the data file's freq column if present
+    min_yoy_growth: float = 0.25         # Minervini "code 33"; cohort ~median
+    reporting_lag_days: int = 75         # annual results known ~75d after FY end (45 for quarterly)
+    pass_if_missing: bool = True         # keep signals with no point-in-time fundamental data
+
+
 class AlertsSettings(BaseModel):
     max_alerts_per_day: int
     signal_ranking_mode: str = "default"
@@ -251,6 +267,7 @@ class AppSettings(BaseModel):
     watchlist: WatchlistSettings = Field(default_factory=WatchlistSettings)
     market_filter: MarketFilterSettings = Field(default_factory=MarketFilterSettings)
     portfolio: PortfolioSettings = Field(default_factory=PortfolioSettings)
+    fundamental_gate: FundamentalGateSettings = Field(default_factory=FundamentalGateSettings)
     india_filter: IndiaFilterSettings | None = None
     telegram: TelegramSettings
     runtime: RuntimeSettings
@@ -335,6 +352,7 @@ def load_settings(config_dir: Path | None = None) -> AppSettings:
         watchlist=WatchlistSettings.model_validate(config_values.get("watchlist", {})),
         market_filter=MarketFilterSettings.model_validate(config_values.get("market_filter", {})),
         portfolio=PortfolioSettings.model_validate(config_values.get("portfolio", {})),
+        fundamental_gate=FundamentalGateSettings.model_validate(config_values.get("fundamental_gate", {})),
         telegram=telegram,
         runtime=runtime,
         alert_channels=alert_channels,
