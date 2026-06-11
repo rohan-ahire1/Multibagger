@@ -112,9 +112,9 @@ watchlist:
 exit_strategy:
   max_loss_pct: 0.07
   absolute_max_loss_pct: 0.07
-  breakeven_activation_r: 1.0
-  partial_profit_r: 2.0
-  time_stop_days: 15
-  trail_pct_bull: 0.20
+  breakeven_activation_r: 2.0
+  partial_profit_r: 8.0
+  time_stop_days: null
+  trail_pct_bull: 0.25
   trail_pct_bear: 0.15
   trail_widen_r: 3.0
