@@ -72,6 +72,7 @@ class SetupVcpSettings(BaseModel):
     contraction_min_count: int = 2
     contraction_max_count: int = 99  # New: Filter out exhaustion
     contraction_standard_count: int = 3  # for high-conviction signals
+    require_progressive: bool = False  # gate setup on true VCP progressive narrowing (each contraction >=20% tighter)
 
 
 class BreakoutSettings(BaseModel):

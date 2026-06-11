@@ -43,6 +43,14 @@ def add_setup_columns(frame: pl.DataFrame, cfg: SetupVcpSettings) -> pl.DataFram
             )
             gate_cols.append("contraction_ok")
 
+    # True-VCP gate: require successive contractions each >=20% tighter (Minervini).
+    # Computed in add_contraction_columns but only enforced when configured.
+    if cfg.require_progressive and "contraction_progressive" in result.columns:
+        result = result.with_columns(
+            pl.col("contraction_progressive").fill_null(False).alias("progressive_ok")
+        )
+        gate_cols.append("progressive_ok")
+
     result = result.with_columns(
         pl.all_horizontal(*gate_cols).alias("setup_pass")
     )
