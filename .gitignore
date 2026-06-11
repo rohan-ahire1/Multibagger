@@ -25,3 +25,7 @@ sepa-terminal/node_modules/
 sepa-terminal/dist/
 sepa-terminal/.superpowers/
 data/raw/screener/
+data/tmp/screener_cookies.txt
+data/raw/screener_xlsx/
+data/us/
+data/us_small/
