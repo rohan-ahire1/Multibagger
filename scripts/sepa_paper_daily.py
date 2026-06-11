@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import date, datetime
 from pathlib import Path
@@ -44,7 +45,32 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="SEPA daily paper-trading runner.")
     p.add_argument("--start", default="2010-01-04", help="Backtest inception date")
     p.add_argument("--update", action="store_true", help="Run data update + scan first (network)")
+    p.add_argument(
+        "--capital", type=float, default=None,
+        help="Pilot capital override (rupees). Falls back to SEPA_CAPITAL env, "
+             "then the config's initial_capital. Does not edit the committed config.",
+    )
+    p.add_argument(
+        "--allow-stale", action="store_true",
+        help="Bypass the data-staleness / price-sanity guards (for historical dry-runs).",
+    )
+    p.add_argument(
+        "--max-lag-days", type=int, default=1,
+        help="Max trading-day lag of OHLCV before the run aborts (default 1).",
+    )
     return p.parse_args()
+
+
+def _resolve_capital(arg_capital: float | None) -> float | None:
+    if arg_capital is not None:
+        return arg_capital
+    env = os.environ.get("SEPA_CAPITAL")
+    if env:
+        try:
+            return float(env)
+        except ValueError:
+            print(f"⚠️  Ignoring invalid SEPA_CAPITAL={env!r}")
+    return None
 
 
 def money(v: float) -> str:
@@ -67,9 +93,32 @@ def main() -> None:
         print("No OHLCV data found.")
         return
 
+    # --- 0.3 Data-staleness guard: refuse to emit a sheet off stale OHLCV ---
+    if not args.allow_stale:
+        from sepa_scanner.calendar import load_cm_holidays
+        from sepa_scanner.live.guards import check_data_staleness
+
+        try:
+            cm_holidays = load_cm_holidays()
+        except Exception:
+            cm_holidays = set()
+        stale = check_data_staleness(
+            latest_date, date.today(), cm_holidays, max_lag_trading_days=args.max_lag_days,
+        )
+        if not stale.ok:
+            print(f"🛑 ABORT — {stale.reason}")
+            print("   Pass --allow-stale to override (e.g. historical dry-runs).")
+            sys.exit(1)
+
     inputs, signals, ohlcv = diag.load_inputs(start, latest_date)
     sector_map = load_sector_map(SECTOR_MAP_PATH if SECTOR_MAP_PATH.exists() else FALLBACK_MAP)
     settings = inputs["settings"]
+
+    # --- 0.2 Pilot capital override (runtime only; committed config untouched) ---
+    capital = _resolve_capital(args.capital)
+    if capital is not None:
+        inputs["portfolio"]["initial_capital"] = capital
+        print(f"💰 Pilot capital override: {money(capital)}")
 
     # Canonical path: same RS>=70 + quality + per-day-cap filter the terminal
     # backtest uses, so the paper book matches the validated strategy exactly.
@@ -144,6 +193,30 @@ def main() -> None:
     else:
         today_exits = trades.head(0)
     today_entries = [h for h in holdings if h["entry_date"] == latest_date.isoformat()]
+
+    # --- 0.3 Price-sanity guard: abort if a fresh entry's fill gaps wildly vs prior close ---
+    if today_entries and not args.allow_stale:
+        from sepa_scanner.live.guards import check_price_sanity
+
+        prior_close = {
+            r["symbol"]: r["close"]
+            for r in (
+                ohlcv.filter(pl.col("date") < latest_date)
+                .sort("date")
+                .group_by("symbol")
+                .last()
+                .select(["symbol", "close"])
+                .to_dicts()
+            )
+        }
+        sanity = check_price_sanity(
+            [(h["symbol"], float(h["entry_price"]), float(prior_close.get(h["symbol"], 0.0)))
+             for h in today_entries]
+        )
+        if not sanity.ok:
+            print(f"🛑 ABORT — {sanity.reason}")
+            print("   Pass --allow-stale to override after verifying the prices.")
+            sys.exit(1)
 
     # --- persist ---
     OUT_DIR.mkdir(parents=True, exist_ok=True)
