@@ -37,8 +37,78 @@ from sepa_scanner.storage.parquet_store import ParquetOhlcvStore
 from sepa_scanner.strategy.ranking import load_sector_map
 
 OUT_DIR = _ROOT / "data" / "live" / "sepa_paper"
+LIVE_DIR = _ROOT / "data" / "live" / "sepa_live"
 SECTOR_MAP_PATH = _ROOT / "data" / "reference" / "full_sector_map.csv"
 FALLBACK_MAP = _ROOT / "data" / "reference" / "nifty500_constituents.csv"
+
+
+def build_trade_sheet(*, as_of, signals, latest_date, holdings, today_exits,
+                      equity, cash, sector_map, risk_pct, max_name_pct, max_positions):
+    """Execution-ready ENTER/EXIT/HOLD sheet sized off the current book equity.
+
+    Sizing mirrors the engine: shares = min(risk_budget/per-share-risk,
+    per-name-cap, affordable cash). For a real pilot, run with --capital <pilot>
+    (and --start near go-live) so `equity` reflects the pilot, not 16y of compounding.
+    """
+    m = money
+    L = [
+        "=" * 60,
+        f"SEPA TRADE SHEET — {as_of}",
+        f"Book equity {m(equity)} | cash {m(cash)} | risk/trade {risk_pct*100:.0f}% | per-name cap {max_name_pct*100:.0f}%",
+        f"Open positions {len(holdings)}/{max_positions}",
+        "=" * 60,
+    ]
+
+    # --- ENTER: today's fresh breakouts -> place buy-stop-limit at trigger ---
+    enter_rows = []
+    if "signal_date" in signals.columns and signals.height:
+        fresh = signals.filter(pl.col("signal_date") == latest_date)
+        for s in fresh.sort("rs_rank", descending=True).to_dicts():
+            entry = float(s.get("entry_ref") or 0.0)
+            stop = float(s.get("stop") or 0.0)
+            net_risk = entry - stop
+            if entry <= 0 or net_risk <= 0:
+                continue
+            risk_budget = equity * risk_pct
+            shares = min(risk_budget / net_risk, (max_name_pct * equity) / entry, cash / entry if entry else 0)
+            shares = int(shares)
+            if shares < 1:
+                continue
+            enter_rows.append({
+                "symbol": s["symbol"], "entry": entry, "stop": stop, "shares": shares,
+                "cost": shares * entry, "risk": shares * net_risk,
+                "rs": s.get("rs_rank"), "sector": sector_map.get(s["symbol"], "—"),
+            })
+    L += ["", "\U0001F7E2 ENTER  (buy-stop-limit at trigger; if already above trigger at open, SKIP — don't chase)"]
+    if enter_rows:
+        L.append(f"  {'symbol':<13}{'trigger':>10}{'stop':>10}{'shares':>8}{'est.cost':>12}{'risk':>10}  RS  sector")
+        for e in enter_rows:
+            L.append(f"  {e['symbol']:<13}{m(e['entry']):>10}{m(e['stop']):>10}{e['shares']:>8}"
+                     f"{m(e['cost']):>12}{m(e['risk']):>10}  {int(e['rs'] or 0):>2}  {e['sector']}")
+    else:
+        L.append("  (no new breakouts today)")
+
+    # --- EXIT: positions the engine exits today ---
+    L += ["", "\U0001F534 EXIT  (act at/after open)"]
+    if today_exits.height:
+        for t in today_exits.to_dicts():
+            status = str(t.get("status", ""))
+            action = "SELL HALF" if "partial" in status else "SELL ALL"
+            L.append(f"  {t['symbol']:<13} {action:<10} ~{m(t.get('exit_price', 0))}   ({status})")
+    else:
+        L.append("  (no exits today)")
+
+    # --- HOLD: keep working stops ---
+    L += ["", "\U0001F7E1 HOLD  (keep these stops working)"]
+    if holdings:
+        L.append(f"  {'symbol':<13}{'qty':>8}{'avg entry':>12}{'stop':>10}{'open R':>8}{'days':>6}")
+        for h in holdings:
+            L.append(f"  {h['symbol']:<13}{h['shares']:>8.0f}{m(h['entry_price']):>12}"
+                     f"{m(h['active_stop']):>10}{h['open_r']:>+7.1f}R{h['holding_days']:>6}")
+    else:
+        L.append("  (no open positions)")
+    L.append("=" * 60)
+    return "\n".join(L)
 
 
 def parse_args() -> argparse.Namespace:
@@ -261,6 +331,21 @@ def main() -> None:
         L.append(f"  … and {len(holdings) - 25} more")
     print("\n".join(L))
     print(f"\nWrote snapshot to {OUT_DIR}/")
+
+    # --- Phase 1: execution-ready daily Trade Sheet ---
+    pf = inputs["portfolio"]
+    sheet = build_trade_sheet(
+        as_of=latest_date.isoformat(), signals=signals, latest_date=latest_date,
+        holdings=holdings, today_exits=today_exits, equity=equity_now, cash=cash,
+        sector_map=sector_map, risk_pct=float(pf["risk_per_trade_pct"]),
+        max_name_pct=float(pf.get("max_name_pct", 0.20)), max_positions=int(pf["max_positions"]),
+    )
+    LIVE_DIR.mkdir(parents=True, exist_ok=True)
+    (LIVE_DIR / f"trade_sheet_{latest_date.isoformat()}.txt").write_text(sheet, encoding="utf-8")
+    with (LIVE_DIR / "running_log.txt").open("a", encoding="utf-8") as fh:
+        fh.write(sheet + "\n\n")
+    print("\n" + sheet)
+    print(f"\nWrote trade sheet to {LIVE_DIR}/trade_sheet_{latest_date.isoformat()}.txt")
 
 
 if __name__ == "__main__":
