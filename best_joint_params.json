@@ -1,0 +1,30 @@
+{
+  "entry": {
+    "rs_rank_min": 55,
+    "vol_mult_min": 1.7000000000000002,
+    "voldry_min": 0.1,
+    "max_signals_per_day": 8
+  },
+  "exit": {
+    "breakeven_activation_r": 2.75,
+    "partial_profit_r": 3.5,
+    "trail_pct_bull": 0.15,
+    "trail_pct_bear": 0.1,
+    "time_stop_days": 15
+  },
+  "holdout_candidate": {
+    "cagr": 0.2699640734656268,
+    "mdd": 0.13275447351912517,
+    "calmar": 2.033559143502118,
+    "final": 2150173.9263912775,
+    "trades": 144
+  },
+  "holdout_current": {
+    "cagr": 0.45324990524855235,
+    "mdd": 0.14732156894336212,
+    "calmar": 3.07660248597274,
+    "final": 3311481.451832059,
+    "trades": 110
+  },
+  "_STATUS": "REJECTED \u2014 worse than committed config on every window. See docs/BACKTEST_TRUTH.md. Do not wire in."
+}
