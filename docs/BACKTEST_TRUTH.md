@@ -116,6 +116,21 @@ Caveats on the test: coarse weekly proxy (not the real daily engine), unadjusted
 artifacts inflate both arms' DD equally), 0.5% forced-exit haircut. A *precise* answer would need a
 daily corp-action-adjusted bhavcopy panel — now a nice-to-have, not a go-live gate.
 
+## Alpha vs beta — TESTED 2026-06-12, it's REAL ALPHA (not an index proxy)
+
+`scripts/alpha_vs_beta.py` regresses strategy daily equity returns on benchmarks:
+
+| Benchmark | Strat CAGR | Bench CAGR | Excess | corr | R² | Jensen α (rf=0) | up-cap | down-cap |
+|---|---|---|---|---|---|---|---|---|
+| Nifty 500 TRI (full) | 21.2% | 11.6% | **+9.6%/yr** | 0.34 | 0.12 | +18.4%/yr | 45% | 28% |
+| Nifty Next 50 (full) | 21.2% | 12.4% | +8.8%/yr | 0.32 | 0.10 | +18.8%/yr | 37% | 21% |
+| Nifty Midcap 150 (2019+) | 36.6% | 19.3% | **+17.4%/yr** | 0.33 | 0.11 | +34.7%/yr | 55% | 31% |
+
+Beats every benchmark incl. the true midcap peer; correlation ~0.33 (R²~0.11 → ~90% idiosyncratic);
+**down-capture ~20–31% vs up-capture 25–55%** — the asymmetry IS the alpha (sits in cash during
+weakness, deployed in strength). Not a closet index fund. Earlier "lumpy midcap beta" framing was
+wrong: it's lumpy *alpha*. Even subtracting a 6% risk-free, alpha stays +12–28%/yr. **Verdict: deepen it.**
+
 ## Remaining caveat (the real one)
 
 - **Regime concentration:** ~4 years (2017 +53%, 2021 +86%, 2023 +70%, 2024 +57%) carry essentially
