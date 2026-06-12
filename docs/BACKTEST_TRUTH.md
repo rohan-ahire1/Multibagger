@@ -59,13 +59,21 @@ other result.
 
 ---
 
-## Rejected candidates (do NOT re-wire these)
+## Rejected candidates / tested-and-failed changes (do NOT re-wire these)
 
 - **"27% joint candidate"** (`best_joint_params.json` → `holdout_candidate`):
   rs55 / vol_mult 1.7 / max_signals 8 / phased exit (be 2.75R, partial 3.5R, trail 0.15/0.10, time_stop 15).
   Looks good ONLY on the 2023+ holdout (27.0% / Calmar 2.03). On **full history it is 15.4% / Calmar 1.16**,
   and the committed config **beats it on every window** (45% vs 27% holdout; 21.2% vs 15.4% full).
   Tested and **rejected**. The high holdout number is a favorable-sub-window artifact, not an upgrade.
+
+- **Pyramiding (adding to winners)** — tested 2026-06-12, `scripts/pyramid_sweep.py`. Swept 1–3 adds
+  at +1R/+2R triggers, risk_frac 0.5 and 1.0. **Every variant is worse risk-adjusted.** Best CAGR
+  (2 adds @1R x0.5 = 21.69%) barely beats base 21.18% but DD jumps 16.6%→21.9%, Calmar collapses
+  1.27→0.99. Reason: adds trigger at +1R on *any* winner; with a 37% win rate most fizzle, so adds
+  load size into the noisy middle before pullbacks, not the rare +20R monsters (already full-size).
+  **Keep `pyramid_max_adds: 0`.** A *selective* pyramid (add only to confirmed top-RS/high-MFE names)
+  is unexplored but is a new feature with overfit risk, not a config flip.
 
 ---
 
@@ -82,9 +90,36 @@ other result.
 4. **Dead exit knobs.** When `exit_mode` is a `baseline_*` mode, the phased `ExitConfig` overrides
    are inert. Tuning `ExitConfig` while `exit_mode=baseline_ema21` changes nothing.
 
-## Open caveats (do not over-trust the 21% in absolute terms)
+## Survivorship — TESTED 2026-06-12, NOT a go-live blocker
 
-- **Survivorship:** OHLCV is yfinance, which under-covers delisted NSE names. The effective
-  symbol panel is thin (~480 names ever signalled) → CAGR is biased upward by an unknown amount.
-- **One regime:** 2010–2026 is bull-dominated. Robustness across a real bear is unproven.
-- These do not change the *ranking* of configs above, but they cap confidence in the absolute level.
+The yfinance price panel under-covers delisted NSE names: of 3,447 point-in-time EQ symbols
+(from bhavcopy snapshots), **36% (1,233) have no yfinance OHLCV**, and of 223 names the committed
+config actually traded, only **1 (CAPF) ever stopped trading**. This *looked* like a fatal
+survivor bias. It was tested and is not.
+
+Test (`scripts/build_weekly_bhav_panel.py` → `scripts/survivorship_test.py`): built a
+survivorship-clean **weekly** panel from the on-disk bhavcopy snapshots (4,073 symbols incl. the
+delisted ones; UNADJUSTED prices), then ran one identical coarse weekly momentum strategy two ways:
+
+| Universe | CAGR | MaxDD |
+|---|---|---|
+| FULL (incl. 1,500 delisted) | 14.75% | 54.4% |
+| SURVIVOR-only (2,573 alive) | 13.58% | 50.0% |
+
+**Including dead names was slightly *better*, not worse.** Mechanism: a trend-following exit
+(close < 10w EMA / −8% stop) sells a failing name on the trend break long before it delists, so the
+strategy almost never rides a position into its terminal collapse. Dead names contribute their up-moves
+while alive, downside truncated by the same exit as any loser. The ~1.2-pt gap is within the noise of
+a crude test. **Survivorship does not materially inflate this trend-exit strategy.**
+
+Caveats on the test: coarse weekly proxy (not the real daily engine), unadjusted prices (split
+artifacts inflate both arms' DD equally), 0.5% forced-exit haircut. A *precise* answer would need a
+daily corp-action-adjusted bhavcopy panel — now a nice-to-have, not a go-live gate.
+
+## Remaining caveat (the real one)
+
+- **Regime concentration:** ~4 years (2017 +53%, 2021 +86%, 2023 +70%, 2024 +57%) carry essentially
+  the entire CAGR; 2011–2016 is flat-to-down. This is lumpy midcap-momentum beta — long dead stretches
+  punctuated by bursts. Behavioral/sizing risk (abandoning before a burst), not a data problem.
+- Trade profile: 37.4% win rate, avg win +4.56R / avg loss −0.76R, **top 10% of trades = 74% of profit**.
+  Tail-driven, as expected for breakout momentum.
