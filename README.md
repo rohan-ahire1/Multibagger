@@ -1,118 +1,124 @@
-# multibagger
+# Multibagger — NSE SEPA Scanner
 
-`multibagger` is a local, alert-only NSE daily scanner for high-probability long swing setups. It ingests adjusted OHLCV from yfinance, stores normalized history locally in Parquet, computes Minervini/SEPA-inspired WATCH and BREAKOUT signals with Polars, persists runs, signals, and ranked watchlist candidates in DuckDB, and serves the data to a local terminal UI.
+A local, alert-only scanner for identifying Minervini/SEPA-inspired long swing-trading setups in NSE equities. It downloads adjusted OHLCV data, stores normalized history in Parquet, computes WATCH and BREAKOUT candidates with Polars, persists research data in DuckDB and exposes results through a local terminal-style web interface.
 
-## Stack
+> Research and alerting software only. It does not place orders and is not investment advice.
 
-- Python 3.12
-- Polars for indicator and scan computation
-- Parquet for OHLCV history
-- DuckDB for run logs and signals
-- Typer CLI
-- FastAPI for the local API
-- React/TypeScript terminal UI in `sepa-terminal/`
-- Requests + Tenacity for NSE calendar and Telegram HTTP calls
+## Highlights
 
-## Project layout
+- broad NSE symbol discovery from bhavcopy snapshots
+- adjusted OHLCV downloads through yfinance
+- local Parquet market-data store
+- high-speed Polars indicator and signal calculation
+- liquidity, trend, relative-strength and setup filters
+- WATCH and one-time BREAKOUT signals
+- DuckDB run history, signal persistence and candidate decisions
+- optional Telegram alerts
+- FastAPI-backed React/TypeScript research terminal
+- persisted-signal backtesting with trade and drawdown inspection
+- CLI health checks and scheduled-run support
+
+## Architecture
 
 ```text
-multibagger/
-├─ config/
-├─ data/
-├─ docs/plans/
-├─ scripts/
-├─ src/sepa_scanner/
-└─ tests/
+NSE bhavcopy snapshots ──► historical symbol universe
+                                  │
+yfinance adjusted OHLCV ─────────┘
+              │
+              ▼
+   Parquet history store
+              │
+              ▼
+ Polars indicator + SEPA scan
+              │
+              ├── signal snapshots
+              ├── DuckDB history/watchlist
+              ├── Telegram alerts
+              └── local API + terminal UI
+```
+
+## Technology
+
+- Python 3.12+
+- Polars and NumPy
+- Parquet and PyArrow
+- DuckDB
+- Typer and Rich
+- Pydantic and YAML configuration
+- yfinance
+- Requests and Tenacity
+- FastAPI and Uvicorn
+- React/TypeScript frontend in `sepa-terminal/`
+- pytest
+
+## Repository structure
+
+```text
+Multibagger/
+├── config/                  # Strategy, universe and alert configuration
+├── data/                    # Local OHLCV, database and generated signals
+├── docs/plans/              # Design and implementation plans
+├── scripts/                 # Data utility wrappers and validation tools
+├── sepa-terminal/           # React/TypeScript terminal UI
+├── src/sepa_scanner/        # Python package and CLI
+├── tests/
+├── pyproject.toml
+└── README.md
 ```
 
 ## Installation
 
-1. Create the environment:
-
 ```bash
+git clone https://github.com/rohan-ahire1/Multibagger.git
+cd Multibagger
 uv venv --python 3.12 .venv
-```
-
-2. Install the package and dev dependencies:
-
-```bash
 uv pip install --python .venv/bin/python -e ".[dev]"
-```
-
-3. Create your local environment file:
-
-```bash
 cp .env.example .env
 ```
 
-4. Edit `config/config.yaml` if you want to override the defaults.
+Edit `config/config.yaml` for strategy and storage settings.
 
-## Configuration
+Supported environment overrides include:
 
-Primary settings live in [config/config.yaml](/Users/rohanahire/Documents/Personal_Projects/multibagger/config/config.yaml).
-
-Environment overrides supported:
-
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID`
-- `POLARS_MAX_THREADS`
-- `SEPA_DATA_DIR`
-
-Optional files:
-
-- [config/alert_channels.yaml](/Users/rohanahire/Documents/Personal_Projects/multibagger/config/alert_channels.yaml)
-- [config/universe.yaml](/Users/rohanahire/Documents/Personal_Projects/multibagger/config/universe.yaml)
-
-If Telegram credentials are missing, the scanner continues in console-only mode and logs that Telegram is disabled.
-
-## Telegram setup
-
-1. Open Telegram and talk to `@BotFather`.
-2. Run `/newbot` and create the bot.
-3. Copy the bot token into `.env` as `TELEGRAM_BOT_TOKEN`.
-4. Send a message to the bot from the target chat.
-5. Visit:
-
-```text
-https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates
+```env
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+POLARS_MAX_THREADS=
+SEPA_DATA_DIR=
 ```
 
-6. Find the chat ID in the response and store it as `TELEGRAM_CHAT_ID`.
+Telegram is optional. Without credentials, the scanner continues in console-only mode.
 
-## CLI usage
-
-Install the package, then use the `sepa` command from the project virtual environment:
+## CLI
 
 ```bash
 ./.venv/bin/sepa --help
 ```
 
-### Build a broad historical universe
-
-Builds a reusable NSE `EQ` symbol list from bhavcopy snapshots. This is for symbol
-discovery only; OHLCV still comes from yfinance.
+### Build a historical symbol universe
 
 ```bash
-./.venv/bin/sepa build-universe --start 2005-01-01 --end 2026-04-18 --cadence monthly
+./.venv/bin/sepa build-universe \
+  --start 2005-01-01 \
+  --end 2026-04-18 \
+  --cadence monthly
 ```
 
-The default output is `data/reference/nse_eq_universe.yaml`. Use `--cadence weekly`
-for broader coverage, or `--cadence daily` if you have brought tea and patience.
+The default output is `data/reference/nse_eq_universe.yaml`. Bhavcopy data is used for symbol discovery; runtime OHLCV continues to come from yfinance.
 
-### Backfill
-
-Downloads adjusted yfinance OHLCV over a date range and upserts it into the local
-parquet store. By default, historical backfills use every known symbol in the parquet
-store, not just symbols present on the latest date.
+### Backfill adjusted OHLCV
 
 ```bash
 ./.venv/bin/sepa backfill --start 2025-01-01 --end 2025-03-31
-./.venv/bin/sepa backfill --start 2005-01-01 --end 2026-04-18 --symbols-from file --symbols-file data/reference/nse_eq_universe.yaml
+
+./.venv/bin/sepa backfill \
+  --start 2005-01-01 \
+  --end 2026-04-18 \
+  --symbols-from file \
+  --symbols-file data/reference/nse_eq_universe.yaml
 ```
 
-### Update
-
-Refreshes the latest yfinance-adjusted bars for the configured full universe and then rewrites the affected local dates.
+### Refresh recent data
 
 ```bash
 ./.venv/bin/sepa update
@@ -122,8 +128,6 @@ Refreshes the latest yfinance-adjusted bars for the configured full universe and
 
 ### Scan
 
-Loads the required lookback window from local Parquet, runs the full scanner, saves signals, updates DuckDB, and sends alerts.
-
 ```bash
 ./.venv/bin/sepa scan
 ./.venv/bin/sepa scan --date 2026-03-06 --export-csv
@@ -132,41 +136,32 @@ Loads the required lookback window from local Parquet, runs the full scanner, sa
 
 Signal snapshots are written to:
 
-- `data/signals/YYYY-MM-DD_signals.parquet`
-- `data/signals/YYYY-MM-DD_signals.csv` when `--export-csv` is used
+```text
+data/signals/YYYY-MM-DD_signals.parquet
+data/signals/YYYY-MM-DD_signals.csv   # with --export-csv
+```
 
-### Run
-
-Runs `update` followed by `scan` for the latest available local yfinance-adjusted date.
+### Update and scan
 
 ```bash
 ./.venv/bin/sepa run
 ```
 
-### UI
+This refreshes recent data and scans the latest locally available adjusted trading date.
 
-Launches the local React terminal for a setup-first trading workspace.
+### Launch the research terminal
 
 ```bash
 ./.venv/bin/sepa ui
 ./.venv/bin/sepa ui --host 127.0.0.1 --port 8602
 ```
 
-The terminal is organized as:
+The terminal contains:
 
-- `Scanner` for full-universe daily signal triage, chart review, and persistent shortlist/reject decisions
-- `Backtest` for full-range signal evaluation and per-trade review
+- **Scanner** — signal triage, chart review and persistent shortlist/reject decisions
+- **Backtest** — persisted BREAKOUT evaluation, equity/drawdown charts and per-trade inspection
 
-The `Backtest` workspace simulates persisted `BREAKOUT` signals locally from DuckDB + Parquet with:
-
-- the canonical `minervini_phased` exit engine by default
-- full-history trade charts and full-data overlays
-- equity and drawdown charts
-- per-trade chart overlays for entry, stop, pivot, and exit
-
-### Backtest
-
-Runs the local trade simulator for persisted `BREAKOUT` signals over a date range.
+### Backtest persisted BREAKOUT signals
 
 ```bash
 ./.venv/bin/sepa backtest --start 2026-01-01 --end 2026-03-06
@@ -175,72 +170,95 @@ Runs the local trade simulator for persisted `BREAKOUT` signals over a date rang
 ./.venv/bin/sepa backtest --start 2026-01-01 --end 2026-03-06 --symbol TCS --export-csv
 ```
 
-Current V1 assumptions:
+Current assumptions:
 
-- only `BREAKOUT` signals are tradable
-- trades are evaluated independently with no portfolio sizing
-- a later signal for the same symbol is skipped while an earlier trade is still open
-- same-day stop and target conflicts resolve conservatively to the worse outcome
-- the supported default exit engine is `minervini_phased`; legacy exit modes are comparison-only
+- only persisted `BREAKOUT` signals are tradable
+- trades are evaluated independently rather than as a sized portfolio
+- later signals for an already-open symbol are skipped
+- same-day stop/target conflicts resolve conservatively
+- `minervini_phased` is the supported default exit engine
+- legacy exit modes are comparison tools
 
-### Health
-
-Prints the latest run status, latest OHLCV date, and the number of symbols currently stored for the latest date.
+### Health check
 
 ```bash
 ./.venv/bin/sepa health
 ```
 
+Reports the latest run, latest stored date and current symbol count.
+
+## Data flow and storage
+
+1. Adjusted OHLCV is downloaded from yfinance.
+2. Normalized history is stored in `data/yf_adjusted/ohlcv_all.parquet`.
+3. Runs, signals and watchlist decisions are stored in `data/db/sepa.duckdb`.
+4. Daily signal snapshots are written under `data/signals/`.
+5. The local API and terminal read from DuckDB and Parquet.
+
+Keep generated market data and databases out of version control unless intentionally adding small fixtures.
+
+## Strategy behavior
+
+- The effective universe is liquidity-filtered on each scan date.
+- `NIFTYBEES` is used as the benchmark and excluded from trade candidates.
+- WATCH requires current-day setup quality.
+- BREAKOUT uses trend and relative strength on day `D`, with setup quality evaluated on day `D-1`.
+- BREAKOUT alerts require the previous close below the breakout threshold to avoid repeated notifications.
+- Runtime scanning uses yfinance-adjusted OHLC and split-adjusted volume.
+- NSE bhavcopy is retained for universe discovery and optional validation, not the runtime price series.
+
+Exact thresholds live in `config/config.yaml` and the scanner source. Treat configuration as part of the strategy definition and version it with every reported result.
+
+## Telegram alerts
+
+1. Create a bot with `@BotFather`.
+2. Send the bot a message from the target chat.
+3. Retrieve the chat ID through Telegram's `getUpdates` endpoint.
+4. Add the bot token and chat ID to `.env`.
+5. Run a scan and verify a test message before scheduling unattended runs.
+
+Never commit the bot token.
+
 ## Helper scripts
 
-The repository also includes thin wrappers:
+- [`scripts/yf_bulk_download.py`](scripts/yf_bulk_download.py)
+- [`scripts/yf_daily_update.py`](scripts/yf_daily_update.py)
+- [`scripts/validate_bhavcopy_vs_yf.py`](scripts/validate_bhavcopy_vs_yf.py)
 
-- [scripts/yf_bulk_download.py](/Users/rohanahire/Documents/Personal_Projects/multibagger/scripts/yf_bulk_download.py)
-- [scripts/yf_daily_update.py](/Users/rohanahire/Documents/Personal_Projects/multibagger/scripts/yf_daily_update.py)
-- [scripts/validate_bhavcopy_vs_yf.py](/Users/rohanahire/Documents/Personal_Projects/multibagger/scripts/validate_bhavcopy_vs_yf.py) for optional raw-price validation
+## Scheduling on macOS
 
-## Data flow
+A `launchd` job can run `sepa run` after the NSE session. Use absolute paths inside the local plist, but do not commit machine-specific paths to this repository.
 
-1. Adjusted OHLCV is downloaded from yfinance for the NSE universe.
-2. Normalized OHLCV is stored in `data/yf_adjusted/ohlcv_all.parquet`.
-3. Runs, signals, and watchlist candidates are stored in `data/db/sepa.duckdb`.
-4. Signal snapshots are exported under `data/signals/`.
+Example command target:
 
-## Strategy notes
-
-- Universe is liquidity-filtered from local yfinance history on each scan date.
-- Broad historical symbol discovery can use NSE bhavcopy snapshots via `sepa build-universe`.
-- Benchmark is `NIFTYBEES`.
-- WATCH requires current-day setup quality.
-- BREAKOUT requires trend and RS on day `D`, but setup quality on day `D-1`.
-- BREAKOUT alerts are one-time only by requiring previous close below the breakout threshold.
-- The scanner excludes `NIFTYBEES` from emitted trade candidates.
-
-## Corporate actions
-
-Runtime scanning/backtesting uses adjusted yfinance OHLC and split-adjusted volume. Bhavcopy is retained only as an optional validation source for same-day price checks.
-
-## Scheduling with macOS launchd
-
-Create a property list under `~/Library/LaunchAgents/` that runs after market close. Example program arguments:
-
-```xml
-<array>
-  <string>/Users/rohanahire/Documents/Personal_Projects/multibagger/.venv/bin/sepa</string>
-  <string>run</string>
-</array>
+```text
+/path/to/Multibagger/.venv/bin/sepa run
 ```
 
-Set `StartCalendarInterval` to a time after the NSE cash close, for example `16:10` IST converted to your machine timezone if needed, then load it with:
-
-```bash
-launchctl load ~/Library/LaunchAgents/com.sepa-scanner-nse.plist
-```
+Schedule after market close and ensure the machine is awake, connected and using the intended timezone.
 
 ## Testing
-
-Run the full test suite with:
 
 ```bash
 ./.venv/bin/pytest -q
 ```
+
+Before relying on a release, also run a small backfill, update, scan, health check, API launch and terminal smoke test.
+
+## Research limitations
+
+- yfinance is unofficial and may contain gaps or delayed adjustments.
+- Historical symbol discovery does not guarantee perfect point-in-time membership.
+- Backtests do not yet represent a capital-constrained portfolio.
+- Persisted signals inherit the exact data and configuration available when the scan ran.
+- Breakout fills, liquidity, slippage, taxes, circuit limits and partial executions need realistic modeling.
+- Scanner rankings and exit rules can be overfit.
+- Alert delivery does not prove that a signal was executable.
+
+## Safety and intended use
+
+The project is intentionally alert-only. Keep execution separate until the scanner has robust data validation, portfolio sizing, idempotent order handling, broker reconciliation and extensive paper-trading evidence.
+
+## License
+
+MIT, as declared in `pyproject.toml`.
