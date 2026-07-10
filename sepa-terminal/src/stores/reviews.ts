@@ -2,13 +2,11 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { ReviewStatus } from '@/lib/types'
 
-interface ReviewAction {
+export interface ReviewAction {
   symbol: string
   scanDate: string
   status: ReviewStatus
-  priority: number
   note: string
-  thesis: string
   reviewedAt: string
 }
 
@@ -20,32 +18,13 @@ interface UndoEntry {
 interface ReviewsStore {
   reviews: Record<string, ReviewAction>
   undoStack: UndoEntry[]
-  shortlist: (symbol: string, scanDate: string) => void
-  reject: (symbol: string, scanDate: string) => void
-  watch: (symbol: string, scanDate: string) => void
-  reset: (symbol: string, scanDate: string) => void
+  setStatus: (symbol: string, scanDate: string, status: ReviewStatus) => void
   setNote: (symbol: string, scanDate: string, note: string) => void
-  setThesis: (symbol: string, scanDate: string, thesis: string) => void
   undoLast: () => void
   getReview: (symbol: string, scanDate: string) => ReviewAction | undefined
 }
 
 const makeKey = (symbol: string, scanDate: string) => `${symbol}:${scanDate}`
-
-const makeReview = (
-  symbol: string,
-  scanDate: string,
-  status: ReviewStatus,
-  prev: ReviewAction | undefined
-): ReviewAction => ({
-  symbol,
-  scanDate,
-  status,
-  priority: status === 'shortlisted' ? 1 : 0,
-  note: prev?.note ?? '',
-  thesis: prev?.thesis ?? '',
-  reviewedAt: prev?.reviewedAt ?? new Date().toISOString(),
-})
 
 export const useReviewsStore = create<ReviewsStore>()(
   persist(
@@ -53,48 +32,22 @@ export const useReviewsStore = create<ReviewsStore>()(
       reviews: {},
       undoStack: [],
 
-      shortlist: (symbol, scanDate) => {
+      setStatus: (symbol, scanDate, status) => {
         const key = makeKey(symbol, scanDate)
         const prev = get().reviews[key]
+        const next: ReviewAction = {
+          symbol,
+          scanDate,
+          status,
+          note: prev?.note ?? '',
+          reviewedAt: new Date().toISOString(),
+        }
         set((s) => ({
           undoStack: [...s.undoStack.slice(-19), { key, prev }],
-          reviews: {
-            ...s.reviews,
-            [key]: makeReview(symbol, scanDate, 'shortlisted', prev),
-          },
+          reviews: status === 'new' && !next.note
+            ? Object.fromEntries(Object.entries(s.reviews).filter(([k]) => k !== key))
+            : { ...s.reviews, [key]: next },
         }))
-      },
-
-      reject: (symbol, scanDate) => {
-        const key = makeKey(symbol, scanDate)
-        const prev = get().reviews[key]
-        set((s) => ({
-          undoStack: [...s.undoStack.slice(-19), { key, prev }],
-          reviews: {
-            ...s.reviews,
-            [key]: makeReview(symbol, scanDate, 'rejected', prev),
-          },
-        }))
-      },
-
-      watch: (symbol, scanDate) => {
-        const key = makeKey(symbol, scanDate)
-        const prev = get().reviews[key]
-        set((s) => ({
-          undoStack: [...s.undoStack.slice(-19), { key, prev }],
-          reviews: {
-            ...s.reviews,
-            [key]: makeReview(symbol, scanDate, 'watching', prev),
-          },
-        }))
-      },
-
-      reset: (symbol, scanDate) => {
-        const key = makeKey(symbol, scanDate)
-        set((s) => {
-          const { [key]: _, ...rest } = s.reviews
-          return { reviews: rest }
-        })
       },
 
       setNote: (symbol, scanDate, note) => {
@@ -106,38 +59,7 @@ export const useReviewsStore = create<ReviewsStore>()(
               ...s.reviews,
               [key]: existing
                 ? { ...existing, note }
-                : {
-                    symbol,
-                    scanDate,
-                    status: 'new' as const,
-                    priority: 0,
-                    note,
-                    thesis: '',
-                    reviewedAt: new Date().toISOString(),
-                  },
-            },
-          }
-        })
-      },
-
-      setThesis: (symbol, scanDate, thesis) => {
-        const key = makeKey(symbol, scanDate)
-        set((s) => {
-          const existing = s.reviews[key]
-          return {
-            reviews: {
-              ...s.reviews,
-              [key]: existing
-                ? { ...existing, thesis }
-                : {
-                    symbol,
-                    scanDate,
-                    status: 'new' as const,
-                    priority: 0,
-                    note: '',
-                    thesis,
-                    reviewedAt: new Date().toISOString(),
-                  },
+                : { symbol, scanDate, status: 'new', note, reviewedAt: new Date().toISOString() },
             },
           }
         })
@@ -148,19 +70,15 @@ export const useReviewsStore = create<ReviewsStore>()(
         if (!undoStack.length) return
         const entry = undoStack[undoStack.length - 1]
         set((s) => {
-          const newReviews = { ...s.reviews }
-          if (entry.prev) {
-            newReviews[entry.key] = entry.prev
-          } else {
-            delete newReviews[entry.key]
-          }
-          return { reviews: newReviews, undoStack: s.undoStack.slice(0, -1) }
+          const reviews = { ...s.reviews }
+          if (entry.prev) reviews[entry.key] = entry.prev
+          else delete reviews[entry.key]
+          return { reviews, undoStack: s.undoStack.slice(0, -1) }
         })
       },
 
-      getReview: (symbol, scanDate) =>
-        get().reviews[makeKey(symbol, scanDate)],
+      getReview: (symbol, scanDate) => get().reviews[makeKey(symbol, scanDate)],
     }),
-    { name: 'sepa-reviews' }
+    { name: 'sepa-reviews-v2' }
   )
 )

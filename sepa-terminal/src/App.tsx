@@ -1,42 +1,48 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { BrowserRouter, Route, Routes, useNavigate } from 'react-router'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { TopBar } from '@/components/layout/TopBar'
-import { ShortcutBar } from '@/components/layout/ShortcutBar'
-import { CommandPalette } from '@/components/shared/CommandPalette'
-import { ShortcutOverlay } from '@/components/shared/ShortcutOverlay'
-import { MarketScanner } from '@/components/workspaces/MarketScanner'
-import { Backtest } from '@/components/workspaces/Backtest'
+import { CommandPalette } from '@/components/layout/CommandPalette'
+import { ShortcutOverlay } from '@/components/layout/ShortcutOverlay'
+import { Dashboard } from '@/pages/Dashboard'
+import { Scanner } from '@/pages/Scanner'
+import { SymbolPage } from '@/pages/Symbol'
+import { Backtest } from '@/pages/Backtest'
 import { useUIStore } from '@/stores/ui'
-import { useWorkspaceSwitch } from '@/hooks/useWorkspaceSwitch'
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
-      retry: 2,
-      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
+      retry: 1,
     },
   },
 })
 
-function AppContent() {
-  const activeWorkspace = useUIStore((s) => s.activeWorkspace)
-  const commandPaletteOpen = useUIStore((s) => s.commandPaletteOpen)
-  const shortcutOverlayOpen = useUIStore((s) => s.shortcutOverlayOpen)
+function Shell() {
   const toggleCommandPalette = useUIStore((s) => s.toggleCommandPalette)
   const toggleShortcutOverlay = useUIStore((s) => s.toggleShortcutOverlay)
-  useWorkspaceSwitch()
+  const navigate = useNavigate()
+
   useHotkeys('mod+k', () => toggleCommandPalette(), { preventDefault: true })
-  useHotkeys('shift+/', () => toggleShortcutOverlay(), { preventDefault: true })
+  useHotkeys('shift+slash', () => toggleShortcutOverlay(), { preventDefault: true })
+  useHotkeys('g>d', () => navigate('/'))
+  useHotkeys('g>s', () => navigate('/scanner'))
+  useHotkeys('g>b', () => navigate('/backtest'))
 
   return (
-    <div className="h-screen flex flex-col bg-bg-primary overflow-hidden">
+    <div className="flex h-screen flex-col overflow-hidden">
       <TopBar />
-      {activeWorkspace === 1 && <MarketScanner />}
-      {activeWorkspace === 2 && <Backtest />}
-      <ShortcutBar />
-      {commandPaletteOpen && <CommandPalette />}
-      {shortcutOverlayOpen && <ShortcutOverlay />}
+      <main className="min-h-0 flex-1 overflow-y-auto">
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/scanner" element={<Scanner />} />
+          <Route path="/symbol/:symbol" element={<SymbolPage />} />
+          <Route path="/backtest" element={<Backtest />} />
+        </Routes>
+      </main>
+      <CommandPalette />
+      <ShortcutOverlay />
     </div>
   )
 }
@@ -44,7 +50,9 @@ function AppContent() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AppContent />
+      <BrowserRouter>
+        <Shell />
+      </BrowserRouter>
     </QueryClientProvider>
   )
 }

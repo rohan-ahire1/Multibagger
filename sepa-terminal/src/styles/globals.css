@@ -1,75 +1,59 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
-  --color-bg-primary: #0F1117;
-  --color-bg-secondary: #13151D;
-  --color-bg-surface: #1A1D27;
-  --color-bg-elevated: #252830;
+  /* Light terminal palette */
+  --color-bg: #f7f7f5;
+  --color-surface: #ffffff;
+  --color-surface-2: #f1f1ef;
+  --color-border: #e4e4e0;
+  --color-border-strong: #cfcfc9;
 
-  --color-text-primary: #E8EAED;
-  --color-text-secondary: #C0C2CC;
-  --color-text-muted: #8B8D97;
-  --color-text-dim: #6B6D77;
-  --color-text-faint: #4A4C56;
+  --color-ink: #1c1c1a;
+  --color-ink-soft: #55554f;
+  --color-ink-faint: #8b8b83;
 
-  --color-border-default: #1E2030;
-  --color-border-subtle: #252830;
-  --color-border-strong: #2A2D3A;
-  --color-border-hover: #3A3D4A;
+  --color-accent: #2557d6;
+  --color-accent-soft: #e8eefc;
+  --color-up: #1a7f4b;
+  --color-up-soft: #e3f3ea;
+  --color-down: #c23934;
+  --color-down-soft: #fbe9e8;
+  --color-warn: #b0700a;
+  --color-warn-soft: #fdf2dd;
 
-  --color-green: #26A69A;
-  --color-green-bg: rgba(38, 166, 154, 0.125);
-  --color-red: #EF5350;
-  --color-red-bg: rgba(239, 83, 80, 0.125);
-  --color-amber: #F5A623;
-  --color-amber-bg: rgba(245, 166, 35, 0.125);
-  --color-blue: #3B82F6;
-  --color-blue-bg: rgba(59, 130, 246, 0.125);
-  --color-purple: #8B5CF6;
-  --color-purple-bg: rgba(139, 92, 246, 0.125);
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 }
 
-:root {
-  --candle-bull: rgba(38,166,154,0.9);
-  --candle-bear: rgba(239,83,80,0.9);
-  --sma-50: #e8b03e;
-  --sma-150: #3b82f6;
-  --sma-200: #ef4444;
-  --line-pivot: #2563eb;
-  --line-entry: #16a34a;
-  --line-stop: #dc2626;
-  --line-exit: #b45309;
-  --line-extended: #f59e0b;
+html,
+body,
+#root {
+  height: 100%;
 }
 
 body {
-  background-color: var(--color-bg-primary);
-  color: var(--color-text-primary);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  font-size: 13px;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  margin: 0;
-  padding: 0;
-  min-height: 100vh;
+  @apply bg-bg text-ink antialiased;
+  font-size: 14px;
 }
 
-.tabular-nums {
-  font-variant-numeric: tabular-nums lining-nums;
+/* Data-dense numeric alignment everywhere */
+.tnum {
+  font-variant-numeric: tabular-nums;
 }
 
-/* Scrollbar styling for dark theme */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* Thin scrollbars, light */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
 }
-::-webkit-scrollbar-track {
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-track {
   background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #2A2D3A;
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #3A3D4A;
 }

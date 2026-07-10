@@ -1,95 +1,86 @@
-import { useBacktestStore } from '@/stores/backtest'
+import { NavLink } from 'react-router'
+import { Activity, Command } from 'lucide-react'
+import { useScanDates, useBreadth } from '@/api/hooks'
 import { useUIStore } from '@/stores/ui'
-import { formatDate } from '@/lib/formatters'
-import { useMarketBreadth } from '@/api/useScannerData'
+import { useEffect } from 'react'
+import { cn, fmtDateShort, fmtPct } from '@/lib/utils'
+import { Badge, Kbd } from '@/components/ui/primitives'
 
-const WORKSPACES = [
-  { id: 1 as const, label: 'Scanner' },
-  { id: 2 as const, label: 'Backtest' },
+const NAV = [
+  { to: '/', label: 'Dashboard', end: true },
+  { to: '/scanner', label: 'Scanner', end: false },
+  { to: '/backtest', label: 'Backtest', end: false },
 ]
 
-function describeActiveRange(
-  activeWorkspace: 1 | 2,
-  scanDate: string,
-  startDate: string,
-  endDate: string,
-): string {
-  if (activeWorkspace === 1) {
-    return scanDate ? `Scan ${formatDate(scanDate)}` : 'Scan date unavailable'
-  }
-  return `${formatDate(startDate)} to ${formatDate(endDate)}`
-}
+const regimeTone = { Strong: 'up', Weak: 'down', Neutral: 'warn' } as const
 
 export function TopBar() {
-  const activeWorkspace = useUIStore((s) => s.activeWorkspace)
-  const setWorkspace = useUIStore((s) => s.setWorkspace)
+  const { data: dates } = useScanDates()
   const scanDate = useUIStore((s) => s.scanDate)
-  const backtestParams = useBacktestStore((s) => s.params)
-  const activeRange = describeActiveRange(
-    activeWorkspace,
-    scanDate,
-    backtestParams.startDate,
-    backtestParams.endDate,
-  )
+  const setScanDate = useUIStore((s) => s.setScanDate)
+  const toggleCommandPalette = useUIStore((s) => s.toggleCommandPalette)
+  const { data: breadth } = useBreadth(scanDate)
 
-  const { data: breadthData } = useMarketBreadth(
-    activeWorkspace === 1 ? scanDate : ''
-  )
-
-  let breadthIndicator = null
-  if (activeWorkspace === 1 && breadthData) {
-    const colorClass =
-      breadthData.regime === 'Strong'
-        ? 'text-green border-green/30 bg-green-bg'
-        : breadthData.regime === 'Weak'
-        ? 'text-red border-red/30 bg-red-bg'
-        : 'text-amber border-amber/30 bg-amber-bg'
-    breadthIndicator = (
-      <span className={`text-[10px] uppercase font-mono border px-1.5 py-0.5 rounded ${colorClass}`}>
-        Breadth: {(breadthData.breadth * 100).toFixed(0)}% ({breadthData.regime})
-      </span>
-    )
-  }
+  // Default to the latest scan date once dates load
+  useEffect(() => {
+    if (!scanDate && dates?.length) setScanDate(dates[0])
+  }, [scanDate, dates, setScanDate])
 
   return (
-    <div className="h-10 bg-bg-secondary border-b border-border-default px-4 flex items-center justify-between shrink-0">
+    <header className="flex h-12 shrink-0 items-center gap-4 border-b border-border bg-surface px-4">
       <div className="flex items-center gap-2">
-        <span className="text-[15px] font-medium text-text-primary">
-          Multibagger Terminal
-        </span>
-        <span className="text-xs bg-green-bg text-green px-1.5 rounded">
-          v2
-        </span>
+        <Activity className="size-4 text-accent" />
+        <span className="text-sm font-bold tracking-tight">SEPA Terminal</span>
       </div>
 
-      <div className="flex items-center gap-1">
-        {WORKSPACES.map((ws) => {
-          const isActive = activeWorkspace === ws.id
-          return (
-            <button
-              key={ws.id}
-              onClick={() => setWorkspace(ws.id)}
-              className={`px-3 py-2 text-xs transition-colors ${
-                isActive
-                  ? 'text-text-primary border-b-2 border-green'
-                  : 'text-text-dim hover:text-text-muted'
-              }`}
-            >
-              {ws.label}
-            </button>
-          )
-        })}
-      </div>
+      <nav className="flex items-center gap-1">
+        {NAV.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.end}
+            className={({ isActive }) =>
+              cn(
+                'rounded-md px-2.5 py-1 text-[13px] font-medium text-ink-soft hover:bg-surface-2 hover:text-ink',
+                isActive && 'bg-accent-soft text-accent hover:bg-accent-soft hover:text-accent'
+              )
+            }
+          >
+            {item.label}
+          </NavLink>
+        ))}
+      </nav>
 
-      <div className="flex items-center gap-3">
-        {breadthIndicator}
-        <span className="text-xs text-text-muted">
-          {activeRange}
-        </span>
-        <kbd className="text-xs text-text-faint border border-border-strong rounded px-1.5 font-mono">
-          Cmd+K
-        </kbd>
+      <div className="ml-auto flex items-center gap-3">
+        {breadth && (
+          <Badge tone={regimeTone[breadth.regime]}>
+            {breadth.regime} · {fmtPct(breadth.breadth, 0)} &gt;50MA
+            {!breadth.marketFilterOn && ' · filter off'}
+          </Badge>
+        )}
+
+        <select
+          value={scanDate ?? ''}
+          onChange={(e) => setScanDate(e.target.value)}
+          className="tnum h-7 rounded-md border border-border bg-surface px-2 text-xs font-medium text-ink outline-none hover:border-border-strong focus:border-accent"
+        >
+          {!dates?.length && <option value="">no scans</option>}
+          {dates?.map((d) => (
+            <option key={d} value={d}>
+              {fmtDateShort(d)} ({d})
+            </option>
+          ))}
+        </select>
+
+        <button
+          onClick={toggleCommandPalette}
+          className="flex h-7 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-ink-faint hover:border-border-strong hover:text-ink-soft"
+        >
+          <Command className="size-3" />
+          <span>Jump</span>
+          <Kbd>⌘K</Kbd>
+        </button>
       </div>
-    </div>
+    </header>
   )
 }

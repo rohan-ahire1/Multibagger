@@ -1,61 +1,23 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-import type { ChartTimeframe, ChartOverlays } from '@/lib/types'
 
 interface UIStore {
-  activeWorkspace: 1 | 2
-  scanDate: string
+  scanDate: string | null // null until dates load; then latest by default
   commandPaletteOpen: boolean
   shortcutOverlayOpen: boolean
-  chartTimeframe: ChartTimeframe
-  chartOverlays: ChartOverlays
-  panelSizes: Record<string, number[]>
-  setWorkspace: (ws: 1 | 2) => void
-  setScanDate: (date: string) => void
+  setScanDate: (d: string) => void
+  setCommandPaletteOpen: (open: boolean) => void
   toggleCommandPalette: () => void
+  setShortcutOverlayOpen: (open: boolean) => void
   toggleShortcutOverlay: () => void
-  setChartTimeframe: (tf: ChartTimeframe) => void
-  toggleChartOverlay: (key: keyof ChartOverlays) => void
-  setPanelSizes: (key: string, sizes: number[]) => void
 }
 
-export const useUIStore = create<UIStore>()(
-  persist(
-    (set) => ({
-      activeWorkspace: 1,
-      scanDate: '',
-      commandPaletteOpen: false,
-      shortcutOverlayOpen: false,
-      chartTimeframe: 'D',
-      chartOverlays: {
-        sma50: true,
-        sma150: true,
-        sma200: true,
-        ema21: false,
-        trail10Low: false,
-        refLines: true,
-      },
-      panelSizes: {},
-      setWorkspace: (ws) => set({ activeWorkspace: ws }),
-      setScanDate: (date) => set({ scanDate: date }),
-      toggleCommandPalette: () =>
-        set((s) => ({ commandPaletteOpen: !s.commandPaletteOpen })),
-      toggleShortcutOverlay: () =>
-        set((s) => ({ shortcutOverlayOpen: !s.shortcutOverlayOpen })),
-      setChartTimeframe: (tf) => set({ chartTimeframe: tf }),
-      toggleChartOverlay: (key) =>
-        set((s) => ({
-          chartOverlays: { ...s.chartOverlays, [key]: !s.chartOverlays[key] },
-        })),
-      setPanelSizes: (key, sizes) =>
-        set((s) => ({ panelSizes: { ...s.panelSizes, [key]: sizes } })),
-    }),
-    {
-      name: 'sepa-ui',
-      partialize: (s) => ({
-        panelSizes: s.panelSizes,
-        chartOverlays: s.chartOverlays,
-      }),
-    }
-  )
-)
+export const useUIStore = create<UIStore>((set) => ({
+  scanDate: null,
+  commandPaletteOpen: false,
+  shortcutOverlayOpen: false,
+  setScanDate: (d) => set({ scanDate: d }),
+  setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
+  toggleCommandPalette: () => set((s) => ({ commandPaletteOpen: !s.commandPaletteOpen })),
+  setShortcutOverlayOpen: (open) => set({ shortcutOverlayOpen: open }),
+  toggleShortcutOverlay: () => set((s) => ({ shortcutOverlayOpen: !s.shortcutOverlayOpen })),
+}))
