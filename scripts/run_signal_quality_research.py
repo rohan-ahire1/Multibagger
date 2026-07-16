@@ -12,7 +12,9 @@ import polars as pl
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from sepa_scanner.backtest.signal_scorecard import compute_scorecard
+from sepa_scanner.settings import load_settings
 from sepa_scanner.storage.parquet_store import ParquetOhlcvStore
+from portfolio_diagnostics import filter_signals, resolve_signal_quality_overrides
 
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -64,18 +66,37 @@ def _print_row(label: str, row: dict) -> None:
 def main() -> None:
     conn = duckdb.connect(str(DB_PATH), read_only=True)
 
-    signals = conn.execute(
+    raw_signals = conn.execute(
         "SELECT * FROM signals WHERE signal_type = 'BREAKOUT' ORDER BY signal_date"
     ).pl()
     diagnostics = conn.execute("SELECT * FROM daily_diagnostics ORDER BY diag_date, symbol").pl()
     conn.close()
+
+    settings = load_settings()
+    signals = filter_signals(
+        raw_signals,
+        settings=settings,
+        diagnostics=diagnostics,
+        rs_rank_min=settings.backtest.rs_rank_min,
+        rs_rank_max=settings.backtest.rs_rank_max,
+        ranking_mode=settings.backtest.signal_ranking_mode,
+        max_signals_per_day=settings.backtest.max_signals_per_day,
+        quality_profile=settings.backtest.signal_quality_profile,
+        quality_overrides=resolve_signal_quality_overrides(settings),
+    )
+    print(f"Canonical entry filters: {signals.height}/{raw_signals.height} raw breakouts retained")
 
     parquet = ParquetOhlcvStore(PARQUET_DIR)
     symbols = signals["symbol"].unique().to_list()
     ohlcv = parquet.read_frame(columns=["date", "symbol", "open", "high", "low", "close", "volume"])
     ohlcv = ohlcv.filter(pl.col("symbol").is_in(symbols)).sort(["symbol", "date"])
 
-    result = compute_scorecard(signals, ohlcv, diagnostics)
+    result = compute_scorecard(
+        signals,
+        ohlcv,
+        diagnostics,
+        pending_days=settings.backtest.pending_days,
+    )
 
     overall = result.get("overall", {})
     print("Signal Quality Research")

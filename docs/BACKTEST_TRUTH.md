@@ -6,7 +6,7 @@
 > independent backtest engines/metrics historically disagreed, and tuning done in one
 > tool was lost or contradicted by another. Do not add new backtest scripts.
 
-Last verified: **2026-06-12** · git `6590717` (branch `feat/sepa-terminal-v2`)
+Last verified: **2026-07-12** (D+1 entry and trading-bar pending-window correction)
 
 ---
 
@@ -23,34 +23,51 @@ Key knobs of the committed config (see `config/config.yaml` for the full set):
 | Exit | `exit_mode` | `baseline_ema21` |
 | Exit | `use_extended_exit_model` | `false` (phased `ExitConfig` is NOT active) |
 | Entry | `backtest.rs_rank_min` / `rs_rank_max` | `70` / `100` |
+| Entry | `pending_days` | `8` D+1 onward symbol trading bars |
 | Entry | `max_signals_per_day` | `20` |
 | Entry | `signal_ranking_mode` | `default` |
 | Sizing | `risk_per_trade_pct` | `0.020` |
 | Sizing | `max_positions` | `20` |
 | Sizing | `max_name_pct` | `0.20` |
 | Sizing | `max_sector_positions` | `4` |
+| Cash | `cash_yield_apy` | `0.06` (idle cash in liquid fund; 0 disables) |
 
 ---
 
 ## Canonical metrics (honest, equity-curve based)
 
-Window: full history **2010-01-04 → 2026-03-17**. Metric source: the real `daily_equity`
+Window: full history **2010-01-04 → latest bar**. Metric source: the real `daily_equity`
 curve from `simulate_portfolio_python` (friction on: slippage + STT/charges + DP fee).
 **Not** the serial-R-compound number the CLI prints (see "Known traps").
 
-| Window | CAGR | Max DD | Calmar | Trades |
+| Config | CAGR | Max DD | Calmar | Trades |
 |---|---|---|---|---|
-| **Full 2010–2026** | **21.18%** | 16.63% | 1.27 | 348 |
-| 2023+ holdout | 45.3% | 14.7% | 3.08 | 110 |
+| **Committed (cash yield 6%)** | **13.30%** | 18.34% | 0.72 | 349 |
+| Strategy-only (`cash_yield_apy: 0`) | 9.01% | 22.92% | 0.39 | 348 |
 
-Committed reference (for parity drift detection): `21.01% / 16.63% / 1.26 / 348`.
-Small CAGR drift vs reference is expected as the data window extends past 2026-03-17.
+Verified 2026-07-12 with data through 2026-07-09. The simulator now accepts entries
+only from D+1 and counts `pending_days` as symbol trading bars. **No filled trade enters
+on its EOD signal date.** Small CAGR drift is expected as the data window extends.
+
+**The two numbers are the SAME strategy.** `cash_yield_apy` (added 2026-07-11) models
+idle cash parked in a liquid fund/LIQUIDBEES at 6% p.a. Avg exposure is only ~40%,
+so yield on the idle ~60% adds ~+4.3 CAGR pts — arithmetic,
+not signal edge. Setting it to 0 reproduces the strategy-only baseline exactly.
+**Live requirement:** the 13.30% only holds if idle cash is actually parked; the
+trade-signal edge itself is the 9.01% line. Do not "improve" on 13.30% by tuning
+signal knobs against it — compare signal changes at `cash_yield_apy: 0`.
+
+**Unresolved execution caveat:** this D+1-corrected result still uses the phased exit
+engine even though config labels the strategy `baseline_ema21`. Do not treat it as a
+validated baseline-EMA21 result until the exit-engine mismatch is corrected and parity is
+re-established.
 
 ### How to reproduce (the ONLY authoritative command)
 
 ```bash
 uv run python optimize_joint_wf.py --parity
-# expect: CAGR=21.18%  MaxDD=16.63%  Calmar=1.27  trades=348
+# expect (data through 2026-07-09): CAGR=13.30%  MaxDD=18.34%  Calmar=0.72  trades=349
+# with cash_yield_apy: 0            CAGR=9.01%   MaxDD=22.92%  Calmar=0.39  trades=348
 ```
 
 This runs the full production path (quality filters + sector map + exits + friction).
@@ -60,6 +77,10 @@ other result.
 ---
 
 ## Rejected candidates / tested-and-failed changes (do NOT re-wire these)
+
+All parameter-comparison results below were measured before the 2026-07-12 D+1 correction.
+They are historical notes only and must be revalidated on the corrected execution model before
+they can justify any configuration decision.
 
 - **"27% joint candidate"** (`best_joint_params.json` → `holdout_candidate`):
   rs55 / vol_mult 1.7 / max_signals 8 / phased exit (be 2.75R, partial 3.5R, trail 0.15/0.10, time_stop 15).
@@ -74,6 +95,27 @@ other result.
   load size into the noisy middle before pullbacks, not the rare +20R monsters (already full-size).
   **Keep `pyramid_max_adds: 0`.** A *selective* pyramid (add only to confirmed top-RS/high-MFE names)
   is unexplored but is a new feature with overfit risk, not a config flip.
+
+- **Index-ETF parking of idle cash (naive or regime-gated)** — tested 2026-07-11 via
+  `cash_returns_by_date` in the canonical sim. Exposure is ~40% because of **signal supply**
+  (median 2 open positions; the 20-position cap is never hit), so idle cash is large.
+  Naive NIFTYBEES parking: 26.03% CAGR but MaxDD explodes 16.6%→35.4% (cash is high exactly
+  in bear markets). Regime-gated (bench>EMA21) *looked* like 61% CAGR — that was **1-day
+  look-ahead**; with the flag lagged 1 day + 0.1% switch cost (29 flips/yr) the gated index
+  earns 7.9%/yr standalone and the portfolio is 24.21% / 18.31% DD / 1.32 Calmar — worse than
+  committed on every axis. **Keep idle cash in a liquid instrument.** Yield scales linearly:
+  ~+0.8 CAGR pts per +1% APY (12% control run: 30.69% / 16.53% / 1.86).
+- **max_name_pct 0.25/0.30** — tested 2026-07-11. 0.25: 27.29% CAGR but DD 18.84%, Calmar
+  1.45 (worse). 0.30: worse on everything (24.24% / 18.35% / 1.32). **Keep 0.20.**
+- **rs_rank_min 65/60** — tested 2026-07-11 at `cash_yield_apy: 0` across WF folds. rs65 wins
+  folds 1–2 but ties fold3 and slightly loses the 2023+ holdout (44.1% vs 45.3%); full-history
+  gain is +0.26 pts (noise). Barely moves exposure (40%→42%) — signal supply, not the RS
+  threshold, is the binding constraint. **Keep 70.**
+- **risk_per_trade_pct 2.5%/3.0%** — tested 2026-07-11 through the canonical harness. The knob is
+  nearly INERT: the 20% `max_name_pct` cap is the binding constraint (median stop ~2.6% means the
+  2% budget already wants ~77% of equity per name). 2.5% gained +1.2 pts on full history but LOST
+  on 3 of 4 walk-forward windows (holdout 43.3% vs 45.3%) — same artifact class as the 27% candidate.
+  3% was worse everywhere. **Keep 2.0%.**
 
 ---
 
@@ -116,7 +158,11 @@ Caveats on the test: coarse weekly proxy (not the real daily engine), unadjusted
 artifacts inflate both arms' DD equally), 0.5% forced-exit haircut. A *precise* answer would need a
 daily corp-action-adjusted bhavcopy panel — now a nice-to-have, not a go-live gate.
 
-## Alpha vs beta — TESTED 2026-06-12, it's REAL ALPHA (not an index proxy)
+## Alpha vs beta — historical pre-D+1 analysis, requires re-run
+
+The figures in this section were measured before the 2026-07-12 entry correction and
+are not evidence for the current strategy. Re-run only after the exit-engine mismatch
+is resolved.
 
 `scripts/alpha_vs_beta.py` regresses strategy daily equity returns on benchmarks:
 
@@ -132,6 +178,9 @@ weakness, deployed in strength). Not a closet index fund. Earlier "lumpy midcap 
 wrong: it's lumpy *alpha*. Even subtracting a 6% risk-free, alpha stays +12–28%/yr. **Verdict: deepen it.**
 
 ## Remaining caveat (the real one)
+
+The return and trade-profile figures below are pre-D+1 historical diagnostics and must
+be regenerated after the exit-engine correction.
 
 - **Regime concentration:** ~4 years (2017 +53%, 2021 +86%, 2023 +70%, 2024 +57%) carry essentially
   the entire CAGR; 2011–2016 is flat-to-down. This is lumpy midcap-momentum beta — long dead stretches

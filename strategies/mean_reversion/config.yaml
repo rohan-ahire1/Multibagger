@@ -1,0 +1,27 @@
+strategy:
+  name: connors_rsi2_mean_reversion
+  universe: nifty100
+
+entry:
+  rsi_period: 2
+  rsi_threshold: 25
+  sma_trend_period: 200
+  min_adv_inr: 100000000
+  min_price_inr: 50
+  stop_atr_mult: 3.0
+  pending_days: 1
+
+exit:
+  mode: sma3
+  time_stop_days: 5
+  max_hold_days: 20
+
+portfolio:
+  max_positions: 10
+  max_sector_positions: 3
+  initial_capital: 1000000
+  risk_per_trade_pct: 0.05
+
+data:
+  ohlcv_path: data/yf_adjusted/ohlcv_all.parquet
+  sector_map_path: data/reference/nifty500_constituents.csv

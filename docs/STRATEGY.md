@@ -896,7 +896,7 @@ A BREAKOUT signal on date `D` becomes actionable starting on trading day `D+1`.
 2. **Intraday trigger:** If any pending day's `high >= entry_ref` → fill at `entry_ref`
 3. **Expiration:** If the pending window expires without either trigger → mark as `not_filled`
 
-**Default pending window:** 5 trading days
+**Configured pending window:** 8 symbol trading bars, starting on D+1. A missing bar for a symbol does not consume the window.
 
 ### 15.3 Exit Logic
 
@@ -933,8 +933,8 @@ If a later BREAKOUT signal appears for a symbol while a prior trade in the same 
 
 | Parameter | Default |
 |---|---|
-| Pending entry window | 5 trading days |
-| Max holding period | 90 trading days |
+| Pending entry window | 8 D+1 onward symbol trading bars |
+| Max holding period | 150 calendar days |
 | Profit target | None (no fixed target; from `risk.target_r` in config) |
 | Exit mode | V3_TRAIL_PCT (percentage trailing stop) |
 | Trail activation | +2R profit (two-stage: breakeven at +1R, trail at +2R) |
@@ -1539,6 +1539,7 @@ Track every strategy change here. Include date, what changed, why, and who/what 
 | 2026-03-14 | Trailing stop same-bar trigger exit | If trail ratchets up and close is already below it, exit immediately instead of waiting for next bar | AI-assisted |
 | 2026-03-15 | Added Minervini multi-phase exit engine | Replace single trailing stop with 6-phase system: initial→breakeven→partial→trail→tighten→exit. Adds partial profits, adaptive trail selection, climax detection, sell-into-strength rules. Legacy modes preserved for A/B comparison. | AI-assisted |
 | 2026-03-17 | Stabilized the supported product path | Active runtime is yfinance → Parquet/DuckDB → FastAPI → terminal, default backtest path is `minervini_phased`, and supported UI is limited to Scanner + Backtest | AI-assisted |
+| 2026-07-11 | Added `portfolio.cash_yield_apy` (default 0.06) — idle cash accrues liquid-fund yield in the canonical portfolio sim | Avg exposure is only ~40%; yield on idle cash adds ~+4.5 CAGR pts (21.18% → 25.75%) with unchanged DD. Not signal edge — arithmetic on idle cash; set 0 for strategy-only comparisons. Live requires actually parking idle cash (liquid fund/LIQUIDBEES). See docs/BACKTEST_TRUTH.md | AI-assisted |
 
 ### 2026-03-15 — V2 Critical Evaluation Implementation
 
@@ -1808,3 +1809,22 @@ The exit engine is deliberately simple and separate from the SEPA phased exit en
 The strategy uses the same yfinance adjusted OHLCV parquet data as the SEPA backtester. Signals are generated fresh per diagnostics run and are not stored in DuckDB.
 
 The current implementation uses a static current Nifty 100 universe or a local `nifty100_constituents.csv` if present. This introduces survivorship bias and is acceptable only for first-pass research diagnostics, not final point-in-time validation.
+
+### 24.5 Realism Validation Harness
+
+Mean reversion validation is run with:
+
+```bash
+python -m strategies.mean_reversion.validation --start 2010-01-04 --end 2026-05-29
+```
+
+The validation harness writes `validation_summary.csv`, `validation_summary.json`, and `validation_verdict.md` under `reports/mean_reversion/validation/`.
+
+The realism mode differs from the original research baseline in four important ways:
+
+- Entry sizing reserves buy-side transaction costs before opening a position, so cash must not go negative.
+- Optional slippage is applied to entries and exits in basis points.
+- Indicator exits can be executed at the next open instead of the same close.
+- The report includes cost stress, risk sizing sweeps, in-sample/validation/out-of-sample splits, and bull/bear regime slices.
+
+The original same-close diagnostics remain available for comparison, but they must not be treated as a production-realistic result. Same-close indicator exits are optimistic because the exit condition is only confirmed at the close. Annoying, but sadly the market does not accept backdated orders.

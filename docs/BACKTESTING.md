@@ -127,7 +127,7 @@ A BREAKOUT signal on date `D` becomes actionable starting on trading day `D+1`. 
 ```python
 # Pseudocode matching engine.py _simulate_signal
 entry_ref = signal["entry_ref"]
-pending_bars = future_bars[:pending_days]     # default pending_days = 5
+pending_bars = future_bars[:pending_days]     # config default: 8 D+1 onward trading bars
 
 for bar in pending_bars:
     if bar["open"] >= entry_ref:              # Case 1: gap-through
@@ -1228,8 +1228,8 @@ Budget for 30-50% alpha decay from backtest to live execution. Sources of decay:
 
 | Field | Config Key | Type | Default | Version | Description |
 |-------|-----------|------|---------|---------|-------------|
-| `pending_days` | `backtest.pending_days` | `int` | `5` | V1 | Trading days to wait for entry trigger |
-| `max_hold_days` | `backtest.max_hold_days` | `int` | `90` | V1 | Maximum holding period before time stop |
+| `pending_days` | `backtest.pending_days` | `int` | `8` | V1 | D+1 onward symbol trading bars to wait for entry trigger |
+| `max_hold_days` | `backtest.max_hold_days` | `int` | `150` | V1 | Maximum holding period before time stop |
 | `target_r` | `risk.target_r` | `float \| None` | `None` | V1 | Profit target as R-multiple; None = no fixed target |
 | `exit_mode` | `backtest.exit_mode` | `ExitMode` | `MINERVINI_PHASED` | V1 | Supported default exit strategy; legacy comparison modes remain available internally |
 | `trail_activation_r` | `backtest.trail_activation_r` | `float` | `2.0` | V1 | R-multiple profit required to activate trailing stop |

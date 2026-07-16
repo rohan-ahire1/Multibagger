@@ -11,6 +11,7 @@ import polars as pl
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from sepa_scanner.backtest.signal_scorecard import compute_scorecard
+from sepa_scanner.settings import load_settings
 from sepa_scanner.storage.parquet_store import ParquetOhlcvStore
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -39,7 +40,12 @@ def main():
     print(f"Loaded OHLCV: {ohlcv.height} rows for {ohlcv['symbol'].n_unique()} symbols")
 
     # Compute scorecard
-    result = compute_scorecard(signals, ohlcv, diagnostics)
+    result = compute_scorecard(
+        signals,
+        ohlcv,
+        diagnostics,
+        pending_days=load_settings().backtest.pending_days,
+    )
 
     # Print results
     print("\n" + "=" * 80)

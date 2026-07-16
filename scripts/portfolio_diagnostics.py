@@ -100,7 +100,7 @@ class PendingSignal:
     pivot: float | None
     rs_rank: float | None
     size_mult: float
-    expiration_date: date
+    bars_checked: int = 0
     range10: float | None = None
     voldry: float | None = None
 
@@ -320,6 +320,7 @@ def load_inputs(start_date: date, end_date: date) -> tuple[dict[str, Any], pl.Da
         "pyramid_trigger_r": settings.portfolio.pyramid_trigger_r,
         "pyramid_add_interval_r": settings.portfolio.pyramid_add_interval_r,
         "pyramid_risk_frac": settings.portfolio.pyramid_risk_frac,
+        "cash_yield_apy": settings.portfolio.cash_yield_apy,
     }
 
     return {
@@ -518,7 +519,17 @@ def simulate_portfolio_python(
     daily_rows: list[dict[str, Any]] = []
     previous_equity = initial_capital
 
+    # Idle cash parked in a liquid instrument accrues yield daily (0 disables).
+    # cash_returns_by_date (date -> daily return) overrides the flat rate per day,
+    # for modeling variable-return parking (e.g. index ETF); absent dates fall
+    # back to the flat rate.
+    cash_daily_yield = float(portfolio.get("cash_yield_apy", 0.0) or 0.0) / 252.0
+    cash_returns_by_date: dict[date, float] = portfolio.get("cash_returns_by_date") or {}
+
     for today in unique_dates:
+        cash_ret = cash_returns_by_date.get(today, cash_daily_yield)
+        if cash_ret and cash > 0.0:
+            cash += cash * cash_ret
         # print(f"Processing {today}...")
         i = 0
         while i < len(open_positions):
@@ -745,7 +756,6 @@ def simulate_portfolio_python(
                         pivot=sig["pivot"],
                         rs_rank=sig["rs_rank"],
                         size_mult=float(sig.get("signal_size_mult", 1.0) or 1.0),
-                        expiration_date=today + timedelta(days=params.pending_days),
                         range10=float(sig["range10"]) if sig.get("range10") is not None else None,
                         voldry=float(sig["voldry"]) if sig.get("voldry") is not None else None,
                     )
@@ -834,24 +844,9 @@ def simulate_portfolio_python(
         j = 0
         while j < len(pending_signals):
             pending = pending_signals[j]
-            if pending.expiration_date < today:
-                closed_trades.append(
-                    empty_trade_dict(
-                        symbol=pending.symbol,
-                        signal_date=pending.signal_date,
-                        status="not_filled",
-                        entry_ref=pending.entry_ref,
-                        stop=pending.stop,
-                    )
-                )
-                pending_signals.pop(j)
-                continue
-
-            if not day_entries_allowed:
-                j += 1
-                continue
-
-            if size_mult == 0.0 or len(open_positions) >= int(portfolio["max_positions"]) or current_equity <= 0.0:
+            # The signal is produced at the close of D. It may be filled only
+            # from the symbol's first available trading bar after D.
+            if today <= pending.signal_date:
                 j += 1
                 continue
 
@@ -870,13 +865,36 @@ def simulate_portfolio_python(
                 continue
 
             idx = sym_prices["date_to_idx"].get(today)
-            filled = False
-            if idx is not None:
-                open_price = float(sym_prices["opens"][idx])
-                high_price = float(sym_prices["highs"][idx])
-                target = float(pending.entry_ref)
+            if idx is None:
+                # A missing bar does not consume a pending trading day.
+                j += 1
+                continue
 
-                if open_price >= target or high_price >= target:
+            # pending_days is a count of this symbol's D+1 onward trading
+            # bars. The eighth inspected bar is still eligible to fill.
+            pending.bars_checked += 1
+            if not day_entries_allowed or size_mult == 0.0 or len(open_positions) >= int(portfolio["max_positions"]) or current_equity <= 0.0:
+                if pending.bars_checked >= params.pending_days:
+                    closed_trades.append(
+                        empty_trade_dict(
+                            symbol=pending.symbol,
+                            signal_date=pending.signal_date,
+                            status="not_filled",
+                            entry_ref=pending.entry_ref,
+                            stop=pending.stop,
+                        )
+                    )
+                    pending_signals.pop(j)
+                else:
+                    j += 1
+                continue
+
+            filled = False
+            open_price = float(sym_prices["opens"][idx])
+            high_price = float(sym_prices["highs"][idx])
+            target = float(pending.entry_ref)
+
+            if open_price >= target or high_price >= target:
                     fill_price = max(open_price, pending.entry_ref)
                     risk_budget = (
                         current_equity
@@ -1024,6 +1042,17 @@ def simulate_portfolio_python(
                                 filled = True
 
             if filled:
+                pending_signals.pop(j)
+            elif pending.bars_checked >= params.pending_days:
+                closed_trades.append(
+                    empty_trade_dict(
+                        symbol=pending.symbol,
+                        signal_date=pending.signal_date,
+                        status="not_filled",
+                        entry_ref=pending.entry_ref,
+                        stop=pending.stop,
+                    )
+                )
                 pending_signals.pop(j)
             else:
                 j += 1
