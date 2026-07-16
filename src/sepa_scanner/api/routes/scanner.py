@@ -60,6 +60,19 @@ def get_scan_dates(
     return [row[0].isoformat() for row in rows if row[0] is not None]
 
 
+@router.get("/sessions")
+def get_scan_sessions(
+    store: DuckDbStore = Depends(get_duckdb_store),
+) -> list[dict]:
+    """Valid scan dates enriched with signal counts and breakout previews."""
+    sessions = []
+    for row in store.fetch_scan_sessions():
+        serialized = _serialize_dates(row)
+        serialized["breakout_symbols"] = serialized["breakout_symbols"][:4]
+        sessions.append(serialized)
+    return sessions
+
+
 @router.get("/breadth")
 def get_market_breadth(
     date: date = Query(..., alias="date"),

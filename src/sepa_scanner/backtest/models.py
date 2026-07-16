@@ -40,8 +40,8 @@ EXIT_MODE_LABELS: dict[ExitMode, str] = {
 
 @dataclass(slots=True)
 class BacktestParams:
-    pending_days: int = 5
-    max_hold_days: int = 90
+    pending_days: int = 8
+    max_hold_days: int = 150
     target_r: float | None = None
     exit_mode: ExitMode = ExitMode.MINERVINI_PHASED
     trail_activation_r: float = 2.0

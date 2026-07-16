@@ -196,6 +196,10 @@ def run_backtest(
 
     # Map sim_result back to expected UI format
     trades = sim_result["trades"]
+    active_trades = [
+        *sim_result.get("open_trades", []),
+        *sim_result.get("pending_trades", []),
+    ]
     equity_curve = sim_result["daily_equity"]
 
     signal_analysis_raw = analyze_signal_quality(
@@ -207,7 +211,12 @@ def run_backtest(
     summary = summarize_backtest(trades, exit_mode=params.exit_mode)
 
     # Use standard serialization
-    trades_json = [_serialize_trade(t) for t in trades]
+    # Active/pending snapshots are appended only to the UI payload. Summary
+    # metrics continue to use closed trades exclusively.
+    trades_json = [
+        *[_serialize_trade(t) for t in trades],
+        *[_serialize_trade(t) for t in active_trades],
+    ]
     equity_json = []
     for row in equity_curve.to_dicts():
         # Convert date and map to UI cumulativeR field (using equity as proxy)
@@ -299,4 +308,10 @@ def signal_scorecard(
     earliest_signal = signals_df["signal_date"].min()
     ohlcv_df = get_backtest_ohlcv(parquet, symbols, earliest_signal, extended_end)
 
-    return compute_scorecard(signals_df, ohlcv_df, diagnostics, req.forward_days)
+    return compute_scorecard(
+        signals_df,
+        ohlcv_df,
+        diagnostics,
+        req.forward_days,
+        pending_days=settings.backtest.pending_days,
+    )

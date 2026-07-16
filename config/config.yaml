@@ -63,7 +63,7 @@ risk:
   target_r: null
 
 backtest:
-  pending_days: 8
+  pending_days: 8  # D+1 onward symbol trading bars, never calendar days
   max_hold_days: 150
   exit_mode: baseline_ema21
   use_regime_entry_controls: false
@@ -102,6 +102,11 @@ portfolio:
   drawdown_close_pct: 0.70
   regime_gate_enabled: true
   pyramid_max_adds: 0
+  # Idle cash modeled as parked in a liquid fund / LIQUIDBEES (~6% p.a.).
+  # Avg exposure is only ~40%, so this adds ~+4 CAGR pts with unchanged DD.
+  # LIVE REQUIREMENT: actually park idle cash, else set 0. Strategy-only
+  # (cash_yield_apy=0) baseline: 21.18% CAGR — see docs/BACKTEST_TRUTH.md.
+  cash_yield_apy: 0.06
 
 # Minervini earnings-growth gate on breakouts. OFF until full survivorship-clean
 # data is sourced (current prototype data is partial/recent, survivorship-biased).

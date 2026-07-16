@@ -20,8 +20,16 @@ def _compute_forward_metrics(
     signals: pl.DataFrame,
     ohlcv: pl.DataFrame,
     forward_days: list[int],
+    pending_days: int,
 ) -> pl.DataFrame:
-    """For each signal, compute forward returns, MFE, and MAE."""
+    """Measure actual D+1 entries and their post-fill price path.
+
+    A BREAKOUT is an end-of-day observation.  The scorecard therefore uses the
+    same executable contract as the simulator: inspect the next ``pending_days``
+    *symbol trading bars*, fill at the first bar that reaches ``entry_ref`` and
+    then assess only bars after the fill day.  Excluding the fill bar avoids
+    inventing an intraday high/low sequence that daily OHLCV cannot establish.
+    """
     max_fwd = max(forward_days)
     rows: list[dict] = []
 
@@ -32,50 +40,114 @@ def _compute_forward_metrics(
     for sig in signals.iter_rows(named=True):
         sym = str(sig["symbol"])
         sig_date = sig["signal_date"]
-        entry_ref = float(sig["entry_ref"])
-        stop = float(sig["stop"])
-        r_per_share = float(sig["r_per_share"])
+        stored_entry_ref = float(sig["entry_ref"])
+        stored_stop = float(sig["stop"])
 
-        # Use OHLCV close on signal date (not stored signal close which may
-        # come from a different data source / adjustment basis)
+        # Stored signals can predate a yfinance corporate-action revision.
+        # Rebase their levels to the current adjusted OHLCV basis while
+        # preserving the original entry/stop relationship.
         sym_prices = prices_by_sym.get(sym)
         if sym_prices is None or sym_prices.is_empty():
             continue
         sig_day_row = sym_prices.filter(pl.col("date") == pl.lit(sig_date))
         if sig_day_row.is_empty():
             continue
-        sig_close = float(sig_day_row["close"][0])
-        # Recompute entry_ref and stop relative to adjusted close
-        entry_ref = sig_close
-        stop = sig_close * (1.0 - r_per_share / float(sig["entry_ref"]))  # preserve R ratio
-        r_per_share = entry_ref - stop
+        adjusted_signal_close = float(sig_day_row["close"][0])
+        stored_signal_close = sig.get("close")
+        if stored_signal_close is not None and float(stored_signal_close) > 0.0:
+            adjustment_factor = adjusted_signal_close / float(stored_signal_close)
+        else:
+            adjustment_factor = 1.0
+        entry_ref = stored_entry_ref * adjustment_factor
+        stop = stored_stop * adjustment_factor
 
-        future = sym_prices.filter(pl.col("date") > pl.lit(sig_date)).head(max_fwd)
-        if future.is_empty():
+        pending = sym_prices.filter(pl.col("date") > pl.lit(sig_date)).head(pending_days)
+        # Do not score a partly observed pending window.  Otherwise the most
+        # recent signals get a favourable chance to be counted as "not filled".
+        if pending.height < pending_days:
             continue
 
+        fill_date = None
+        fill_price = None
+        for bar in pending.iter_rows(named=True):
+            open_price = float(bar["open"])
+            high_price = float(bar["high"])
+            if open_price >= entry_ref:
+                fill_date = bar["date"]
+                fill_price = open_price
+                break
+            if high_price >= entry_ref:
+                fill_date = bar["date"]
+                fill_price = entry_ref
+                break
+
+        row = {
+            "symbol": sym,
+            "signal_date": sig_date,
+            "sig_close": adjusted_signal_close,
+            "entry_ref": entry_ref,
+            "stop": stop,
+            "rs_rank": float(sig["rs_rank"]),
+            "vol_mult": float(sig["vol_mult"]),
+            "range10": float(sig["range10"]),
+            "voldry": float(sig["voldry"]),
+            "atr_pct": float(sig["atr_pct"]),
+            "filled": fill_price is not None,
+            "fill_date": fill_date,
+            "fill_price": fill_price,
+            "r_per_share": None,
+            "days_available": None,
+            "mfe_pct": None,
+            "mae_pct": None,
+            "mfe_r": None,
+            "mae_r": None,
+            "hit_stop_first": None,
+            "hit_1r_first": None,
+            "reached_2r": None,
+            "reached_3r": None,
+            "reached_5r": None,
+        }
+        for d in forward_days:
+            row[f"fwd_{d}d_pct"] = None
+            row[f"fwd_{d}d_win"] = None
+            row[f"fwd_{d}d_r"] = None
+
+        if fill_price is None:
+            rows.append(row)
+            continue
+
+        r_per_share = fill_price - stop
+        # A gap through the physical stop is not an executable long entry for
+        # this scorecard; leave it visible as filled but without R outcomes.
+        if r_per_share <= 0.0:
+            rows.append(row)
+            continue
+
+        future = sym_prices.filter(pl.col("date") > pl.lit(fill_date)).head(max_fwd)
         highs = future["high"].to_list()
         lows = future["low"].to_list()
         closes = future["close"].to_list()
         n = len(closes)
 
-        if n < forward_days[0]:
+        row["r_per_share"] = r_per_share
+        row["days_available"] = n
+        if n == 0:
+            rows.append(row)
             continue
 
-        # MFE/MAE over available days
+        # MFE/MAE over the configured maximum forward window, calculated from
+        # the actual fill rather than the EOD signal close.
         max_high = max(float(h) for h in highs)
         min_low = min(float(lo) for lo in lows)
-        mfe_pct = (max_high - sig_close) / sig_close * 100.0
-        mae_pct = (min_low - sig_close) / sig_close * 100.0
-
-        # MFE/MAE in R-multiples
-        mfe_r = (max_high - entry_ref) / r_per_share if r_per_share > 0 else 0.0
-        mae_r = (min_low - entry_ref) / r_per_share if r_per_share > 0 else 0.0
+        mfe_pct = (max_high - fill_price) / fill_price * 100.0
+        mae_pct = (min_low - fill_price) / fill_price * 100.0
+        mfe_r = (max_high - fill_price) / r_per_share
+        mae_r = (min_low - fill_price) / r_per_share
 
         # Did price hit stop before +1R?
         hit_stop_first = False
         hit_1r_first = False
-        target_1r = entry_ref + r_per_share
+        target_1r = fill_price + r_per_share
         for i in range(n):
             low_i = float(lows[i])
             high_i = float(highs[i])
@@ -86,18 +158,7 @@ def _compute_forward_metrics(
                 hit_1r_first = True
                 break
 
-        row = {
-            "symbol": sym,
-            "signal_date": sig_date,
-            "sig_close": sig_close,
-            "entry_ref": entry_ref,
-            "stop": stop,
-            "r_per_share": r_per_share,
-            "rs_rank": float(sig["rs_rank"]),
-            "vol_mult": float(sig["vol_mult"]),
-            "range10": float(sig["range10"]),
-            "voldry": float(sig["voldry"]),
-            "atr_pct": float(sig["atr_pct"]),
+        row.update({
             "mfe_pct": mfe_pct,
             "mae_pct": mae_pct,
             "mfe_r": mfe_r,
@@ -107,14 +168,14 @@ def _compute_forward_metrics(
             "reached_2r": mfe_r >= 2.0,
             "reached_3r": mfe_r >= 3.0,
             "reached_5r": mfe_r >= 5.0,
-            "days_available": n,
-        }
+        })
 
         for d in forward_days:
             if n >= d:
                 fwd_close = float(closes[d - 1])
-                row[f"fwd_{d}d_pct"] = (fwd_close - sig_close) / sig_close * 100.0
-                row[f"fwd_{d}d_win"] = fwd_close > sig_close
+                row[f"fwd_{d}d_pct"] = (fwd_close - fill_price) / fill_price * 100.0
+                row[f"fwd_{d}d_win"] = fwd_close > fill_price
+                row[f"fwd_{d}d_r"] = (fwd_close - fill_price) / r_per_share
             else:
                 row[f"fwd_{d}d_pct"] = None
                 row[f"fwd_{d}d_win"] = None
@@ -143,14 +204,20 @@ def _slice_summary(df: pl.DataFrame, group_col: str, forward_days: list[int]) ->
     if df.is_empty():
         return []
 
-    agg_exprs: list[pl.Expr] = [pl.len().alias("count")]
+    agg_exprs: list[pl.Expr] = [
+        pl.len().alias("count"),
+        pl.col("filled").sum().alias("filled_count"),
+        (pl.col("filled").mean() * 100.0).alias("fill_rate_pct"),
+    ]
 
     for d in forward_days:
         col = f"fwd_{d}d_pct"
         win_col = f"fwd_{d}d_win"
+        r_col = f"fwd_{d}d_r"
         agg_exprs.extend([
             pl.col(col).filter(pl.col(col).is_not_null()).mean().alias(f"avg_{d}d_return"),
             pl.col(col).filter(pl.col(col).is_not_null()).median().alias(f"med_{d}d_return"),
+            pl.col(r_col).filter(pl.col(r_col).is_not_null()).mean().alias(f"avg_{d}d_r"),
             (
                 pl.col(win_col).filter(pl.col(win_col).is_not_null()).mean() * 100.0
             ).alias(f"win_rate_{d}d"),
@@ -177,6 +244,7 @@ def compute_scorecard(
     ohlcv: pl.DataFrame,
     diagnostics: pl.DataFrame | None = None,
     forward_days: list[int] | None = None,
+    pending_days: int = 8,
 ) -> dict:
     """Compute full signal scorecard with sliced breakdowns.
 
@@ -190,7 +258,10 @@ def compute_scorecard(
     if breakouts.is_empty():
         return {"error": "No BREAKOUT signals found", "total_signals": 0}
 
-    metrics = _compute_forward_metrics(breakouts, ohlcv, forward_days)
+    if pending_days < 1:
+        raise ValueError("pending_days must be at least one trading bar")
+
+    metrics = _compute_forward_metrics(breakouts, ohlcv, forward_days, pending_days)
     if metrics.is_empty():
         return {"error": "No forward data available for signals", "total_signals": breakouts.height}
 
@@ -300,12 +371,19 @@ def compute_scorecard(
 
     result = {
         "total_signals": breakouts.height,
-        "signals_with_fwd_data": metrics.height,
+        "signals_entry_evaluable": metrics.height,
+        "signals_filled": int(metrics["filled"].sum()),
+        "signals_with_fwd_data": int(
+            metrics.filter(pl.col("mfe_r").is_not_null()).height
+            if "mfe_r" in metrics.columns
+            else 0
+        ),
         "date_range": {
             "earliest": str(breakouts["signal_date"].min()),
             "latest": str(breakouts["signal_date"].max()),
         },
         "forward_days": forward_days,
+        "pending_days": pending_days,
         "overall": overall[0] if overall else {},
         "by_rs_rank": _slice_summary(metrics, "rs_rank_bucket", forward_days),
         "by_vol_mult": _slice_summary(metrics, "vol_mult_bucket", forward_days),

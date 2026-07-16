@@ -67,7 +67,7 @@ class PendingSignal:
     pivot: float | None
     rs_rank: float
     size_mult: float
-    expiration_date: date
+    bars_checked: int = 0
 
 def empty_trade_dict(symbol: str, signal_date: date, status: str, entry_ref: float, stop: float) -> dict[str, Any]:
     return {
@@ -500,28 +500,35 @@ def simulate_portfolio_python(
                         pivot=sig["pivot"],
                         rs_rank=sig["rs_rank"],
                         size_mult=float(sig.get("signal_size_mult", 1.0) or 1.0),
-                        expiration_date=today + timedelta(days=params.pending_days),
                     )
                 )
 
         j = 0
         while j < len(pending_signals):
             pending = pending_signals[j]
-            if pending.expiration_date < today:
-                closed_trades.append(empty_trade_dict(pending.symbol, pending.signal_date, "not_filled", pending.entry_ref, pending.stop))
-                pending_signals.pop(j)
-                continue
-
-            if not day_entries_allowed or size_mult == 0.0 or len(open_positions) >= int(portfolio["max_positions"]) or current_equity <= 0.0:
+            if today <= pending.signal_date:
                 j += 1
                 continue
 
             sym_prices = symbol_data.get(pending.symbol)
-            if sym_prices is None or today not in sym_prices["date_to_idx"]:
+            if sym_prices is None:
                 j += 1
                 continue
 
-            idx = sym_prices["date_to_idx"][today]
+            idx = sym_prices["date_to_idx"].get(today)
+            if idx is None:
+                j += 1
+                continue
+
+            pending.bars_checked += 1
+            if not day_entries_allowed or size_mult == 0.0 or len(open_positions) >= int(portfolio["max_positions"]) or current_equity <= 0.0:
+                if pending.bars_checked >= params.pending_days:
+                    closed_trades.append(empty_trade_dict(pending.symbol, pending.signal_date, "not_filled", pending.entry_ref, pending.stop))
+                    pending_signals.pop(j)
+                else:
+                    j += 1
+                continue
+
             open_p, high_p = float(sym_prices["opens"][idx]), float(sym_prices["highs"][idx])
             
             if open_p >= pending.entry_ref or high_p >= pending.entry_ref:
@@ -563,6 +570,10 @@ def simulate_portfolio_python(
                         ))
                         pending_signals.pop(j)
                         continue
+            if pending.bars_checked >= params.pending_days:
+                closed_trades.append(empty_trade_dict(pending.symbol, pending.signal_date, "not_filled", pending.entry_ref, pending.stop))
+                pending_signals.pop(j)
+                continue
             j += 1
 
         daily_rows.append({
@@ -576,8 +587,69 @@ def simulate_portfolio_python(
         previous_equity = current_equity
 
     _bt_fields = {f.name for f in BacktestTrade.__dataclass_fields__.values()}
+    open_trade_snapshots: list[BacktestTrade] = []
+    pending_trade_snapshots: list[BacktestTrade] = []
+
+    if unique_dates:
+        latest_date = unique_dates[-1]
+        for pos in open_positions:
+            sym_prices = symbol_data.get(pos.symbol)
+            if sym_prices is None:
+                continue
+            latest_idx = sym_prices["date_to_idx"].get(latest_date)
+            if latest_idx is None:
+                continue
+
+            latest_close = float(sym_prices["closes"][latest_idx])
+            net_entry = pos.entry_price * slippage_buy * tax_buy
+            net_mark = latest_close * slippage_sell * tax_sell
+            snapshot = close_trade_dict(
+                symbol=pos.symbol,
+                signal_date=pos.signal_date,
+                status="open",
+                entry_ref=pos.entry_ref,
+                stop=pos.stop,
+                pivot=pos.pivot,
+                entry_date=pos.entry_date,
+                entry_price=net_entry,
+                exit_date=latest_date,
+                exit_price=net_mark,
+                holding_days=(latest_date - pos.entry_date).days,
+                mae_price=pos.mae_price,
+                mfe_price=pos.mfe_price,
+                shares=pos.shares,
+                sector=analysis_sector_map.get(pos.symbol, "UNKNOWN"),
+                original_shares=pos.original_shares,
+                realized_pnl=pos.realized_pnl,
+            )
+            # Keep the mark-to-market return/R from close_trade_dict, but no
+            # synthetic exit: this position is genuinely still active.
+            snapshot["exit_date"] = None
+            snapshot["exit_price"] = None
+            snapshot["exit_phase"] = pos.phase.value
+            snapshot["exit_reason"] = "position_open"
+            open_trade_snapshots.append(
+                BacktestTrade(**{k: v for k, v in snapshot.items() if k in _bt_fields})
+            )
+
+        for pending in pending_signals:
+            snapshot = empty_trade_dict(
+                pending.symbol,
+                pending.signal_date,
+                "pending_entry",
+                pending.entry_ref,
+                pending.stop,
+            )
+            snapshot["pivot"] = pending.pivot
+            snapshot["exit_reason"] = "waiting_for_entry"
+            pending_trade_snapshots.append(
+                BacktestTrade(**{k: v for k, v in snapshot.items() if k in _bt_fields})
+            )
+
     return {
         "trades": [BacktestTrade(**{k: v for k, v in t.items() if k in _bt_fields}) for t in closed_trades],
+        "open_trades": open_trade_snapshots,
+        "pending_trades": pending_trade_snapshots,
         "daily_equity": pl.DataFrame(daily_rows, schema={
             "date": pl.Date, "equity": pl.Float64, "cash": pl.Float64, 
             "positions": pl.Int64, "daily_pnl": pl.Float64, "daily_return": pl.Float64

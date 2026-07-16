@@ -341,8 +341,8 @@ def test_scorecard_reports_multi_r_outcomes_and_quality_sections() -> None:
             "range10": [0.05],
             "voldry": [0.38],
             "atr_pct": [0.028],
-            "entry_ref": [100.0],
-            "stop": [95.0],
+            "entry_ref": [105.0],
+            "stop": [100.0],
             "r_per_share": [5.0],
         }
     )
@@ -358,7 +358,7 @@ def test_scorecard_reports_multi_r_outcomes_and_quality_sections() -> None:
             ],
             "symbol": ["ALPHA"] * 6,
             "open": [100.0, 101.0, 104.0, 109.0, 112.0, 114.0],
-            "high": [101.0, 106.0, 112.0, 116.0, 117.0, 118.0],
+            "high": [101.0, 106.0, 112.0, 120.0, 121.0, 122.0],
             "low": [99.0, 100.0, 103.0, 108.0, 111.0, 113.0],
             "close": [100.0, 105.0, 110.0, 114.0, 116.0, 117.0],
             "volume": [1_000_000] * 6,
@@ -387,8 +387,15 @@ def test_scorecard_reports_multi_r_outcomes_and_quality_sections() -> None:
         }
     )
 
-    result = compute_scorecard(signals, ohlcv, diagnostics, forward_days=[1, 3, 5])
+    result = compute_scorecard(
+        signals,
+        ohlcv,
+        diagnostics,
+        forward_days=[1, 3, 5],
+        pending_days=3,
+    )
 
+    assert result["overall"]["fill_rate_pct"] == 100.0
     assert result["overall"]["reached_2r_pct"] == 100.0
     assert result["overall"]["reached_3r_pct"] == 100.0
     assert "by_setup_streak" in result

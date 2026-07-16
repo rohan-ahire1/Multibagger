@@ -30,6 +30,90 @@ def _serialize_dates(row: dict) -> dict:
     return out
 
 
+def _unfilled_signal_outcomes(
+    *,
+    symbol: str,
+    signal_rows: list[dict],
+    trades: list[dict],
+    pending_days: int,
+    parquet: ParquetOhlcvStore,
+) -> dict[str, dict]:
+    """Return price-basis-aligned pending-window outcomes for real unfilled trades.
+
+    A raw scanner signal with no matching cached trade was excluded before the
+    simulation and must not be presented as a simulated unfilled order.  This
+    helper therefore operates only on cache records explicitly marked
+    ``not_filled``. The window matches the portfolio simulator: D+1 is the
+    first eligible bar and ``pending_days`` counts symbol trading bars.
+    """
+    unfilled = [trade for trade in trades if trade.get("status") == "not_filled"]
+    if not unfilled:
+        return {}
+
+    signals_by_date = {
+        row["signal_date"]: row
+        for row in signal_rows
+        if row.get("signal_type") == "BREAKOUT"
+    }
+    signal_dates = [
+        date.fromisoformat(str(trade["signal_date"]))
+        for trade in unfilled
+        if trade.get("signal_date")
+    ]
+    if not signal_dates:
+        return {}
+
+    prices = parquet.read_frame(
+        start_date=min(signal_dates),
+        columns=["date", "symbol", "close"],
+        symbols=symbol,
+    ).sort("date")
+    if prices.is_empty():
+        return {}
+
+    outcomes: dict[str, dict] = {}
+    for trade in unfilled:
+        signal_date_raw = trade.get("signal_date")
+        if not signal_date_raw:
+            continue
+        signal_date = date.fromisoformat(str(signal_date_raw))
+        signal = signals_by_date.get(signal_date)
+        if signal is None:
+            # The cached run and raw signal history do not describe the same
+            # signal set, so do not manufacture an outcome from mismatched data.
+            continue
+
+        signal_bar = prices.filter(pl.col("date") == pl.lit(signal_date))
+        window = prices.filter(pl.col("date") > pl.lit(signal_date)).head(pending_days)
+        if signal_bar.is_empty() or window.is_empty():
+            continue
+
+        stored_close = float(signal.get("close") or 0.0)
+        if stored_close <= 0:
+            continue
+        adjustment_factor = float(signal_bar["close"][0]) / stored_close
+        entry_ref = float(trade["entry_ref"]) * adjustment_factor
+        stop = float(trade["stop"]) * adjustment_factor
+        pivot = trade.get("pivot")
+        end_bar = window.tail(1)
+        end_price = float(end_bar["close"][0])
+        initial_risk = entry_ref - stop
+
+        outcomes[signal_date.isoformat()] = {
+            "signal_date": signal_date,
+            "entry_ref": entry_ref,
+            "stop": stop,
+            "pivot": float(pivot) * adjustment_factor if pivot is not None else None,
+            "end_date": end_bar["date"][0],
+            "end_price": end_price,
+            "holding_bars": window.height,
+            "return_pct": ((end_price - entry_ref) / entry_ref) * 100.0 if entry_ref > 0 else None,
+            "r_multiple": (end_price - entry_ref) / initial_risk if initial_risk > 0 else None,
+        }
+
+    return outcomes
+
+
 def _get_contraction_sequence(
     symbol: str,
     scan_date: date,
@@ -545,6 +629,7 @@ def get_signal_history(
     symbol: str,
     store: DuckDbStore = Depends(get_duckdb_store),
     settings: AppSettings = Depends(get_settings),
+    parquet: ParquetOhlcvStore = Depends(get_parquet_store),
 ) -> dict:
     conn = store._connect()
     rows = conn.execute(
@@ -557,12 +642,31 @@ def get_signal_history(
         [symbol],
     ).fetchall()
     columns = [desc[0] for desc in conn.description]
-    serialized_signals = [_serialize_dates(dict(zip(columns, row, strict=False))) for row in rows]
+    signal_rows = [dict(zip(columns, row, strict=False)) for row in rows]
+    serialized_signals = [_serialize_dates(row) for row in signal_rows]
 
     cache_path: Path = settings.runtime.data_dir / "backtest" / "latest.json"
     filtered_trades: list[dict] = []
+    pending_days = settings.backtest.pending_days
     if cache_path.exists():
         cached = json.loads(cache_path.read_text(encoding="utf-8"))
         filtered_trades = [t for t in cached.get("trades", []) if t.get("symbol") == symbol]
+        pending_days = int(cached.get("params", {}).get("pending_days", pending_days))
 
-    return {"signals": serialized_signals, "trades": filtered_trades}
+    unfilled_outcomes = _unfilled_signal_outcomes(
+        symbol=symbol,
+        signal_rows=signal_rows,
+        trades=filtered_trades,
+        pending_days=pending_days,
+        parquet=parquet,
+    )
+
+    return {
+        "signals": serialized_signals,
+        "trades": filtered_trades,
+        "pending_days": pending_days,
+        "unfilled_outcomes": {
+            signal_date: _serialize_dates(outcome)
+            for signal_date, outcome in unfilled_outcomes.items()
+        },
+    }

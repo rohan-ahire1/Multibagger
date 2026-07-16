@@ -125,6 +125,53 @@ def test_duckdb_store_upserts_and_fetches_watchlist_candidates(tmp_path: Path) -
     assert replaced_rows[0]["symbol"] == "TCS"
 
 
+def test_duckdb_store_fetches_valid_scan_sessions_with_signal_activity(tmp_path: Path) -> None:
+    store = DuckDbStore(tmp_path / "sepa.duckdb")
+    store.initialize()
+    conn = store._connect()
+
+    conn.execute(
+        """
+        INSERT INTO runs (
+            run_id, started_at, scan_date, num_symbols, num_eligible,
+            num_watch, num_breakout, status
+        ) VALUES
+            ('latest', '2026-03-09 10:00:00', '2026-03-09', 100, 80, 1, 2, 'success'),
+            ('quiet', '2026-03-08 10:00:00', '2026-03-08', 100, 80, 0, 0, 'success'),
+            ('failed', '2026-03-07 10:00:00', '2026-03-07', 100, 80, 0, 1, 'failed')
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO daily_diagnostics (diag_date, symbol, created_at) VALUES
+            ('2026-03-09', 'RELIANCE', NOW()),
+            ('2026-03-08', 'TCS', NOW()),
+            ('2026-03-07', 'INFY', NOW())
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO signals (
+            signal_date, symbol, signal_type, close, "pivot", near_pivot,
+            volume, vol50, vol_mult, rs_rank, range10, voldry, atr_pct,
+            adv50, entry_ref, stop, r_per_share, created_at
+        ) VALUES
+            ('2026-03-09', 'RELIANCE', 'BREAKOUT', 100, 99, 0, 1000, 500, 2, 95, 0.05, 0.5, 0.02, 1000000, 100, 95, 5, NOW()),
+            ('2026-03-09', 'HDFCBANK', 'BREAKOUT', 100, 99, 0, 1000, 500, 2, 90, 0.05, 0.5, 0.02, 1000000, 100, 95, 5, NOW()),
+            ('2026-03-09', 'TCS', 'WATCH', 100, 101, 0.01, 1000, 500, 2, 85, 0.05, 0.5, 0.02, 1000000, 100, 95, 5, NOW())
+        """
+    )
+
+    sessions = store.fetch_scan_sessions()
+
+    assert [row["date"] for row in sessions] == [date(2026, 3, 9), date(2026, 3, 8)]
+    assert sessions[0]["breakout_count"] == 2
+    assert sessions[0]["watch_count"] == 1
+    assert sessions[0]["breakout_symbols"] == ["RELIANCE", "HDFCBANK"]
+    assert sessions[1]["breakout_count"] == 0
+    assert sessions[1]["watch_count"] == 0
+
+
 def test_duckdb_store_upserts_and_fetches_setup_reviews(tmp_path: Path) -> None:
     db_path = tmp_path / "sepa.duckdb"
     store = DuckDbStore(db_path)
@@ -155,5 +202,3 @@ def test_duckdb_store_upserts_and_fetches_setup_reviews(tmp_path: Path) -> None:
     assert rows[0]["review_status"] == "shortlisted"
     assert rows[0]["priority"] == 3
     assert rows[0]["note"] == "Promote if market confirms"
-
-

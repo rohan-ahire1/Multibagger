@@ -200,6 +200,43 @@ class DuckDbStore:
         columns = [desc[0] for desc in conn.description]
         return [dict(zip(columns, row, strict=False)) for row in rows]
 
+    def fetch_scan_sessions(self) -> list[dict]:
+        """Return valid scan dates with their persisted signal activity."""
+        self.initialize()
+        conn = self._connect()
+        rows = conn.execute(
+            """
+            WITH valid_dates AS (
+                SELECT DISTINCT CAST(r.scan_date AS DATE) AS scan_date
+                FROM runs r
+                INNER JOIN daily_diagnostics d
+                    ON d.diag_date = r.scan_date
+                WHERE r.status = 'success'
+            ),
+            signal_summary AS (
+                SELECT
+                    signal_date,
+                    COUNT(CASE WHEN signal_type = 'BREAKOUT' THEN 1 END) AS breakout_count,
+                    COUNT(CASE WHEN signal_type = 'WATCH' THEN 1 END) AS watch_count,
+                    LIST(symbol ORDER BY rs_rank DESC, symbol)
+                        FILTER (WHERE signal_type = 'BREAKOUT') AS breakout_symbols
+                FROM signals
+                GROUP BY signal_date
+            )
+            SELECT
+                v.scan_date AS date,
+                COALESCE(s.breakout_count, 0) AS breakout_count,
+                COALESCE(s.watch_count, 0) AS watch_count,
+                COALESCE(s.breakout_symbols, []::VARCHAR[]) AS breakout_symbols
+            FROM valid_dates v
+            LEFT JOIN signal_summary s
+                ON s.signal_date = v.scan_date
+            ORDER BY v.scan_date DESC
+            """
+        ).fetchall()
+        columns = [desc[0] for desc in conn.description]
+        return [dict(zip(columns, row, strict=False)) for row in rows]
+
     def upsert_watchlist_candidates(self, candidates: list[WatchlistCandidate]) -> None:
         if not candidates:
             return

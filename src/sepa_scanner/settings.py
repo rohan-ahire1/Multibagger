@@ -93,8 +93,8 @@ class RiskSettings(BaseModel):
 
 
 class BacktestSettings(BaseModel):
-    pending_days: int = 2
-    max_hold_days: int = 21
+    pending_days: int = 8
+    max_hold_days: int = 150
     exit_mode: str = "advanced_sepa"
     rs_rank_min: float | None = None
     rs_rank_max: float | None = None
@@ -206,6 +206,7 @@ class PortfolioSettings(BaseModel):
     initial_capital: float = 1_000_000.0
     risk_per_trade_pct: float = 0.035    # 3.5% risk per trade
     max_name_pct: float = 0.20           # hard cap: single position <= 20% of equity
+    cash_yield_apy: float = 0.06         # idle cash parked in liquid fund/LIQUIDBEES; 0 disables
     regime_gate_enabled: bool = True
     regime_high_volatility_threshold: float = 0.25  # 20D ann. realized vol on benchmark
     regime_cooldown_days: int = 0
