@@ -1,28 +1,68 @@
 @import 'tailwindcss';
 
 @theme {
-  /* Light terminal palette */
-  --color-bg: #f7f7f5;
+  /* Warm, low-glare terminal palette; dark values override these variables below. */
+  --color-bg: #f4f5f7;
   --color-surface: #ffffff;
-  --color-surface-2: #f1f1ef;
-  --color-border: #e4e4e0;
-  --color-border-strong: #cfcfc9;
+  --color-surface-2: #f6f7f9;
+  --color-border: #e3e6eb;
+  --color-border-strong: #cbd0d9;
 
-  --color-ink: #1c1c1a;
-  --color-ink-soft: #55554f;
-  --color-ink-faint: #8b8b83;
+  --color-ink: #172033;
+  --color-ink-soft: #586174;
+  --color-ink-faint: #8991a1;
 
-  --color-accent: #2557d6;
-  --color-accent-soft: #e8eefc;
-  --color-up: #1a7f4b;
-  --color-up-soft: #e3f3ea;
-  --color-down: #c23934;
-  --color-down-soft: #fbe9e8;
-  --color-warn: #b0700a;
-  --color-warn-soft: #fdf2dd;
+  --color-accent: #3563e9;
+  --color-accent-soft: #edf2ff;
+  --color-up: #16835d;
+  --color-up-soft: #e9f7f1;
+  --color-down: #cf4b51;
+  --color-down-soft: #fff0f0;
+  --color-warn: #ad700d;
+  --color-warn-soft: #fff6e4;
 
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+:root {
+  color-scheme: light;
+  --color-topbar: rgba(255, 255, 255, 0.88);
+  --color-overlay: rgba(18, 27, 45, 0.38);
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.03), 0 8px 24px rgba(16, 24, 40, 0.04);
+  --shadow-floating: 0 20px 50px rgba(16, 24, 40, 0.18);
+  --chart-volume-up: rgba(26, 127, 75, 0.35);
+  --chart-volume-down: rgba(194, 57, 52, 0.35);
+}
+
+html[data-theme='dark'] {
+  color-scheme: dark;
+  --color-bg: #0c111b;
+  --color-surface: #121925;
+  --color-surface-2: #192230;
+  --color-border: #263244;
+  --color-border-strong: #3b485c;
+
+  --color-ink: #eef2f8;
+  --color-ink-soft: #aab4c4;
+  --color-ink-faint: #707d91;
+
+  --color-accent: #7c9df5;
+  --color-accent-soft: #1c2a4b;
+  --color-up: #52c994;
+  --color-up-soft: #16382c;
+  --color-down: #f27d82;
+  --color-down-soft: #422329;
+  --color-warn: #e1ad55;
+  --color-warn-soft: #3b2e1c;
+
+  --color-topbar: rgba(18, 25, 37, 0.9);
+  --color-overlay: rgba(0, 0, 0, 0.56);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.22), 0 10px 28px rgba(0, 0, 0, 0.14);
+  --shadow-floating: 0 24px 60px rgba(0, 0, 0, 0.5);
+
+  --chart-volume-up: rgba(91, 198, 141, 0.32);
+  --chart-volume-down: rgba(240, 123, 117, 0.32);
 }
 
 html,
@@ -34,6 +74,42 @@ body,
 body {
   @apply bg-bg text-ink antialiased;
   font-size: 14px;
+  letter-spacing: -0.006em;
+  transition: background-color 120ms ease, color 120ms ease;
+  background-image:
+    radial-gradient(circle at 8% -10%, color-mix(in srgb, var(--color-accent) 5%, transparent), transparent 27rem),
+    radial-gradient(circle at 92% 110%, color-mix(in srgb, var(--color-up) 4%, transparent), transparent 32rem);
+  background-attachment: fixed;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+  transition-duration: 140ms;
+  transition-timing-function: ease;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
 }
 
 /* Data-dense numeric alignment everywhere */
@@ -41,7 +117,7 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Thin scrollbars, light */
+/* Thin scrollbars */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--color-border-strong) transparent;

@@ -30,18 +30,18 @@ export function CommandPalette() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-ink/20 pt-[15vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-[var(--color-overlay)] pt-[15vh] backdrop-blur-[2px]"
       onClick={() => setOpen(false)}
     >
       <div onClick={(e) => e.stopPropagation()} className="w-[560px]">
         <Command
           label="Command palette"
-          className="overflow-hidden rounded-xl border border-border bg-surface shadow-2xl"
+          className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-floating)]"
         >
           <Command.Input
             autoFocus
             placeholder="Jump to view or symbol…"
-            className="w-full border-b border-border bg-transparent px-4 py-3 text-sm outline-none placeholder:text-ink-faint"
+            className="w-full border-b border-border bg-transparent px-4 py-4 text-sm outline-none placeholder:text-ink-faint"
           />
           <Command.List className="max-h-[320px] overflow-y-auto p-1.5">
             <Command.Empty className="py-6 text-center text-sm text-ink-faint">

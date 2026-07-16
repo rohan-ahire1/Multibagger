@@ -7,6 +7,7 @@ import type {
   DailyDiagnostics,
   MarketBreadth,
   OHLCVBar,
+  ScanSessionSummary,
   SetupExplanation,
   Signal,
   SymbolSignalHistory,
@@ -19,6 +20,14 @@ export function useScanDates() {
   return useQuery({
     queryKey: ['scan-dates'],
     queryFn: () => apiFetch<string[]>('/scanner/dates'),
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
+export function useScanSessions() {
+  return useQuery({
+    queryKey: ['scan-sessions'],
+    queryFn: () => apiFetch<ScanSessionSummary[]>('/scanner/sessions'),
     staleTime: 5 * 60 * 1000,
   })
 }

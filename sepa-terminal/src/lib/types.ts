@@ -42,6 +42,13 @@ export interface MarketBreadth {
   marketFilterOn: boolean
 }
 
+export interface ScanSessionSummary {
+  date: string
+  breakoutCount: number
+  watchCount: number
+  breakoutSymbols: string[]
+}
+
 // --- Triage ---
 export type ReviewStatus = 'new' | 'shortlisted' | 'watching' | 'rejected'
 
@@ -149,6 +156,8 @@ export interface BacktestRunRequest {
 }
 
 export type TradeStatus =
+  | 'open'
+  | 'pending_entry'
   | 'not_filled'
   | 'stopped'
   | 'target'
@@ -222,4 +231,18 @@ export interface BacktestReport {
 export interface SymbolSignalHistory {
   signals: Signal[]
   trades: BacktestTrade[]
+  pendingDays: number
+  unfilledOutcomes: Record<string, UnfilledSignalOutcome>
+}
+
+export interface UnfilledSignalOutcome {
+  signalDate: string
+  entryRef: number
+  stop: number
+  pivot: number | null
+  endDate: string
+  endPrice: number
+  holdingBars: number
+  returnPct: number | null
+  rMultiple: number | null
 }

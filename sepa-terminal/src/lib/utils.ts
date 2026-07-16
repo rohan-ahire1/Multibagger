@@ -81,3 +81,21 @@ export function fmtDateShort(iso: string | null | undefined): string {
 export function todayISO(): string {
   return new Date().toISOString().slice(0, 10)
 }
+
+export type SymbolNavigationSource = 'dashboard' | 'scanner' | 'backtest' | 'history'
+
+/**
+ * Keep the exact signal identity in the URL so a symbol with many breakouts
+ * opens on the one the user actually selected, even after a refresh.
+ */
+export function symbolSignalPath(
+  symbol: string,
+  signalDate?: string | null,
+  source?: SymbolNavigationSource
+): string {
+  const params = new URLSearchParams()
+  if (signalDate) params.set('signalDate', signalDate)
+  if (source) params.set('source', source)
+  const query = params.toString()
+  return `/symbol/${encodeURIComponent(symbol)}${query ? `?${query}` : ''}`
+}

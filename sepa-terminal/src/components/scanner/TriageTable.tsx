@@ -19,7 +19,7 @@ export function TriageTable({
   rows: SetupRow[]
   selectedId: string | null
   onSelect: (id: string) => void
-  onOpen: (symbol: string) => void
+  onOpen: (row: SetupRow) => void
 }) {
   const selectedRef = useRef<HTMLTableRowElement>(null)
 
@@ -29,8 +29,8 @@ export function TriageTable({
 
   return (
     <table className="w-full text-xs">
-      <thead className="sticky top-0 z-10 bg-surface-2 text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
-        <tr className="[&>th]:px-2 [&>th]:py-1.5 [&>th]:text-right [&>th]:font-semibold">
+      <thead className="sticky top-0 z-10 bg-surface-2/95 text-[9px] font-semibold uppercase tracking-[0.1em] text-ink-faint backdrop-blur">
+        <tr className="border-b border-border [&>th]:px-2.5 [&>th]:py-2.5 [&>th]:text-right [&>th]:font-semibold">
           <th className="!text-left !pl-4">Symbol</th>
           <th className="!text-left">Type</th>
           <th>Close</th>
@@ -52,13 +52,13 @@ export function TriageTable({
               key={row.id}
               ref={isSelected ? selectedRef : undefined}
               onClick={() => onSelect(row.id)}
-              onDoubleClick={() => onOpen(row.symbol)}
+              onDoubleClick={() => onOpen(row)}
               className={cn(
-                'cursor-pointer border-b border-border hover:bg-surface-2',
-                isSelected && 'bg-accent-soft hover:bg-accent-soft'
+                'group cursor-pointer border-b border-border/70 hover:bg-surface-2',
+                isSelected && 'bg-accent-soft shadow-[inset_3px_0_0_var(--color-accent)] hover:bg-accent-soft'
               )}
             >
-              <td className="px-2 py-1.5 pl-4 font-semibold">{row.symbol}</td>
+              <td className="px-2.5 py-2.5 pl-4 font-semibold tracking-[-0.01em] group-hover:text-accent">{row.symbol}</td>
               <td className="px-2 py-1.5">
                 {row.signalType ? (
                   <Badge tone={row.signalType === 'BREAKOUT' ? 'up' : 'accent'}>
@@ -68,8 +68,8 @@ export function TriageTable({
                   <Badge>CANDIDATE</Badge>
                 )}
               </td>
-              <td className="tnum px-2 py-1.5 text-right">{fmtPrice(row.close)}</td>
-              <td className="tnum px-2 py-1.5 text-right">{fmtPrice(row.pivot)}</td>
+              <td className="tnum px-2.5 py-2.5 text-right">{fmtPrice(row.close)}</td>
+              <td className="tnum px-2.5 py-2.5 text-right">{fmtPrice(row.pivot)}</td>
               {/* near_pivot is (pivot - close)/pivot: positive = below pivot. Flip so + means above. */}
               <td
                 className={cn(

@@ -31,9 +31,9 @@ function Shell() {
   useHotkeys('g>b', () => navigate('/backtest'))
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
+    <div className="flex h-screen min-w-[960px] flex-col overflow-hidden">
       <TopBar />
-      <main className="min-h-0 flex-1 overflow-y-auto">
+      <main className="min-h-0 flex-1 overflow-y-auto scroll-smooth">
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/scanner" element={<Scanner />} />

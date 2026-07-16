@@ -9,6 +9,7 @@ import { EmptyState, Spinner } from '@/components/ui/primitives'
 import { TriageTable } from '@/components/scanner/TriageTable'
 import { DetailPanel } from '@/components/scanner/DetailPanel'
 import { QueueTabs, type QueueId } from '@/components/scanner/QueueTabs'
+import { fmtDate, symbolSignalPath } from '@/lib/utils'
 
 export function Scanner() {
   const scanDate = useUIStore((s) => s.scanDate)
@@ -109,7 +110,11 @@ export function Scanner() {
   useHotkeys('x', () => decide('rejected'), [selected])
   useHotkeys('u', () => undoLast(), [])
   useHotkeys('n', () => noteRef.current?.focus(), { preventDefault: true }, [])
-  useHotkeys('enter', () => selected && navigate(`/symbol/${selected.symbol}`), [selected])
+  useHotkeys(
+    'enter',
+    () => selected && navigate(symbolSignalPath(selected.symbol, selected.scanDate, 'scanner')),
+    [selected]
+  )
   useHotkeys('1', () => setQueue('breakout'))
   useHotkeys('2', () => setQueue('watch'))
   useHotkeys('3', () => setQueue('shortlisted'))
@@ -128,9 +133,10 @@ export function Scanner() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col bg-bg/60">
       <QueueTabs
         active={queue}
+        scanDate={fmtDate(scanDate)}
         counts={{
           breakout: queues.breakout.length,
           watch: queues.watch.length,
@@ -142,14 +148,14 @@ export function Scanner() {
           setSelectedIdx(0)
         }}
       />
-      <div className="flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1 overflow-y-auto border-r border-border">
+      <div className="flex min-h-0 flex-1 gap-3 p-3 pt-0">
+        <div className="min-w-0 flex-1 overflow-y-auto rounded-xl border border-border bg-surface shadow-[var(--shadow-card)]">
           {rows.length ? (
             <TriageTable
               rows={rows}
               selectedId={selected?.id ?? null}
               onSelect={(id) => setSelectedIdx(rows.findIndex((r) => r.id === id))}
-              onOpen={(symbol) => navigate(`/symbol/${symbol}`)}
+              onOpen={(row) => navigate(symbolSignalPath(row.symbol, row.scanDate, 'scanner'))}
             />
           ) : (
             <EmptyState
@@ -162,9 +168,16 @@ export function Scanner() {
             />
           )}
         </div>
-        <div className="w-[380px] shrink-0 overflow-y-auto bg-surface">
+        <div className="w-[410px] shrink-0 overflow-y-auto rounded-xl border border-border bg-surface shadow-[var(--shadow-card)]">
           {selected ? (
-            <DetailPanel row={selected} noteRef={noteRef} />
+            <DetailPanel
+              row={selected}
+              noteRef={noteRef}
+              onShortlist={() => decide('shortlisted')}
+              onWatch={() => decide('watching')}
+              onReject={() => decide('rejected')}
+              onUndo={undoLast}
+            />
           ) : (
             <EmptyState title="No row selected" />
           )}
