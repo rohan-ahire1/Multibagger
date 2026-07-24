@@ -1,0 +1,753 @@
+Loading OHLCV from 2008-09-09 to 2026-03-17 ...
+Loaded 7,210,200 rows, 4,034 symbols.
+Preparing indicators (one-time) ...
+  2010-01-26: ERROR Missing benchmark data for NIFTYBEES on 2010-01-26
+  2010-02-12: ERROR Missing benchmark data for NIFTYBEES on 2010-02-12
+  2010-02-17: watch=1 breakout=1
+  2010-03-01: ERROR Missing benchmark data for NIFTYBEES on 2010-03-01
+  2010-03-18: watch=11 breakout=1
+  2010-03-19: watch=13 breakout=2
+  2010-03-24: ERROR Missing benchmark data for NIFTYBEES on 2010-03-24
+  2010-03-25: watch=9 breakout=3
+  2010-03-26: watch=12 breakout=1
+  2010-03-29: watch=8 breakout=1
+  2010-04-02: ERROR Missing benchmark data for NIFTYBEES on 2010-04-02
+  2010-04-05: watch=11 breakout=4
+  2010-04-06: watch=7 breakout=1
+  2010-04-14: ERROR Missing benchmark data for NIFTYBEES on 2010-04-14
+  2010-04-21: watch=14 breakout=1
+  2010-05-03: watch=9 breakout=1
+  2010-06-17: watch=10 breakout=1
+  2010-06-21: watch=14 breakout=1
+  2010-06-24: watch=11 breakout=1
+  2010-07-06: watch=16 breakout=1
+  2010-07-12: watch=10 breakout=1
+  2010-07-15: watch=8 breakout=1
+  2010-07-27: watch=10 breakout=1
+  2010-08-02: watch=8 breakout=1
+  2010-08-04: watch=9 breakout=1
+  2010-08-13: watch=14 breakout=2
+  2010-08-17: watch=8 breakout=1
+  2010-08-18: watch=3 breakout=1
+  2010-08-19: watch=5 breakout=1
+  2010-08-23: watch=4 breakout=1
+  2010-09-09: watch=5 breakout=1
+  2010-09-10: ERROR Missing benchmark data for NIFTYBEES on 2010-09-10
+  2010-10-01: watch=10 breakout=1
+  2010-10-04: watch=4 breakout=1
+  2010-10-21: watch=6 breakout=1
+  2010-10-25: watch=4 breakout=1
+  2010-11-04: watch=6 breakout=2
+  2010-11-09: watch=3 breakout=1
+  2010-11-17: ERROR Missing benchmark data for NIFTYBEES on 2010-11-17
+  2010-12-16: watch=2 breakout=2
+  2010-12-17: ERROR Missing benchmark data for NIFTYBEES on 2010-12-17
+  2010-12-20: watch=2 breakout=1
+  2010-12-30: watch=7 breakout=1
+  2011-01-04: watch=6 breakout=1
+  2011-01-05: watch=6 breakout=1
+  2011-01-26: ERROR Missing benchmark data for NIFTYBEES on 2011-01-26
+  2011-03-02: ERROR Missing benchmark data for NIFTYBEES on 2011-03-02
+  2011-04-04: watch=0 breakout=1
+  2011-04-12: ERROR Missing benchmark data for NIFTYBEES on 2011-04-12
+  2011-04-14: ERROR Missing benchmark data for NIFTYBEES on 2011-04-14
+  2011-04-22: ERROR Missing benchmark data for NIFTYBEES on 2011-04-22
+  2011-05-24: watch=1 breakout=1
+  2011-06-14: watch=3 breakout=1
+  2011-07-19: watch=7 breakout=1
+  2011-07-20: watch=6 breakout=1
+  2011-07-25: watch=7 breakout=1
+  2011-07-29: watch=3 breakout=1
+  2011-08-15: ERROR Missing benchmark data for NIFTYBEES on 2011-08-15
+  2011-08-31: ERROR Missing benchmark data for NIFTYBEES on 2011-08-31
+  2011-09-01: ERROR Missing benchmark data for NIFTYBEES on 2011-09-01
+  2011-10-06: ERROR Missing benchmark data for NIFTYBEES on 2011-10-06
+  2011-10-27: ERROR Missing benchmark data for NIFTYBEES on 2011-10-27
+  2011-10-28: watch=1 breakout=1
+  2011-11-07: ERROR Missing benchmark data for NIFTYBEES on 2011-11-07
+  2011-11-10: ERROR Missing benchmark data for NIFTYBEES on 2011-11-10
+  2011-12-06: ERROR Missing benchmark data for NIFTYBEES on 2011-12-06
+  2012-01-26: ERROR Missing benchmark data for NIFTYBEES on 2012-01-26
+  2012-02-20: ERROR Missing benchmark data for NIFTYBEES on 2012-02-20
+  2012-03-08: ERROR Missing benchmark data for NIFTYBEES on 2012-03-08
+  2012-04-05: ERROR Missing benchmark data for NIFTYBEES on 2012-04-05
+  2012-04-06: ERROR Missing benchmark data for NIFTYBEES on 2012-04-06
+  2012-05-01: ERROR Missing benchmark data for NIFTYBEES on 2012-05-01
+  2012-06-29: watch=5 breakout=2
+  2012-07-20: watch=6 breakout=1
+  2012-07-24: watch=4 breakout=1
+  2012-07-25: watch=3 breakout=1
+  2012-08-15: ERROR Missing benchmark data for NIFTYBEES on 2012-08-15
+  2012-08-17: watch=2 breakout=1
+  2012-08-20: ERROR Missing benchmark data for NIFTYBEES on 2012-08-20
+  2012-08-21: watch=7 breakout=1
+  2012-09-10: watch=3 breakout=1
+  2012-09-19: ERROR Missing benchmark data for NIFTYBEES on 2012-09-19
+  2012-10-02: ERROR Missing benchmark data for NIFTYBEES on 2012-10-02
+  2012-10-24: ERROR Missing benchmark data for NIFTYBEES on 2012-10-24
+  2012-10-25: watch=6 breakout=1
+  2012-11-01: watch=7 breakout=1
+  2012-11-14: ERROR Missing benchmark data for NIFTYBEES on 2012-11-14
+  2012-11-20: watch=4 breakout=1
+  2012-11-28: ERROR Missing benchmark data for NIFTYBEES on 2012-11-28
+  2012-12-25: ERROR Missing benchmark data for NIFTYBEES on 2012-12-25
+  2013-01-02: watch=7 breakout=2
+  2013-01-03: watch=9 breakout=1
+  2013-02-20: watch=7 breakout=1
+  2013-02-25: watch=0 breakout=1
+  2013-02-26: watch=2 breakout=2
+  2013-02-28: watch=3 breakout=1
+  2013-03-05: watch=1 breakout=2
+  2013-03-07: watch=1 breakout=2
+  2013-03-27: ERROR Missing benchmark data for NIFTYBEES on 2013-03-27
+  2013-03-29: ERROR Missing benchmark data for NIFTYBEES on 2013-03-29
+  2013-04-19: ERROR Missing benchmark data for NIFTYBEES on 2013-04-19
+  2013-04-24: ERROR Missing benchmark data for NIFTYBEES on 2013-04-24
+  2013-05-01: ERROR Missing benchmark data for NIFTYBEES on 2013-05-01
+  2013-05-08: watch=3 breakout=1
+  2013-05-13: watch=4 breakout=1
+  2013-05-15: watch=4 breakout=2
+  2013-07-25: watch=6 breakout=1
+  2013-07-31: watch=0 breakout=1
+  2013-08-09: ERROR Missing benchmark data for NIFTYBEES on 2013-08-09
+  2013-08-13: watch=1 breakout=1
+  2013-08-15: ERROR Missing benchmark data for NIFTYBEES on 2013-08-15
+  2013-09-09: ERROR Missing benchmark data for NIFTYBEES on 2013-09-09
+  2013-10-02: ERROR Missing benchmark data for NIFTYBEES on 2013-10-02
+  2013-10-11: watch=4 breakout=2
+  2013-10-16: ERROR Missing benchmark data for NIFTYBEES on 2013-10-16
+  2013-11-04: ERROR Missing benchmark data for NIFTYBEES on 2013-11-04
+  2013-11-15: ERROR Missing benchmark data for NIFTYBEES on 2013-11-15
+  2013-12-19: watch=3 breakout=1
+  2013-12-20: watch=4 breakout=2
+  2013-12-23: watch=5 breakout=1
+  2013-12-25: ERROR Missing benchmark data for NIFTYBEES on 2013-12-25
+  2014-02-14: watch=1 breakout=1
+  2014-02-27: ERROR Missing benchmark data for NIFTYBEES on 2014-02-27
+  2014-02-28: watch=6 breakout=1
+  2014-03-17: ERROR Missing benchmark data for NIFTYBEES on 2014-03-17
+  2014-04-02: watch=4 breakout=1
+  2014-04-08: ERROR Missing benchmark data for NIFTYBEES on 2014-04-08
+  2014-04-14: ERROR Missing benchmark data for NIFTYBEES on 2014-04-14
+  2014-04-17: watch=11 breakout=1
+  2014-04-18: ERROR Missing benchmark data for NIFTYBEES on 2014-04-18
+  2014-04-24: ERROR Missing benchmark data for NIFTYBEES on 2014-04-24
+  2014-05-01: ERROR Missing benchmark data for NIFTYBEES on 2014-05-01
+  2014-05-09: watch=7 breakout=1
+  2014-05-12: watch=0 breakout=1
+  2014-05-13: watch=0 breakout=1
+  2014-07-03: watch=5 breakout=1
+  2014-07-17: watch=0 breakout=1
+  2014-07-29: ERROR Missing benchmark data for NIFTYBEES on 2014-07-29
+  2014-08-13: watch=3 breakout=1
+  2014-08-15: ERROR Missing benchmark data for NIFTYBEES on 2014-08-15
+  2014-08-29: ERROR Missing benchmark data for NIFTYBEES on 2014-08-29
+  2014-09-01: watch=8 breakout=2
+  2014-09-04: watch=10 breakout=1
+  2014-09-08: watch=11 breakout=1
+  2014-09-15: watch=17 breakout=2
+  2014-09-17: watch=11 breakout=1
+  2014-09-18: watch=12 breakout=1
+  2014-09-19: watch=9 breakout=1
+  2014-10-02: ERROR Missing benchmark data for NIFTYBEES on 2014-10-02
+  2014-10-03: ERROR Missing benchmark data for NIFTYBEES on 2014-10-03
+  2014-10-06: ERROR Missing benchmark data for NIFTYBEES on 2014-10-06
+  2014-10-15: ERROR Missing benchmark data for NIFTYBEES on 2014-10-15
+  2014-10-24: ERROR Missing benchmark data for NIFTYBEES on 2014-10-24
+  2014-11-04: ERROR Missing benchmark data for NIFTYBEES on 2014-11-04
+  2014-11-06: ERROR Missing benchmark data for NIFTYBEES on 2014-11-06
+  2014-11-07: watch=7 breakout=1
+  2014-11-28: watch=15 breakout=1
+  2014-12-01: watch=15 breakout=2
+  2014-12-02: watch=17 breakout=1
+  2014-12-03: watch=10 breakout=1
+  2014-12-15: watch=3 breakout=1
+  2014-12-25: ERROR Missing benchmark data for NIFTYBEES on 2014-12-25
+  2015-01-08: watch=9 breakout=2
+  2015-01-14: watch=8 breakout=1
+  2015-01-20: watch=7 breakout=1
+  2015-01-23: watch=4 breakout=1
+  2015-01-26: ERROR Missing benchmark data for NIFTYBEES on 2015-01-26
+  2015-02-03: watch=4 breakout=1
+  2015-02-17: ERROR Missing benchmark data for NIFTYBEES on 2015-02-17
+  2015-03-02: watch=12 breakout=1
+  2015-03-06: ERROR Missing benchmark data for NIFTYBEES on 2015-03-06
+  2015-03-17: watch=3 breakout=1
+  2015-03-24: watch=2 breakout=1
+  2015-04-01: watch=3 breakout=1
+  2015-04-02: ERROR Missing benchmark data for NIFTYBEES on 2015-04-02
+  2015-04-03: ERROR Missing benchmark data for NIFTYBEES on 2015-04-03
+  2015-04-14: ERROR Missing benchmark data for NIFTYBEES on 2015-04-14
+  2015-05-01: ERROR Missing benchmark data for NIFTYBEES on 2015-05-01
+  2015-05-29: watch=2 breakout=1
+  2015-06-05: watch=1 breakout=1
+  2015-06-19: watch=2 breakout=1
+  2015-07-09: watch=3 breakout=1
+  2015-07-10: watch=3 breakout=1
+  2015-07-15: watch=10 breakout=1
+  2015-07-16: watch=9 breakout=1
+  2015-07-20: watch=11 breakout=1
+  2015-07-30: watch=7 breakout=1
+  2015-07-31: watch=9 breakout=1
+  2015-08-07: watch=2 breakout=1
+  2015-09-17: ERROR Missing benchmark data for NIFTYBEES on 2015-09-17
+  2015-09-25: ERROR Missing benchmark data for NIFTYBEES on 2015-09-25
+  2015-10-02: ERROR Missing benchmark data for NIFTYBEES on 2015-10-02
+  2015-10-22: ERROR Missing benchmark data for NIFTYBEES on 2015-10-22
+  2015-11-12: ERROR Missing benchmark data for NIFTYBEES on 2015-11-12
+  2015-11-25: ERROR Missing benchmark data for NIFTYBEES on 2015-11-25
+  2015-12-01: watch=2 breakout=1
+  2015-12-17: watch=4 breakout=1
+  2015-12-25: ERROR Missing benchmark data for NIFTYBEES on 2015-12-25
+  2015-12-31: watch=8 breakout=1
+  2016-01-06: watch=7 breakout=1
+  2016-01-08: watch=9 breakout=1
+  2016-01-11: watch=7 breakout=1
+  2016-01-26: ERROR Missing benchmark data for NIFTYBEES on 2016-01-26
+  2016-03-07: ERROR Missing benchmark data for NIFTYBEES on 2016-03-07
+  2016-03-24: ERROR Missing benchmark data for NIFTYBEES on 2016-03-24
+  2016-03-25: ERROR Missing benchmark data for NIFTYBEES on 2016-03-25
+  2016-04-13: watch=3 breakout=1
+  2016-04-14: ERROR Missing benchmark data for NIFTYBEES on 2016-04-14
+  2016-04-15: ERROR Missing benchmark data for NIFTYBEES on 2016-04-15
+  2016-04-19: ERROR Missing benchmark data for NIFTYBEES on 2016-04-19
+  2016-05-02: watch=4 breakout=1
+  2016-05-04: watch=3 breakout=1
+  2016-05-13: watch=5 breakout=1
+  2016-05-27: watch=8 breakout=1
+  2016-05-30: watch=6 breakout=1
+  2016-06-07: watch=7 breakout=1
+  2016-06-27: watch=12 breakout=2
+  2016-07-06: ERROR Missing benchmark data for NIFTYBEES on 2016-07-06
+  2016-07-21: watch=12 breakout=1
+  2016-07-25: watch=12 breakout=1
+  2016-07-26: watch=7 breakout=1
+  2016-07-28: watch=9 breakout=1
+  2016-08-15: ERROR Missing benchmark data for NIFTYBEES on 2016-08-15
+  2016-08-26: watch=6 breakout=1
+  2016-09-05: ERROR Missing benchmark data for NIFTYBEES on 2016-09-05
+  2016-09-06: watch=15 breakout=1
+  2016-09-08: watch=17 breakout=1
+  2016-09-13: ERROR Missing benchmark data for NIFTYBEES on 2016-09-13
+  2016-10-04: watch=9 breakout=2
+  2016-10-06: watch=5 breakout=1
+  2016-10-11: ERROR Missing benchmark data for NIFTYBEES on 2016-10-11
+  2016-10-12: ERROR Missing benchmark data for NIFTYBEES on 2016-10-12
+  2016-10-25: watch=11 breakout=1
+  2016-10-26: watch=9 breakout=1
+  2016-10-28: watch=17 breakout=1
+  2016-10-31: ERROR Missing benchmark data for NIFTYBEES on 2016-10-31
+  2016-11-01: watch=20 breakout=1
+  2016-11-14: ERROR Missing benchmark data for NIFTYBEES on 2016-11-14
+  2016-12-08: watch=1 breakout=1
+  2017-01-25: watch=7 breakout=2
+  2017-01-26: ERROR Missing benchmark data for NIFTYBEES on 2017-01-26
+  2017-02-02: watch=7 breakout=1
+  2017-02-09: watch=7 breakout=1
+  2017-02-13: watch=3 breakout=1
+  2017-02-24: ERROR Missing benchmark data for NIFTYBEES on 2017-02-24
+  2017-03-13: ERROR Missing benchmark data for NIFTYBEES on 2017-03-13
+  2017-03-14: watch=13 breakout=3
+  2017-03-15: watch=19 breakout=2
+  2017-03-29: watch=27 breakout=1
+  2017-03-30: watch=28 breakout=1
+  2017-03-31: watch=24 breakout=1
+  2017-04-03: watch=22 breakout=1
+  2017-04-04: ERROR Missing benchmark data for NIFTYBEES on 2017-04-04
+  2017-04-06: watch=21 breakout=1
+  2017-04-10: watch=15 breakout=1
+  2017-04-14: ERROR Missing benchmark data for NIFTYBEES on 2017-04-14
+  2017-04-17: watch=16 breakout=1
+  2017-04-18: watch=14 breakout=1
+  2017-04-24: watch=13 breakout=1
+  2017-04-26: watch=5 breakout=1
+  2017-05-01: ERROR Missing benchmark data for NIFTYBEES on 2017-05-01
+  2017-05-10: watch=7 breakout=1
+  2017-05-17: watch=12 breakout=1
+  2017-05-26: watch=5 breakout=1
+  2017-06-01: watch=4 breakout=1
+  2017-06-12: watch=9 breakout=1
+  2017-06-14: watch=15 breakout=1
+  2017-06-15: watch=16 breakout=1
+  2017-06-26: ERROR Missing benchmark data for NIFTYBEES on 2017-06-26
+  2017-06-27: watch=14 breakout=1
+  2017-07-03: watch=10 breakout=3
+  2017-07-26: watch=21 breakout=4
+  2017-07-27: watch=14 breakout=1
+  2017-07-28: watch=16 breakout=1
+  2017-07-31: watch=17 breakout=1
+  2017-08-01: watch=15 breakout=2
+  2017-08-02: watch=19 breakout=1
+  2017-08-04: watch=17 breakout=1
+  2017-08-08: watch=11 breakout=1
+  2017-08-15: ERROR Missing benchmark data for NIFTYBEES on 2017-08-15
+  2017-08-25: ERROR Missing benchmark data for NIFTYBEES on 2017-08-25
+  2017-08-31: watch=10 breakout=1
+  2017-09-05: watch=19 breakout=1
+  2017-09-08: watch=27 breakout=1
+  2017-09-11: watch=18 breakout=2
+  2017-09-12: watch=19 breakout=2
+  2017-09-13: watch=17 breakout=1
+  2017-10-02: ERROR Missing benchmark data for NIFTYBEES on 2017-10-02
+  2017-10-18: watch=16 breakout=1
+  2017-10-20: ERROR Missing benchmark data for NIFTYBEES on 2017-10-20
+  2017-10-26: watch=12 breakout=1
+  2017-10-30: watch=16 breakout=1
+  2017-10-31: watch=13 breakout=1
+  2017-11-28: watch=7 breakout=1
+  2017-12-11: watch=9 breakout=1
+  2017-12-25: ERROR Missing benchmark data for NIFTYBEES on 2017-12-25
+  2018-01-03: watch=14 breakout=1
+  2018-01-04: watch=24 breakout=1
+  2018-01-05: watch=22 breakout=1
+  2018-01-09: watch=23 breakout=2
+  2018-01-12: watch=18 breakout=1
+  2018-01-15: watch=14 breakout=2
+  2018-01-19: watch=11 breakout=1
+  2018-01-26: ERROR Missing benchmark data for NIFTYBEES on 2018-01-26
+  2018-02-13: ERROR Missing benchmark data for NIFTYBEES on 2018-02-13
+  2018-02-28: watch=8 breakout=1
+  2018-03-02: ERROR Missing benchmark data for NIFTYBEES on 2018-03-02
+  2018-03-29: ERROR Missing benchmark data for NIFTYBEES on 2018-03-29
+  2018-03-30: ERROR Missing benchmark data for NIFTYBEES on 2018-03-30
+  2018-04-02: watch=7 breakout=1
+  2018-04-09: watch=3 breakout=1
+  2018-04-17: watch=5 breakout=1
+  2018-04-20: watch=11 breakout=1
+  2018-04-26: watch=9 breakout=1
+  2018-05-01: ERROR Missing benchmark data for NIFTYBEES on 2018-05-01
+  2018-05-02: watch=10 breakout=1
+  2018-05-03: watch=8 breakout=1
+  2018-05-07: watch=12 breakout=1
+  2018-05-08: watch=4 breakout=1
+  2018-05-24: watch=2 breakout=1
+  2018-07-06: watch=9 breakout=1
+  2018-07-09: watch=9 breakout=1
+  2018-07-11: watch=5 breakout=2
+  2018-07-12: watch=6 breakout=1
+  2018-07-23: watch=4 breakout=1
+  2018-07-31: watch=4 breakout=1
+  2018-08-13: watch=11 breakout=1
+  2018-08-14: watch=10 breakout=1
+  2018-08-15: ERROR Missing benchmark data for NIFTYBEES on 2018-08-15
+  2018-08-17: watch=16 breakout=1
+  2018-08-20: watch=16 breakout=1
+  2018-08-21: watch=17 breakout=1
+  2018-08-22: ERROR Missing benchmark data for NIFTYBEES on 2018-08-22
+  2018-08-23: watch=14 breakout=2
+  2018-08-30: watch=11 breakout=1
+  2018-09-04: watch=3 breakout=1
+  2018-09-13: ERROR Missing benchmark data for NIFTYBEES on 2018-09-13
+  2018-09-17: watch=0 breakout=1
+  2018-09-20: ERROR Missing benchmark data for NIFTYBEES on 2018-09-20
+  2018-09-25: watch=0 breakout=1
+  2018-10-02: ERROR Missing benchmark data for NIFTYBEES on 2018-10-02
+  2018-10-18: ERROR Missing benchmark data for NIFTYBEES on 2018-10-18
+  2018-11-08: ERROR Missing benchmark data for NIFTYBEES on 2018-11-08
+  2018-11-23: ERROR Missing benchmark data for NIFTYBEES on 2018-11-23
+  2018-12-25: ERROR Missing benchmark data for NIFTYBEES on 2018-12-25
+  2019-01-08: watch=5 breakout=1
+  2019-01-09: watch=8 breakout=1
+  2019-01-10: watch=11 breakout=1
+  2019-01-21: watch=13 breakout=1
+  2019-01-30: watch=3 breakout=1
+  2019-01-31: watch=3 breakout=1
+  2019-02-25: watch=5 breakout=2
+  2019-02-27: watch=5 breakout=1
+  2019-03-04: ERROR Missing benchmark data for NIFTYBEES on 2019-03-04
+  2019-03-05: watch=10 breakout=1
+  2019-03-11: watch=9 breakout=2
+  2019-03-21: ERROR Missing benchmark data for NIFTYBEES on 2019-03-21
+  2019-03-22: watch=8 breakout=1
+  2019-03-26: watch=13 breakout=1
+  2019-03-29: watch=11 breakout=1
+  2019-04-17: ERROR Missing benchmark data for NIFTYBEES on 2019-04-17
+  2019-04-19: ERROR Missing benchmark data for NIFTYBEES on 2019-04-19
+  2019-04-29: ERROR Missing benchmark data for NIFTYBEES on 2019-04-29
+  2019-05-01: ERROR Missing benchmark data for NIFTYBEES on 2019-05-01
+  2019-05-02: watch=10 breakout=1
+  2019-05-20: watch=1 breakout=1
+  2019-05-23: watch=0 breakout=1
+  2019-06-05: ERROR Missing benchmark data for NIFTYBEES on 2019-06-05
+  2019-06-25: watch=19 breakout=1
+  2019-07-18: watch=5 breakout=1
+  2019-08-12: ERROR Missing benchmark data for NIFTYBEES on 2019-08-12
+  2019-08-15: ERROR Missing benchmark data for NIFTYBEES on 2019-08-15
+  2019-08-27: watch=4 breakout=1
+  2019-08-30: watch=7 breakout=1
+  2019-09-02: ERROR Missing benchmark data for NIFTYBEES on 2019-09-02
+  2019-09-05: watch=4 breakout=1
+  2019-09-10: ERROR Missing benchmark data for NIFTYBEES on 2019-09-10
+  2019-09-20: watch=2 breakout=3
+  2019-10-02: ERROR Missing benchmark data for NIFTYBEES on 2019-10-02
+  2019-10-08: ERROR Missing benchmark data for NIFTYBEES on 2019-10-08
+  2019-10-21: ERROR Missing benchmark data for NIFTYBEES on 2019-10-21
+  2019-10-28: ERROR Missing benchmark data for NIFTYBEES on 2019-10-28
+  2019-10-31: watch=7 breakout=1
+  2019-11-08: watch=11 breakout=1
+  2019-11-12: ERROR Missing benchmark data for NIFTYBEES on 2019-11-12
+  2019-11-19: watch=6 breakout=1
+  2019-11-20: watch=4 breakout=1
+  2019-12-02: watch=9 breakout=1
+  2019-12-12: watch=8 breakout=1
+  2019-12-25: ERROR Missing benchmark data for NIFTYBEES on 2019-12-25
+  2020-01-08: watch=14 breakout=1
+  2020-01-14: watch=8 breakout=1
+  2020-01-17: watch=7 breakout=1
+  2020-01-29: watch=6 breakout=1
+  2020-01-31: watch=7 breakout=1
+  2020-02-21: ERROR Missing benchmark data for NIFTYBEES on 2020-02-21
+  2020-03-10: ERROR Missing benchmark data for NIFTYBEES on 2020-03-10
+  2020-04-02: ERROR Missing benchmark data for NIFTYBEES on 2020-04-02
+  2020-04-06: ERROR Missing benchmark data for NIFTYBEES on 2020-04-06
+  2020-04-10: ERROR Missing benchmark data for NIFTYBEES on 2020-04-10
+  2020-04-14: ERROR Missing benchmark data for NIFTYBEES on 2020-04-14
+  2020-05-01: ERROR Missing benchmark data for NIFTYBEES on 2020-05-01
+  2020-05-25: ERROR Missing benchmark data for NIFTYBEES on 2020-05-25
+  2020-07-14: watch=2 breakout=1
+  2020-07-20: watch=2 breakout=1
+  2020-09-10: watch=1 breakout=1
+  2020-10-02: ERROR Missing benchmark data for NIFTYBEES on 2020-10-02
+  2020-10-27: watch=3 breakout=1
+  2020-10-29: watch=3 breakout=1
+  2020-11-05: watch=2 breakout=1
+  2020-11-16: ERROR Missing benchmark data for NIFTYBEES on 2020-11-16
+  2020-11-26: watch=8 breakout=1
+  2020-11-27: watch=8 breakout=1
+  2020-11-30: ERROR Missing benchmark data for NIFTYBEES on 2020-11-30
+  2020-12-01: watch=8 breakout=1
+  2020-12-04: watch=7 breakout=1
+  2020-12-15: watch=12 breakout=1
+  2020-12-16: watch=9 breakout=3
+  2020-12-22: watch=8 breakout=1
+  2020-12-25: ERROR Missing benchmark data for NIFTYBEES on 2020-12-25
+  2021-01-18: watch=5 breakout=1
+  2021-01-26: ERROR Missing benchmark data for NIFTYBEES on 2021-01-26
+  2021-03-04: watch=1 breakout=1
+  2021-03-11: ERROR Missing benchmark data for NIFTYBEES on 2021-03-11
+  2021-03-29: ERROR Missing benchmark data for NIFTYBEES on 2021-03-29
+  2021-04-02: ERROR Missing benchmark data for NIFTYBEES on 2021-04-02
+  2021-04-07: watch=4 breakout=1
+  2021-04-14: ERROR Missing benchmark data for NIFTYBEES on 2021-04-14
+  2021-04-21: ERROR Missing benchmark data for NIFTYBEES on 2021-04-21
+  2021-05-07: watch=1 breakout=1
+  2021-05-13: ERROR Missing benchmark data for NIFTYBEES on 2021-05-13
+  2021-05-17: watch=2 breakout=1
+  2021-05-24: watch=3 breakout=1
+  2021-06-01: watch=13 breakout=1
+  2021-06-14: watch=16 breakout=1
+  2021-06-17: watch=16 breakout=1
+  2021-06-28: watch=12 breakout=1
+  2021-07-06: watch=13 breakout=1
+  2021-07-09: watch=14 breakout=1
+  2021-07-21: ERROR Missing benchmark data for NIFTYBEES on 2021-07-21
+  2021-07-22: watch=16 breakout=1
+  2021-08-02: watch=8 breakout=1
+  2021-08-03: watch=7 breakout=1
+  2021-08-05: watch=7 breakout=1
+  2021-08-17: watch=7 breakout=2
+  2021-08-18: watch=7 breakout=1
+  2021-08-19: ERROR Missing benchmark data for NIFTYBEES on 2021-08-19
+  2021-08-24: watch=8 breakout=1
+  2021-08-30: watch=8 breakout=1
+  2021-09-01: watch=6 breakout=1
+  2021-09-03: watch=6 breakout=1
+  2021-09-06: watch=11 breakout=1
+  2021-09-10: ERROR Missing benchmark data for NIFTYBEES on 2021-09-10
+  2021-09-14: watch=27 breakout=1
+  2021-09-15: watch=32 breakout=1
+  2021-09-16: watch=38 breakout=1
+  2021-09-17: watch=34 breakout=2
+  2021-09-21: watch=23 breakout=2
+  2021-09-22: watch=27 breakout=3
+  2021-09-23: watch=23 breakout=2
+  2021-10-07: watch=2 breakout=2
+  2021-10-08: watch=0 breakout=1
+  2021-10-15: ERROR Missing benchmark data for NIFTYBEES on 2021-10-15
+  2021-10-26: watch=0 breakout=1
+  2021-11-05: ERROR Missing benchmark data for NIFTYBEES on 2021-11-05
+  2021-11-08: watch=1 breakout=1
+  2021-11-19: ERROR Missing benchmark data for NIFTYBEES on 2021-11-19
+  2021-11-23: watch=2 breakout=1
+  2021-12-24: watch=2 breakout=1
+  2022-01-03: watch=5 breakout=1
+  2022-01-11: watch=10 breakout=1
+  2022-01-12: watch=9 breakout=1
+  2022-01-26: ERROR Missing benchmark data for NIFTYBEES on 2022-01-26
+  2022-03-01: ERROR Missing benchmark data for NIFTYBEES on 2022-03-01
+  2022-03-18: ERROR Missing benchmark data for NIFTYBEES on 2022-03-18
+  2022-03-25: watch=0 breakout=1
+  2022-04-01: watch=7 breakout=1
+  2022-04-08: watch=5 breakout=1
+  2022-04-14: ERROR Missing benchmark data for NIFTYBEES on 2022-04-14
+  2022-04-15: ERROR Missing benchmark data for NIFTYBEES on 2022-04-15
+  2022-05-03: ERROR Missing benchmark data for NIFTYBEES on 2022-05-03
+  2022-06-24: watch=0 breakout=1
+  2022-07-21: watch=5 breakout=3
+  2022-07-27: watch=4 breakout=1
+  2022-07-29: watch=7 breakout=1
+  2022-08-09: ERROR Missing benchmark data for NIFTYBEES on 2022-08-09
+  2022-08-15: ERROR Missing benchmark data for NIFTYBEES on 2022-08-15
+  2022-08-23: watch=7 breakout=1
+  2022-08-24: watch=8 breakout=1
+  2022-08-26: watch=6 breakout=2
+  2022-08-31: ERROR Missing benchmark data for NIFTYBEES on 2022-08-31
+  2022-09-01: watch=6 breakout=1
+  2022-09-05: watch=3 breakout=1
+  2022-10-05: ERROR Missing benchmark data for NIFTYBEES on 2022-10-05
+  2022-10-25: watch=13 breakout=1
+  2022-10-26: ERROR Missing benchmark data for NIFTYBEES on 2022-10-26
+  2022-11-07: watch=12 breakout=1
+  2022-11-08: ERROR Missing benchmark data for NIFTYBEES on 2022-11-08
+  2022-11-16: watch=7 breakout=1
+  2022-11-29: watch=7 breakout=1
+  2022-11-30: watch=11 breakout=1
+  2022-12-05: watch=9 breakout=1
+  2022-12-06: watch=12 breakout=1
+  2022-12-08: watch=13 breakout=1
+  2022-12-09: watch=15 breakout=1
+  2022-12-14: watch=14 breakout=1
+  2023-01-13: watch=9 breakout=1
+  2023-01-18: watch=12 breakout=1
+  2023-01-19: watch=16 breakout=1
+  2023-01-24: watch=10 breakout=1
+  2023-01-26: ERROR Missing benchmark data for NIFTYBEES on 2023-01-26
+  2023-02-16: watch=2 breakout=1
+  2023-02-20: watch=5 breakout=1
+  2023-02-21: watch=11 breakout=1
+  2023-02-24: watch=9 breakout=1
+  2023-03-06: watch=9 breakout=1
+  2023-03-07: ERROR Missing benchmark data for NIFTYBEES on 2023-03-07
+  2023-03-30: ERROR Missing benchmark data for NIFTYBEES on 2023-03-30
+  2023-04-04: ERROR Missing benchmark data for NIFTYBEES on 2023-04-04
+  2023-04-07: ERROR Missing benchmark data for NIFTYBEES on 2023-04-07
+  2023-04-13: watch=8 breakout=1
+  2023-04-14: ERROR Missing benchmark data for NIFTYBEES on 2023-04-14
+  2023-04-21: watch=14 breakout=1
+  2023-04-27: watch=18 breakout=1
+  2023-04-28: watch=16 breakout=2
+  2023-05-01: ERROR Missing benchmark data for NIFTYBEES on 2023-05-01
+  2023-05-03: watch=16 breakout=3
+  2023-05-04: watch=15 breakout=1
+  2023-05-09: watch=15 breakout=2
+  2023-05-15: watch=15 breakout=1
+  2023-05-16: watch=14 breakout=1
+  2023-05-18: watch=10 breakout=1
+  2023-05-22: watch=13 breakout=1
+  2023-05-26: watch=8 breakout=2
+  2023-05-30: watch=14 breakout=1
+  2023-05-31: watch=10 breakout=1
+  2023-06-02: watch=13 breakout=2
+  2023-06-06: watch=11 breakout=2
+  2023-06-09: watch=22 breakout=2
+  2023-06-14: watch=27 breakout=1
+  2023-06-15: watch=22 breakout=4
+  2023-06-16: watch=22 breakout=1
+  2023-06-20: watch=18 breakout=1
+  2023-06-21: watch=14 breakout=4
+  2023-06-29: ERROR Missing benchmark data for NIFTYBEES on 2023-06-29
+  2023-06-30: watch=9 breakout=1
+  2023-07-03: watch=13 breakout=1
+  2023-07-12: watch=14 breakout=1
+  2023-07-14: watch=15 breakout=1
+  2023-07-18: watch=18 breakout=1
+  2023-07-19: watch=18 breakout=2
+  2023-07-21: watch=22 breakout=1
+  2023-07-24: watch=22 breakout=1
+  2023-07-26: watch=24 breakout=2
+  2023-07-27: watch=22 breakout=2
+  2023-07-28: watch=21 breakout=2
+  2023-07-31: watch=15 breakout=1
+  2023-08-01: watch=15 breakout=2
+  2023-08-02: watch=13 breakout=1
+  2023-08-03: watch=6 breakout=1
+  2023-08-07: watch=10 breakout=1
+  2023-08-08: watch=8 breakout=1
+  2023-08-14: watch=7 breakout=1
+  2023-08-15: ERROR Missing benchmark data for NIFTYBEES on 2023-08-15
+  2023-08-21: watch=14 breakout=1
+  2023-08-22: watch=13 breakout=1
+  2023-08-31: watch=18 breakout=1
+  2023-09-04: watch=23 breakout=2
+  2023-09-05: watch=24 breakout=2
+  2023-09-11: watch=26 breakout=3
+  2023-09-19: ERROR Missing benchmark data for NIFTYBEES on 2023-09-19
+  2023-09-27: watch=10 breakout=1
+  2023-10-02: ERROR Missing benchmark data for NIFTYBEES on 2023-10-02
+  2023-10-06: watch=9 breakout=1
+  2023-10-10: watch=14 breakout=1
+  2023-10-11: watch=18 breakout=1
+  2023-10-24: ERROR Missing benchmark data for NIFTYBEES on 2023-10-24
+  2023-11-13: watch=12 breakout=2
+  2023-11-14: ERROR Missing benchmark data for NIFTYBEES on 2023-11-14
+  2023-11-17: watch=25 breakout=2
+  2023-11-21: watch=27 breakout=1
+  2023-11-23: watch=30 breakout=1
+  2023-11-24: watch=34 breakout=1
+  2023-11-27: ERROR Missing benchmark data for NIFTYBEES on 2023-11-27
+  2023-11-28: watch=33 breakout=1
+  2023-11-30: watch=30 breakout=4
+  2023-12-01: watch=30 breakout=2
+  2023-12-04: watch=29 breakout=4
+  2023-12-06: watch=17 breakout=3
+  2023-12-07: watch=20 breakout=1
+  2023-12-08: watch=22 breakout=1
+  2023-12-11: watch=21 breakout=1
+  2023-12-12: watch=23 breakout=1
+  2023-12-14: watch=26 breakout=3
+  2023-12-18: watch=32 breakout=1
+  2023-12-19: watch=20 breakout=1
+  2023-12-25: ERROR Missing benchmark data for NIFTYBEES on 2023-12-25
+  2023-12-29: watch=7 breakout=1
+  2024-01-11: watch=30 breakout=4
+  2024-01-16: watch=40 breakout=2
+  2024-01-18: watch=24 breakout=2
+  2024-01-19: watch=16 breakout=2
+  2024-01-22: ERROR Missing benchmark data for NIFTYBEES on 2024-01-22
+  2024-01-23: watch=6 breakout=1
+  2024-01-26: ERROR Missing benchmark data for NIFTYBEES on 2024-01-26
+  2024-02-16: watch=6 breakout=1
+  2024-02-27: watch=16 breakout=1
+  2024-03-01: watch=32 breakout=1
+  2024-03-04: watch=31 breakout=2
+  2024-03-08: ERROR Missing benchmark data for NIFTYBEES on 2024-03-08
+  2024-03-25: ERROR Missing benchmark data for NIFTYBEES on 2024-03-25
+  2024-03-29: ERROR Missing benchmark data for NIFTYBEES on 2024-03-29
+  2024-04-11: ERROR Missing benchmark data for NIFTYBEES on 2024-04-11
+  2024-04-16: watch=13 breakout=1
+  2024-04-17: ERROR Missing benchmark data for NIFTYBEES on 2024-04-17
+  2024-04-18: watch=14 breakout=1
+  2024-05-01: ERROR Missing benchmark data for NIFTYBEES on 2024-05-01
+  2024-05-06: watch=19 breakout=1
+  2024-05-10: watch=10 breakout=1
+  2024-05-14: watch=9 breakout=1
+  2024-05-16: watch=8 breakout=2
+  2024-05-17: watch=10 breakout=1
+  2024-05-20: ERROR Missing benchmark data for NIFTYBEES on 2024-05-20
+  2024-05-21: watch=8 breakout=1
+  2024-05-23: watch=14 breakout=1
+  2024-05-27: watch=8 breakout=2
+  2024-05-31: watch=25 breakout=1
+  2024-06-03: watch=21 breakout=4
+  2024-06-05: watch=3 breakout=3
+  2024-06-17: ERROR Missing benchmark data for NIFTYBEES on 2024-06-17
+  2024-06-26: watch=19 breakout=1
+  2024-06-28: watch=33 breakout=1
+  2024-07-02: watch=34 breakout=1
+  2024-07-05: watch=35 breakout=2
+  2024-07-15: watch=45 breakout=1
+  2024-07-16: watch=43 breakout=1
+  2024-07-17: ERROR Missing benchmark data for NIFTYBEES on 2024-07-17
+  2024-07-23: watch=19 breakout=1
+  2024-08-15: ERROR Missing benchmark data for NIFTYBEES on 2024-08-15
+  2024-08-30: watch=27 breakout=1
+  2024-09-03: watch=28 breakout=1
+  2024-09-04: watch=28 breakout=1
+  2024-09-11: watch=36 breakout=1
+  2024-09-13: watch=32 breakout=1
+  2024-09-16: watch=34 breakout=1
+  2024-09-18: watch=24 breakout=1
+  2024-09-26: watch=22 breakout=2
+  2024-09-27: watch=20 breakout=2
+  2024-10-02: ERROR Missing benchmark data for NIFTYBEES on 2024-10-02
+  2024-11-07: watch=2 breakout=1
+  2024-11-15: ERROR Missing benchmark data for NIFTYBEES on 2024-11-15
+  2024-11-20: ERROR Missing benchmark data for NIFTYBEES on 2024-11-20
+  2024-11-25: watch=2 breakout=1
+  2024-12-03: watch=8 breakout=1
+  2024-12-12: watch=29 breakout=1
+  2024-12-13: watch=29 breakout=1
+  2024-12-17: watch=31 breakout=1
+  2024-12-25: ERROR Missing benchmark data for NIFTYBEES on 2024-12-25
+  2025-01-02: watch=8 breakout=1
+  2025-02-03: watch=3 breakout=1
+  2025-02-05: watch=3 breakout=1
+  2025-02-14: watch=1 breakout=1
+  2025-02-26: ERROR Missing benchmark data for NIFTYBEES on 2025-02-26
+  2025-03-14: ERROR Missing benchmark data for NIFTYBEES on 2025-03-14
+  2025-03-17: watch=3 breakout=1
+  2025-03-31: ERROR Missing benchmark data for NIFTYBEES on 2025-03-31
+  2025-04-01: watch=5 breakout=1
+  2025-04-10: ERROR Missing benchmark data for NIFTYBEES on 2025-04-10
+  2025-04-14: ERROR Missing benchmark data for NIFTYBEES on 2025-04-14
+  2025-04-18: ERROR Missing benchmark data for NIFTYBEES on 2025-04-18
+  2025-05-01: ERROR Missing benchmark data for NIFTYBEES on 2025-05-01
+  2025-05-06: watch=8 breakout=1
+  2025-05-14: watch=6 breakout=1
+  2025-06-02: watch=17 breakout=1
+  2025-06-03: watch=14 breakout=1
+  2025-06-04: watch=16 breakout=1
+  2025-06-06: watch=10 breakout=1
+  2025-06-09: watch=12 breakout=1
+  2025-06-16: watch=9 breakout=1
+  2025-06-23: watch=9 breakout=1
+  2025-06-30: watch=7 breakout=1
+  2025-07-22: watch=15 breakout=1
+  2025-07-23: watch=16 breakout=4
+  2025-07-28: watch=12 breakout=1
+  2025-08-07: watch=8 breakout=1
+  2025-08-15: ERROR Missing benchmark data for NIFTYBEES on 2025-08-15
+  2025-08-26: watch=11 breakout=1
+  2025-08-27: ERROR Missing benchmark data for NIFTYBEES on 2025-08-27
+  2025-09-01: watch=12 breakout=3
+  2025-09-08: watch=15 breakout=3
+  2025-09-09: watch=14 breakout=1
+  2025-09-10: watch=16 breakout=1
+  2025-09-12: watch=20 breakout=2
+  2025-09-16: watch=27 breakout=1
+  2025-09-17: watch=27 breakout=1
+  2025-09-18: watch=31 breakout=1
+  2025-09-22: watch=31 breakout=2
+  2025-09-23: watch=24 breakout=3
+  2025-09-24: watch=31 breakout=1
+  2025-09-30: watch=28 breakout=1
+  2025-10-02: ERROR Missing benchmark data for NIFTYBEES on 2025-10-02
+  2025-10-03: watch=27 breakout=1
+  2025-10-06: watch=20 breakout=3
+  2025-10-07: watch=18 breakout=1
+  2025-10-08: watch=15 breakout=1
+  2025-10-09: watch=15 breakout=1
+  2025-10-14: watch=10 breakout=1
+  2025-10-17: watch=18 breakout=2
+  2025-10-20: watch=19 breakout=1
+  2025-10-22: ERROR Missing benchmark data for NIFTYBEES on 2025-10-22
+  2025-10-24: watch=30 breakout=2
+  2025-10-28: watch=23 breakout=1
+  2025-10-30: watch=28 breakout=1
+  2025-11-03: watch=23 breakout=2
+  2025-11-05: ERROR Missing benchmark data for NIFTYBEES on 2025-11-05
+  2025-11-07: watch=19 breakout=2
+  2025-11-11: watch=22 breakout=1
+  2025-11-12: watch=19 breakout=2
+  2025-11-14: watch=27 breakout=1
+  2025-11-18: watch=19 breakout=1
+  2025-11-25: watch=29 breakout=1
+  2025-11-26: watch=40 breakout=1
+  2025-12-10: watch=33 breakout=1
+  2025-12-15: watch=30 breakout=3
+  2025-12-24: watch=34 breakout=1
+  2025-12-25: ERROR Missing benchmark data for NIFTYBEES on 2025-12-25
+  2025-12-26: watch=30 breakout=2
+  2026-01-02: watch=29 breakout=2
+  2026-01-05: watch=29 breakout=2
+  2026-01-07: watch=33 breakout=2
+  2026-01-08: watch=25 breakout=1
+  2026-01-14: watch=10 breakout=1
+  2026-01-15: ERROR Missing benchmark data for NIFTYBEES on 2026-01-15
+  2026-01-16: watch=8 breakout=1
+  2026-01-19: watch=6 breakout=1
+  2026-01-20: watch=2 breakout=1
+  2026-01-23: watch=1 breakout=1
+  2026-01-26: ERROR Missing benchmark data for NIFTYBEES on 2026-01-26
+  2026-02-17: watch=7 breakout=1
+  2026-02-18: watch=17 breakout=1
+  2026-02-20: watch=21 breakout=2
+  2026-02-24: watch=24 breakout=3
+  2026-02-25: watch=26 breakout=1
+  2026-02-26: watch=33 breakout=2
+  2026-03-03: ERROR Missing benchmark data for NIFTYBEES on 2026-03-03
+  2026-03-10: watch=6 breakout=1
+  2026-03-13: watch=1 breakout=1
+  Scanning ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4227/4227 0:13:41
+
+Done. succeeded=4003 failed=224

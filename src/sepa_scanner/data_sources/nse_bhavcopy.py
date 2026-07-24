@@ -78,11 +78,17 @@ def parse_bhavcopy_zip(zip_path: Path, allowed_series: list[str]) -> pl.DataFram
         ignore_errors=False,
     )
 
+    isin_expr = (
+        pl.col("ISIN").cast(pl.Utf8).str.strip_chars()
+        if "ISIN" in frame.columns
+        else pl.lit(None, dtype=pl.Utf8)
+    )
     normalized = (
         frame.with_columns(
             date=_parse_trade_date(),
             symbol=pl.col("TckrSymb").cast(pl.Utf8).str.strip_chars(),
             series=pl.col("SctySrs").cast(pl.Utf8).str.strip_chars(),
+            isin=isin_expr,
             open=pl.col("OpnPric").cast(pl.Float64),
             high=pl.col("HghPric").cast(pl.Float64),
             low=pl.col("LwPric").cast(pl.Float64),
@@ -94,6 +100,7 @@ def parse_bhavcopy_zip(zip_path: Path, allowed_series: list[str]) -> pl.DataFram
             "date",
             "symbol",
             "series",
+            "isin",
             "open",
             "high",
             "low",
@@ -125,6 +132,11 @@ def parse_legacy_bhavcopy_zip(zip_path: Path, allowed_series: list[str]) -> pl.D
     col_map = {c: c.strip() for c in frame.columns}
     frame = frame.rename(col_map)
 
+    isin_expr = (
+        pl.col("ISIN").cast(pl.Utf8).str.strip_chars()
+        if "ISIN" in frame.columns
+        else pl.lit(None, dtype=pl.Utf8)
+    )
     normalized = (
         frame.with_columns(
             date=pl.coalesce([
@@ -134,6 +146,7 @@ def parse_legacy_bhavcopy_zip(zip_path: Path, allowed_series: list[str]) -> pl.D
             ]),
             symbol=pl.col("SYMBOL").cast(pl.Utf8).str.strip_chars(),
             series=pl.col("SERIES").cast(pl.Utf8).str.strip_chars(),
+            isin=isin_expr,
             open=pl.col("OPEN").cast(pl.Float64),
             high=pl.col("HIGH").cast(pl.Float64),
             low=pl.col("LOW").cast(pl.Float64),
@@ -142,7 +155,7 @@ def parse_legacy_bhavcopy_zip(zip_path: Path, allowed_series: list[str]) -> pl.D
             turnover=pl.col("TOTTRDVAL").cast(pl.Float64),
         )
         .select(
-            "date", "symbol", "series",
+            "date", "symbol", "series", "isin",
             "open", "high", "low", "close",
             "volume", "turnover",
         )

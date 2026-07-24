@@ -38,6 +38,7 @@ def test_parse_bhavcopy_zip_normalizes_and_filters_rows(tmp_path: Path) -> None:
         "date",
         "symbol",
         "series",
+        "isin",
         "open",
         "high",
         "low",
@@ -45,7 +46,7 @@ def test_parse_bhavcopy_zip_normalizes_and_filters_rows(tmp_path: Path) -> None:
         "volume",
         "turnover",
     ]
-    assert frame.shape == (3, 9)
+    assert frame.shape == (3, 10)
     assert frame["symbol"].to_list() == ["HDFCBANK", "NIFTYBEES", "RELIANCE"]
     assert frame["date"].to_list() == [date(2026, 3, 7)] * 3
     assert frame["volume"].dtype == pl.Int64
