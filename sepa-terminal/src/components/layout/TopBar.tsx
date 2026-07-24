@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router'
 import {
   Activity,
+  Beaker,
   Command,
   FlaskConical,
   LayoutDashboard,
@@ -19,6 +20,7 @@ const NAV = [
   { to: '/', label: 'Overview', end: true, icon: LayoutDashboard },
   { to: '/scanner', label: 'Setup desk', end: false, icon: ScanSearch },
   { to: '/backtest', label: 'Research', end: false, icon: FlaskConical },
+  { to: '/lab', label: 'Lab', end: false, icon: Beaker },
 ]
 
 const regimeTone = { Strong: 'up', Weak: 'down', Neutral: 'warn' } as const

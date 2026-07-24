@@ -8,6 +8,8 @@ import { Dashboard } from '@/pages/Dashboard'
 import { Scanner } from '@/pages/Scanner'
 import { SymbolPage } from '@/pages/Symbol'
 import { Backtest } from '@/pages/Backtest'
+import { Lab } from '@/pages/Lab'
+import { LabRun } from '@/pages/LabRun'
 import { useUIStore } from '@/stores/ui'
 
 const queryClient = new QueryClient({
@@ -29,6 +31,7 @@ function Shell() {
   useHotkeys('g>d', () => navigate('/'))
   useHotkeys('g>s', () => navigate('/scanner'))
   useHotkeys('g>b', () => navigate('/backtest'))
+  useHotkeys('g>l', () => navigate('/lab'))
 
   return (
     <div className="flex h-screen min-w-[960px] flex-col overflow-hidden">
@@ -39,6 +42,8 @@ function Shell() {
           <Route path="/scanner" element={<Scanner />} />
           <Route path="/symbol/:symbol" element={<SymbolPage />} />
           <Route path="/backtest" element={<Backtest />} />
+          <Route path="/lab" element={<Lab />} />
+          <Route path="/lab/runs/:runId" element={<LabRun />} />
         </Routes>
       </main>
       <CommandPalette />
