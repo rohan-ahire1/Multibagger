@@ -38,6 +38,7 @@ params = BacktestParams(
     max_hold_days=settings.backtest.max_hold_days,
     target_r=settings.risk.target_r,
     exit_mode=ExitMode(settings.backtest.exit_mode),
+    baseline_tighten_r=settings.backtest.baseline_tighten_r,
     friction_enabled=True,
 )
 portfolio = {

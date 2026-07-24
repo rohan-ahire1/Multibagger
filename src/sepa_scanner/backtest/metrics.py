@@ -162,6 +162,9 @@ def summarize_backtest(
         avg_mae_r=(sum(mae_values) / len(mae_values)) if mae_values else None,
         avg_giveback_pct=(sum(giveback_values) / len(giveback_values)) if giveback_values else None,
         dead_money_exits=sum(1 for trade in trades if trade.status == "dead_money"),
+        stagnation_exits=sum(
+            1 for trade in trades if trade.status.startswith("stagnation")
+        ),
         exit_mode=exit_mode.value,
         breakeven_exits=breakeven_exits,
         partial_profit_exits=partial_profit_exits,

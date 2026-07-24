@@ -33,6 +33,7 @@ from sepa_scanner.backtest.exit_engine import (
     ExitConfig,
     TradeState,
     evaluate_exit,
+    evaluate_exit_baseline,
 )
 from sepa_scanner.backtest.models import ExitPhase
 from sepa_scanner.backtest.simulation import _build_exit_config, _rolling_mean, _rolling_min, _ema
@@ -140,6 +141,38 @@ class OpenPosition:
     rs_rank: float | None = None
     range10: float | None = None
     voldry: float | None = None
+    pending_exit_reason: str | None = None
+    bars_held: int = 0
+
+
+TRADE_RESULT_SCHEMA: dict[str, pl.DataType] = {
+    "symbol": pl.String,
+    "signal_date": pl.Date,
+    "status": pl.String,
+    "entry_ref": pl.Float64,
+    "stop": pl.Float64,
+    "pivot": pl.Float64,
+    "entry_date": pl.Date,
+    "entry_price": pl.Float64,
+    "exit_date": pl.Date,
+    "exit_price": pl.Float64,
+    "holding_days": pl.Int64,
+    "return_pct": pl.Float64,
+    "r_multiple": pl.Float64,
+    "mae_price": pl.Float64,
+    "mfe_price": pl.Float64,
+    "initial_risk_price": pl.Float64,
+    "mae_r": pl.Float64,
+    "mfe_r": pl.Float64,
+    "giveback_r": pl.Float64,
+    "peak_gain_capture_pct": pl.Float64,
+    "shares": pl.Float64,
+    "pnl": pl.Float64,
+    "sector": pl.String,
+    "rs_rank": pl.Float64,
+    "range10": pl.Float64,
+    "voldry": pl.Float64,
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -252,11 +285,19 @@ def resolve_exit_config(settings: Any) -> dict[str, Any]:
 
 def load_inputs(start_date: date, end_date: date) -> tuple[dict[str, Any], pl.DataFrame, pl.DataFrame]:
     settings = load_settings()
-    parquet_store = ParquetOhlcvStore(settings.runtime.data_dir / "yf_adjusted")
+    parquet_store = ParquetOhlcvStore(settings.runtime.data_dir / settings.data.panel_subdir)
     conn = duckdb.connect(str(settings.runtime.data_dir / "db" / "sepa.duckdb"), read_only=True)
 
-    signals = get_backtest_signals(conn, start_date=start_date, end_date=end_date, symbol=None)
+    signals = get_backtest_signals(
+        conn,
+        start_date=start_date,
+        end_date=end_date,
+        symbol=None,
+        include_pullbacks=settings.pullback.enabled,
+    )
     symbols = signals["symbol"].unique().to_list()
+    if settings.market.benchmark_symbol not in symbols:
+        symbols.append(settings.market.benchmark_symbol)
     diagnostics = get_backtest_diagnostics(conn, start_date=start_date, end_date=end_date, symbols=symbols)
     ohlcv_end_date = end_date + timedelta(days=(settings.backtest.pending_days + settings.backtest.max_hold_days) * 2)
     ohlcv = get_backtest_ohlcv(parquet_store, symbols=symbols, start_date=start_date, end_date=ohlcv_end_date)
@@ -290,6 +331,10 @@ def load_inputs(start_date: date, end_date: date) -> tuple[dict[str, Any], pl.Da
         max_hold_days=max(settings.backtest.max_hold_days, 90),
         target_r=settings.risk.target_r,
         exit_mode=ExitMode(settings.backtest.exit_mode),
+        baseline_tighten_r=settings.backtest.baseline_tighten_r,
+        stop_trigger_mode=settings.backtest.stop_trigger_mode,
+        signal_exit_execution=settings.backtest.signal_exit_execution,
+        slippage_bps=settings.backtest.slippage_bps,
         trail_activation_r=settings.exit_strategy.trail_activation_r,
         trail_pct=settings.exit_strategy.trail_pct,
         dead_money_days=settings.exit_strategy.dead_money_days,
@@ -297,6 +342,9 @@ def load_inputs(start_date: date, end_date: date) -> tuple[dict[str, Any], pl.Da
         dead_money_min_open_r=settings.exit_strategy.dead_money_min_open_r,
         dead_money_min_mfe_r=settings.exit_strategy.dead_money_min_mfe_r,
         dead_money_extend_to_breakeven=settings.exit_strategy.dead_money_extend_to_breakeven,
+        stagnation_exit_bars=settings.exit_strategy.stagnation_exit_bars,
+        stagnation_max_mfe_r=settings.exit_strategy.stagnation_max_mfe_r,
+        stagnation_max_open_r=settings.exit_strategy.stagnation_max_open_r,
         friction_enabled=True,
     )
 
@@ -464,7 +512,30 @@ def simulate_portfolio_python(
     trail_pct_bull: float = 0.25,
     trail_pct_bear: float = 0.15,
     trail_widen_r: float = 3.0,
+    stop_trigger_mode: str | None = None,
+    signal_exit_execution: str | None = None,
+    slippage_bps: float | None = None,
+    entry_day_collision_mode: str = "ignore",
 ) -> dict[str, Any]:
+    stop_trigger_mode = stop_trigger_mode or params.stop_trigger_mode
+    signal_exit_execution = signal_exit_execution or params.signal_exit_execution
+    slippage_bps = params.slippage_bps if slippage_bps is None else slippage_bps
+    stop_trigger_mode = {
+        "intraday": "intraday_active",
+    }.get(stop_trigger_mode, stop_trigger_mode)
+    if stop_trigger_mode not in {"close_only", "intraday_active", "intraday_hard"}:
+        raise ValueError(
+            "stop_trigger_mode must be 'close_only', 'intraday_active', or 'intraday_hard'"
+        )
+    if signal_exit_execution not in {"same_close", "next_open"}:
+        raise ValueError("signal_exit_execution must be 'same_close' or 'next_open'")
+    if slippage_bps < 0 or slippage_bps >= 10_000:
+        raise ValueError("slippage_bps must be between 0 and 10,000")
+    if entry_day_collision_mode not in {"ignore", "stop_after_fill"}:
+        raise ValueError(
+            "entry_day_collision_mode must be 'ignore' or 'stop_after_fill'"
+        )
+
     symbols = build_signal_rows(signals)
     symbol_data, unique_dates = build_symbol_data(ohlcv)
     print(f"Unique dates in simulation: {len(unique_dates)}")
@@ -498,6 +569,16 @@ def simulate_portfolio_python(
     def sector_cap_applies(sector: str) -> bool:
         return sector != "ETF"
 
+    def executable_session_stop(pos: OpenPosition) -> float:
+        if stop_trigger_mode != "intraday_hard":
+            return pos.active_stop
+        baseline_ema_modes = {
+            "baseline_ema10", "baseline_ema21", "baseline_ema_hybrid",
+        }
+        if params.exit_mode.value in baseline_ema_modes:
+            return max(pos.stop, pos.entry_price if pos.breakeven_activated else pos.stop)
+        return pos.active_stop
+
     signals_by_date: dict[date, list[dict[str, Any]]] = defaultdict(list)
     for signal in symbols:
         signals_by_date[signal["signal_date"]].append(signal)
@@ -507,8 +588,9 @@ def simulate_portfolio_python(
     equity_peak = initial_capital
     
     friction_enabled = getattr(params, "friction_enabled", False)
-    slippage_buy = 1.0 if not friction_enabled else 1.001
-    slippage_sell = 1.0 if not friction_enabled else 0.999
+    slippage_fraction = slippage_bps / 10_000.0
+    slippage_buy = 1.0 if not friction_enabled else 1.0 + slippage_fraction
+    slippage_sell = 1.0 if not friction_enabled else 1.0 - slippage_fraction
     tax_buy = 1.0 if not friction_enabled else 1.00118658
     tax_sell = 1.0 if not friction_enabled else 0.99896342
     dp_charge = 0.0 if not friction_enabled else 16.0
@@ -541,6 +623,7 @@ def simulate_portfolio_python(
 
             idx = sym_prices["date_to_idx"].get(today)
             if idx is not None:
+                pos.bars_held += 1
                 open_price = float(sym_prices["opens"][idx])
                 high_price = float(sym_prices["highs"][idx])
                 low_price = float(sym_prices["lows"][idx])
@@ -548,11 +631,37 @@ def simulate_portfolio_python(
                 holding_days = (today - pos.entry_date).days
                 market_hostile = not bool(entry_gate.get(today, True))
 
-                pos.mae_price = min(pos.mae_price, low_price)
-                pos.mfe_price = max(pos.mfe_price, high_price)
+                # A close-confirmed exit cannot transact at that already-observed
+                # close in the conservative execution model. Fill it at the next
+                # symbol-session open before evaluating any new bar information.
+                if pos.pending_exit_reason is not None:
+                    net_entry = pos.entry_price * slippage_buy * tax_buy
+                    net_exit = open_price * slippage_sell * tax_sell
+                    cash += pos.shares * net_exit - dp_charge
+                    closed_trades.append(
+                        close_trade_dict(
+                            symbol=pos.symbol, signal_date=pos.signal_date,
+                            status=f"{pos.pending_exit_reason}_next_open", entry_ref=pos.entry_ref,
+                            stop=pos.stop, pivot=pos.pivot,
+                            entry_date=pos.entry_date, entry_price=net_entry,
+                            exit_date=today, exit_price=net_exit,
+                            holding_days=holding_days,
+                            mae_price=pos.mae_price, mfe_price=pos.mfe_price,
+                            shares=pos.shares, sector=analysis_sector_map.get(pos.symbol, "UNKNOWN"),
+                            original_shares=pos.original_shares, realized_pnl=pos.realized_pnl,
+                            rs_rank=pos.rs_rank, range10=pos.range10, voldry=pos.voldry,
+                            friction_enabled=friction_enabled,
+                        )
+                    )
+                    open_positions.pop(i)
+                    continue
 
-                # --- Gap-down stop: if open gaps below stop, exit at open ---
-                if open_price <= pos.active_stop:
+                session_stop = executable_session_stop(pos)
+
+                # --- Gap-down stop: if open gaps below an executable stop, exit at open ---
+                if open_price <= session_stop:
+                    pos.mae_price = min(pos.mae_price, open_price)
+                    pos.mfe_price = max(pos.mfe_price, open_price)
                     net_entry = pos.entry_price * slippage_buy * tax_buy
                     net_exit = open_price * slippage_sell * tax_sell
                     cash += pos.shares * net_exit - dp_charge
@@ -560,6 +669,76 @@ def simulate_portfolio_python(
                         close_trade_dict(
                             symbol=pos.symbol, signal_date=pos.signal_date,
                             status="stopped", entry_ref=pos.entry_ref,
+                            stop=pos.stop, pivot=pos.pivot,
+                            entry_date=pos.entry_date, entry_price=net_entry,
+                            exit_date=today, exit_price=net_exit,
+                            holding_days=holding_days,
+                            mae_price=pos.mae_price, mfe_price=pos.mfe_price,
+                            shares=pos.shares, sector=analysis_sector_map.get(pos.symbol, "UNKNOWN"),
+                            original_shares=pos.original_shares, realized_pnl=pos.realized_pnl,
+                            rs_rank=pos.rs_rank, range10=pos.range10, voldry=pos.voldry,
+                            friction_enabled=friction_enabled,
+                        )
+                    )
+                    open_positions.pop(i)
+                    continue
+
+                pos.mae_price = min(pos.mae_price, low_price)
+                pos.mfe_price = max(pos.mfe_price, high_price)
+
+                # Conservative hard-stop model: the active stop entering this
+                # session is executable intraday. It is checked before today's
+                # close can ratchet an EMA stop, avoiding same-bar look-ahead.
+                if stop_trigger_mode != "close_only" and low_price <= session_stop:
+                    net_entry = pos.entry_price * slippage_buy * tax_buy
+                    net_exit = session_stop * slippage_sell * tax_sell
+                    cash += pos.shares * net_exit - dp_charge
+                    closed_trades.append(
+                        close_trade_dict(
+                            symbol=pos.symbol, signal_date=pos.signal_date,
+                            status="intraday_stop", entry_ref=pos.entry_ref,
+                            stop=pos.stop, pivot=pos.pivot,
+                            entry_date=pos.entry_date, entry_price=net_entry,
+                            exit_date=today, exit_price=net_exit,
+                            holding_days=holding_days,
+                            mae_price=pos.mae_price, mfe_price=pos.mfe_price,
+                            shares=pos.shares, sector=analysis_sector_map.get(pos.symbol, "UNKNOWN"),
+                            original_shares=pos.original_shares, realized_pnl=pos.realized_pnl,
+                            rs_rank=pos.rs_rank, range10=pos.range10, voldry=pos.voldry,
+                            friction_enabled=friction_enabled,
+                        )
+                    )
+                    open_positions.pop(i)
+                    continue
+
+                peak_r = (
+                    (pos.mfe_price - pos.entry_price) / pos.initial_risk
+                    if pos.initial_risk > 0.0
+                    else 0.0
+                )
+                open_r = (
+                    (close_price - pos.entry_price) / pos.initial_risk
+                    if pos.initial_risk > 0.0
+                    else 0.0
+                )
+                if (
+                    params.stagnation_exit_bars is not None
+                    and pos.bars_held >= params.stagnation_exit_bars
+                    and peak_r < params.stagnation_max_mfe_r
+                    and open_r <= params.stagnation_max_open_r
+                ):
+                    if signal_exit_execution == "next_open":
+                        pos.pending_exit_reason = "stagnation"
+                        i += 1
+                        continue
+
+                    net_entry = pos.entry_price * slippage_buy * tax_buy
+                    net_exit = close_price * slippage_sell * tax_sell
+                    cash += pos.shares * net_exit - dp_charge
+                    closed_trades.append(
+                        close_trade_dict(
+                            symbol=pos.symbol, signal_date=pos.signal_date,
+                            status="stagnation", entry_ref=pos.entry_ref,
                             stop=pos.stop, pivot=pos.pivot,
                             entry_date=pos.entry_date, entry_price=net_entry,
                             exit_date=today, exit_price=net_exit,
@@ -612,15 +791,26 @@ def simulate_portfolio_python(
                     avg_volume_50=float(sym_prices["avg_volume_50"][idx]),
                 )
 
-                # --- Call phased exit engine ---
-                market_regime = "defensive" if market_hostile else "bull"
-                actions = evaluate_exit(
-                    trade_state,
-                    bar=bar,
-                    config=phased_exit_config,
-                    market_regime=market_regime,
-                    rs_rank=80.0,
-                )
+                # --- Route to the exit engine selected by canonical config ---
+                baseline_modes = {
+                    "baseline_hard", "baseline_ema10", "baseline_ema21", "baseline_ema_hybrid"
+                }
+                if params.exit_mode.value in baseline_modes:
+                    actions = evaluate_exit_baseline(
+                        trade_state,
+                        bar=bar,
+                        exit_mode=params.exit_mode.value,
+                        tighten_r=params.baseline_tighten_r,
+                    )
+                else:
+                    market_regime = "defensive" if market_hostile else "bull"
+                    actions = evaluate_exit(
+                        trade_state,
+                        bar=bar,
+                        config=phased_exit_config,
+                        market_regime=market_regime,
+                        rs_rank=float(pos.rs_rank if pos.rs_rank is not None else 80.0),
+                    )
 
                 # --- Sync state back to OpenPosition ---
                 pos.phase = trade_state.phase
@@ -637,8 +827,11 @@ def simulate_portfolio_python(
                 status = ""
                 for action in actions:
                     if action.action == "SELL_ALL":
-                        exit_price = close_price
                         status = action.reason
+                        if signal_exit_execution == "next_open":
+                            pos.pending_exit_reason = status
+                        else:
+                            exit_price = close_price
                         break
                     elif action.action == "SELL_PARTIAL":
                         sell_shares = min(pos.shares, float(action.shares))
@@ -657,7 +850,11 @@ def simulate_portfolio_python(
                             pos.partial_exit_r = (net_sell - net_entry) / net_risk if net_risk > 0 else 0.0
 
                 # --- Hard max hold cap ---
-                if exit_price is None and holding_days >= params.max_hold_days:
+                if (
+                    exit_price is None
+                    and pos.pending_exit_reason is None
+                    and holding_days >= params.max_hold_days
+                ):
                     exit_price = close_price
                     status = "max_hold"
 
@@ -892,6 +1089,7 @@ def simulate_portfolio_python(
             filled = False
             open_price = float(sym_prices["opens"][idx])
             high_price = float(sym_prices["highs"][idx])
+            low_price = float(sym_prices["lows"][idx])
             target = float(pending.entry_ref)
 
             if open_price >= target or high_price >= target:
@@ -997,6 +1195,40 @@ def simulate_portfolio_python(
                                 target_price = None
                                 if params.target_r is not None:
                                     target_price = fill_price + (risk_per_share * params.target_r)
+
+                                if (
+                                    entry_day_collision_mode == "stop_after_fill"
+                                    and low_price <= pending.stop
+                                ):
+                                    net_exit = pending.stop * slippage_sell * tax_sell
+                                    cash += shares * net_exit - dp_charge
+                                    closed_trades.append(
+                                        close_trade_dict(
+                                            symbol=pending.symbol,
+                                            signal_date=pending.signal_date,
+                                            status="entry_day_stop",
+                                            entry_ref=pending.entry_ref,
+                                            stop=pending.stop,
+                                            pivot=pending.pivot,
+                                            entry_date=today,
+                                            entry_price=net_entry,
+                                            exit_date=today,
+                                            exit_price=net_exit,
+                                            holding_days=0,
+                                            mae_price=min(fill_price, low_price),
+                                            mfe_price=max(fill_price, high_price),
+                                            shares=shares,
+                                            sector=sector,
+                                            original_shares=shares,
+                                            realized_pnl=0.0,
+                                            rs_rank=pending.rs_rank,
+                                            range10=pending.range10,
+                                            voldry=pending.voldry,
+                                            friction_enabled=friction_enabled,
+                                        )
+                                    )
+                                    pending_signals.pop(j)
+                                    continue
 
                                 open_positions.append(
                                     OpenPosition(
@@ -1137,10 +1369,12 @@ def simulate_portfolio_python(
             *[pl.col(c).cast(pl.Float64) for c in cols_to_cast]
         ])
 
+    trades_df = pl.from_dicts(closed_trades, schema=TRADE_RESULT_SCHEMA, strict=False)
+
     return {
         "final_equity": cash,
         "daily_equity": daily_equity_df,
-        "trades": pl.DataFrame(closed_trades, infer_schema_length=10000).sort(["signal_date", "symbol"]),
+        "trades": trades_df.sort(["signal_date", "symbol"]),
         "open_positions": [
             {
                 "symbol": pos.symbol,
@@ -1208,6 +1442,11 @@ def empty_trade_dict(
         "r_multiple": None,
         "mae_price": None,
         "mfe_price": None,
+        "initial_risk_price": None,
+        "mae_r": None,
+        "mfe_r": None,
+        "giveback_r": None,
+        "peak_gain_capture_pct": None,
         "shares": None,
         "pnl": 0.0,
         "sector": sector,
@@ -1243,6 +1482,7 @@ def close_trade_dict(
     total_shares = original_shares if original_shares is not None else shares
     dp_charge = 16.0 if friction_enabled else 0.0
     pnl = realized_pnl + (shares * (exit_price - entry_price)) - (dp_charge if shares > 0.0 else 0.0)
+    peak_gain = mfe_price - entry_price
     return {
         "symbol": symbol,
         "signal_date": signal_date,
@@ -1259,6 +1499,13 @@ def close_trade_dict(
         "r_multiple": (pnl / (total_shares * risk)) if risk > 0.0 and total_shares > 1e-5 else None,
         "mae_price": mae_price,
         "mfe_price": mfe_price,
+        "initial_risk_price": risk if risk > 0.0 else None,
+        "mae_r": ((mae_price - entry_price) / risk) if risk > 0.0 else None,
+        "mfe_r": ((mfe_price - entry_price) / risk) if risk > 0.0 else None,
+        "giveback_r": (max(0.0, mfe_price - exit_price) / risk) if risk > 0.0 else None,
+        "peak_gain_capture_pct": (
+            ((exit_price - entry_price) / peak_gain) * 100.0 if peak_gain > 0.0 else None
+        ),
         "shares": total_shares,
         "pnl": pnl,
         "sector": sector,
@@ -1394,7 +1641,7 @@ def compute_regime_inputs(
     benchmark_curve: pl.DataFrame,
 ) -> pl.DataFrame:
     lookback_start = start_date - timedelta(days=500)
-    parquet_path = settings.runtime.data_dir / "yf_adjusted" / "ohlcv_all.parquet"
+    parquet_path = settings.runtime.data_dir / settings.data.panel_subdir / "ohlcv_all.parquet"
 
     breadth = (
         pl.scan_parquet(parquet_path)
@@ -1452,7 +1699,11 @@ def resolve_signal_quality_overrides(settings: Any) -> dict[str, Any]:
         "voldry_min": settings.backtest.signal_quality_voldry_min,
         "voldry_max": settings.backtest.signal_quality_voldry_max,
         "contraction_count_min": settings.backtest.signal_quality_contraction_min,
-        "contraction_count_max": settings.backtest.signal_quality_contraction_max,
+        "contraction_count_max": (
+            settings.backtest.signal_quality_contraction_max
+            if settings.backtest.signal_quality_contraction_max is not None
+            else settings.setup_vcp.contraction_max_count
+        ),
         "setup_active_streak_min": settings.backtest.signal_quality_setup_streak_min,
         "setup_active_streak_max": settings.backtest.signal_quality_setup_streak_max,
         "pivot_age_days_min": settings.backtest.signal_quality_pivot_age_min,
@@ -1603,6 +1854,16 @@ def filter_signals(
     quality_overrides: dict[str, Any] | None = None,
 ) -> pl.DataFrame:
     original_columns = list(signals.columns)
+    pullback_enabled = bool(
+        getattr(getattr(settings, "pullback", None), "enabled", False)
+    )
+    allowed_signal_types = (
+        ["BREAKOUT", "PULLBACK"]
+        if pullback_enabled
+        else ["BREAKOUT"]
+    )
+    if "signal_type" in signals.columns:
+        signals = signals.filter(pl.col("signal_type").is_in(allowed_signal_types))
     quality_filters = resolve_signal_quality_filters(
         quality_profile=quality_profile,
         overrides=quality_overrides,
@@ -1680,6 +1941,8 @@ def filter_signals(
             reporting_lag_days=fg.reporting_lag_days,
             freq=fg.freq,
             pass_if_missing=fg.pass_if_missing,
+            availability_date_column=fg.availability_date_column,
+            require_actual_announcement_date=fg.require_actual_announcement_date,
         )
         print(f"Signals after fundamental gate (>= {fg.min_yoy_growth:.0%} YoY): {filtered.height} (was {before})")
 
@@ -1933,24 +2196,33 @@ def main() -> None:
                 f"rust={rust_result['final_equity']}, python={py_result['final_equity']}"
             )
 
-    strategy_curve = py_result["daily_equity"].sort("date")
+    # OHLCV intentionally extends past ``end_date`` so positions opened near
+    # the boundary can be managed. Performance for the declared window must
+    # nevertheless stop at that boundary; otherwise the report silently uses
+    # future buffer returns while labelling them with the earlier end date.
+    strategy_curve = (
+        py_result["daily_equity"]
+        .filter((pl.col("date") >= start_date) & (pl.col("date") <= end_date))
+        .sort("date")
+    )
+    end_equity = float(strategy_curve["equity"][-1])
     trades = py_result["trades"]
     
-    first_entry = trades.filter(pl.col("entry_date").is_not_null())["entry_date"].min()
-    if first_entry is None:
-        first_entry = start_date
-
     joined_curve = join_strategy_and_benchmark(strategy_curve, benchmark_curve)
 
-    strategy_stats = compute_performance_stats(strategy_curve.select("date", "equity"), "equity", first_trade_date=first_entry)
-    benchmark_stats = compute_performance_stats(benchmark_curve.select("date", "tri"), "tri", first_trade_date=first_entry)
+    strategy_stats = compute_performance_stats(
+        strategy_curve.select("date", "equity"), "equity"
+    )
+    benchmark_stats = compute_performance_stats(
+        benchmark_curve.select("date", "tri"), "tri"
+    )
 
     strategy_roll = compute_rolling_cagr(joined_curve.select("date", "equity"), "equity")
     benchmark_roll = compute_rolling_cagr(joined_curve.select("date", "benchmark_tri"), "benchmark_tri")
     rolling_summary = compute_rolling_summary(strategy_roll, benchmark_roll)
 
     closed_trade_pnl = trades.filter(pl.col("entry_date").is_not_null()).drop_nulls(["pnl"])
-    total_pnl = float(py_result["final_equity"] - bundle["portfolio"]["initial_capital"])
+    total_pnl = end_equity - float(bundle["portfolio"]["initial_capital"])
     top10_trade_pnl = float(closed_trade_pnl.sort("pnl", descending=True).head(10)["pnl"].sum()) if closed_trade_pnl.height else 0.0
 
     year_contribution = compute_year_contribution(strategy_curve)
@@ -1970,13 +2242,15 @@ def main() -> None:
         "date_range": {"start": start_date.isoformat(), "end": end_date.isoformat()},
         "verification": {
             "rust_final_equity": float(rust_result["final_equity"]) if rust_result is not None else None,
-            "python_final_equity": float(py_result["final_equity"]),
+            "python_final_equity": end_equity,
             "rust_trade_rows": len(rust_result["trades"]) if rust_result is not None else None,
             "python_trade_rows": trades.height,
         },
         "strategy": {
             **strategy_stats,
-            "total_return_pct": (float(py_result["final_equity"]) / bundle["portfolio"]["initial_capital"] - 1.0),
+            "total_return_pct": (
+                end_equity / bundle["portfolio"]["initial_capital"] - 1.0
+            ),
             "filled_trades": int(closed_trade_pnl.height),
             "total_signals": int(filtered_signals.height),
         },

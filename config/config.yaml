@@ -66,7 +66,11 @@ risk:
 backtest:
   pending_days: 8  # D+1 onward symbol trading bars, never calendar days
   max_hold_days: 150
-  exit_mode: baseline_ema21
+  exit_mode: baseline_ema_hybrid
+  baseline_tighten_r: 5.0  # honest-execution plateau center: EMA21 after 3R, EMA10 after 5R
+  stop_trigger_mode: intraday_hard  # 7%/breakeven hard stop uses the session low
+  signal_exit_execution: next_open  # close-confirmed EMA signal executes next session
+  slippage_bps: 10.0  # each side, before statutory charges
   use_regime_entry_controls: false
   use_extended_exit_model: false
   max_signals_per_day: 20
@@ -103,16 +107,15 @@ portfolio:
   drawdown_close_pct: 0.70
   regime_gate_enabled: true
   pyramid_max_adds: 0
-  # Idle cash modeled as parked in a liquid fund / LIQUIDBEES (~6% p.a.).
-  # Avg exposure is only ~40%, so this adds ~+4 CAGR pts with unchanged DD.
-  # LIVE REQUIREMENT: actually park idle cash, else set 0. Strategy-only
-  # (cash_yield_apy=0) baseline: 21.18% CAGR — see docs/BACKTEST_TRUTH.md.
-  cash_yield_apy: 0.06
+  # Strategy performance excludes assumed income on idle cash. Model an actual
+  # liquid-fund deployment separately; never count it as SEPA alpha.
+  cash_yield_apy: 0.0
 
 # Minervini earnings-growth gate on breakouts. OFF until full survivorship-clean
 # data is sourced (current prototype data is partial/recent, survivorship-biased).
 # When on: drops breakouts whose point-in-time earnings YoY growth < min_yoy_growth;
-# symbols without data are kept (pass_if_missing). Validated to improve Calmar/DD.
+# symbols without data are kept (pass_if_missing). Corrected portfolio tests did
+# not improve the canonical strategy. Strict mode forbids period-end lag proxies.
 fundamental_gate:
   enabled: false
   data_path: data/reference/screener_annual.csv
@@ -130,6 +133,12 @@ watchlist:
 exit_strategy:
   max_loss_pct: 0.07
   absolute_max_loss_pct: 0.07
+  # Recycle stalled breakouts after 15 symbol sessions only when they never
+  # reached +0.4R and still close at/below entry. The close signal fills next open.
+  stagnation_exit_bars: 15
+  stagnation_max_mfe_r: 0.40
+  stagnation_max_open_r: 0.0
+  dead_money_days: null  # disable the legacy unconditional per-symbol time exit
   breakeven_activation_r: 2.0
   partial_profit_r: 8.0
   time_stop_days: null

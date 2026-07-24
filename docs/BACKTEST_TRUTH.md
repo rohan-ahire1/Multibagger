@@ -6,7 +6,18 @@
 > independent backtest engines/metrics historically disagreed, and tuning done in one
 > tool was lost or contradicted by another. Do not add new backtest scripts.
 
-Last verified: **2026-07-12** (D+1 entry and trading-bar pending-window correction)
+Last verified: **2026-07-19** (data cutover: survivorship-free NSE bhavcopy panel is now the
+default price source, `config.data.source: nse_bhavcopy`)
+
+> **DATA SOURCE CHANGE (2026-07-19).** Production now reads the self-built,
+> survivorship-free, corporate-action-adjusted NSE bhavcopy panel
+> (`data/nse_adjusted/ohlcv_all.parquet`, total-return basis) instead of the legacy
+> yfinance panel. The yfinance panel omitted ~16.8% of securities that ever traded
+> (delisted/merged names) — see `reports/data_audit/`. All canonical metrics below were
+> re-measured on the new panel. The pre-cutover yfinance DB is archived at
+> `data/db/sepa_PRE_CUTOVER_yfinance_20260719.duckdb`. **Known gap:** `sepa update` still
+> feeds the legacy yfinance panel; a daily-bhavcopy refresh job is not yet wired, so the
+> NSE panel must be refreshed manually via `scripts/nse_bhav_backfill.py` for now.
 
 ---
 
@@ -20,54 +31,80 @@ Key knobs of the committed config (see `config/config.yaml` for the full set):
 
 | Area | Knob | Value |
 |---|---|---|
-| Exit | `exit_mode` | `baseline_ema21` |
+| Exit | `exit_mode` | `baseline_ema_hybrid` |
+| Exit | `baseline_tighten_r` | `5.0` (EMA21 after 3R, EMA10 after 5R peak close) |
+| Exit | `stagnation_exit_bars` | `15` symbol sessions |
+| Exit | `stagnation_max_mfe_r` / `stagnation_max_open_r` | `0.40R` / `0.00R` |
+| Execution | `stop_trigger_mode` | `intraday_hard` (original/breakeven hard stops use session low) |
+| Execution | `signal_exit_execution` | `next_open` (close-confirmed EMA exits trade next session) |
+| Friction | `slippage_bps` | `10` each side, plus statutory charges and DP fee |
 | Exit | `use_extended_exit_model` | `false` (phased `ExitConfig` is NOT active) |
 | Entry | `backtest.rs_rank_min` / `rs_rank_max` | `70` / `100` |
 | Entry | `pending_days` | `8` D+1 onward symbol trading bars |
 | Entry | `max_signals_per_day` | `20` |
 | Entry | `signal_ranking_mode` | `default` |
+| Entry | `setup_vcp.contraction_max_count` | `2` (reject 3+ on breakout day) |
 | Sizing | `risk_per_trade_pct` | `0.020` |
 | Sizing | `max_positions` | `20` |
 | Sizing | `max_name_pct` | `0.20` |
 | Sizing | `max_sector_positions` | `4` |
-| Cash | `cash_yield_apy` | `0.06` (idle cash in liquid fund; 0 disables) |
+| Cash | `cash_yield_apy` | `0.0` (assumed idle-cash income is excluded from strategy CAGR) |
 
 ---
 
 ## Canonical metrics (honest, equity-curve based)
 
-Window: full history **2010-01-04 → latest bar**. Metric source: the real `daily_equity`
+Window: signal dates **2010-01-04 → 2026-03-17** (later OHLCV is loaded so open
+trades can be managed). Metric source: the real `daily_equity`
 curve from `simulate_portfolio_python` (friction on: slippage + STT/charges + DP fee).
 **Not** the serial-R-compound number the CLI prints (see "Known traps").
 
 | Config | CAGR | Max DD | Calmar | Trades |
 |---|---|---|---|---|
-| **Committed (cash yield 6%)** | **13.30%** | 18.34% | 0.72 | 349 |
-| Strategy-only (`cash_yield_apy: 0`) | 9.01% | 22.92% | 0.39 | 348 |
+| **Committed strategy-only** (`cash_yield_apy: 0`) — NSE panel | **12.48%** | **24.28%** | **0.51** | 281 |
+| Total portfolio: + 6% idle-cash yield sleeve | 17.20% | 15.08% | 1.14 | 278 |
+| Legacy yfinance panel (pre-cutover, survivor-biased) | 14.03% | 15.01% | 0.93 | 287 |
 
-Verified 2026-07-12 with data through 2026-07-09. The simulator now accepts entries
+**Survivorship is the whole difference between the last two rows.** Like-for-like (same
+committed config), moving from the survivor-biased yfinance panel to the survivorship-free
+NSE panel costs only ~1.5 CAGR pts (14.03→12.48) but **nearly doubles max drawdown
+(15.0→24.3) and halves Calmar (0.93→0.51)**. The trend-exit sells losers before they fully
+collapse, so return is barely dented — but the delisted blow-ups (DHFL, SINTEX, ALBK…) still
+hit hard on the ride, and their absence had been *hiding the true drawdown*. This refines the
+old "survivorship not a blocker" conclusion below: it does not inflate CAGR, it hides risk.
+
+The +6% idle-cash row is the **total-portfolio** outcome (exposure averages ~40%, so ~60% of
+capital is idle). It both recovers CAGR and pulls drawdown back to 15% because idle cash
+buffers the equity blow-ups. Per policy the committed *strategy* headline still excludes it
+(`cash_yield_apy: 0`); deploy idle cash in a liquid instrument and track it as a separate
+sleeve. ~+0.8 CAGR pts per +1% APY.
+
+Verified 2026-07-16 with OHLCV through 2026-07-09. The simulator accepts entries
 only from D+1 and counts `pending_days` as symbol trading bars. **No filled trade enters
 on its EOD signal date.** Small CAGR drift is expected as the data window extends.
 
-**The two numbers are the SAME strategy.** `cash_yield_apy` (added 2026-07-11) models
-idle cash parked in a liquid fund/LIQUIDBEES at 6% p.a. Avg exposure is only ~40%,
-so yield on the idle ~60% adds ~+4.3 CAGR pts — arithmetic,
-not signal edge. Setting it to 0 reproduces the strategy-only baseline exactly.
-**Live requirement:** the 13.30% only holds if idle cash is actually parked; the
-trade-signal edge itself is the 9.01% line. Do not "improve" on 13.30% by tuning
-signal knobs against it — compare signal changes at `cash_yield_apy: 0`.
+The 6% reference is arithmetic on uninvested cash, not SEPA alpha, and is excluded from
+the committed headline. If idle cash is actually deployed into a liquid instrument, track
+that return as a separate sleeve rather than adding it to strategy CAGR.
 
-**Unresolved execution caveat:** this D+1-corrected result still uses the phased exit
-engine even though config labels the strategy `baseline_ema21`. Do not treat it as a
-validated baseline-EMA21 result until the exit-engine mismatch is corrected and parity is
-re-established.
+The former 19.41% / 14.85% / 1.31 headline used two optimistic execution semantics:
+the 7% "hard" stop ignored an intraday low unless the close also failed, and a close-confirmed
+EMA exit filled at that already-observed close. It is retained only as a legacy comparison.
+Under the same 7R exit with honest execution, strategy-only performance is
+13.61% / 15.76% / 0.86; revalidating the exit neighborhood selected the 5R plateau center.
+
+The prior parity report (13.30% / 18.34% / 0.72) was invalid for the configured strategy:
+`portfolio_diagnostics.py` silently routed `baseline_ema21` through the phased exit engine.
+The route is now covered by a regression test. The repaired, like-for-like EMA21 baseline
+before the accepted entry/exit changes was 16.36% / 17.13% / 0.96 with cash yield.
 
 ### How to reproduce (the ONLY authoritative command)
 
 ```bash
 uv run python optimize_joint_wf.py --parity
-# expect (data through 2026-07-09): CAGR=13.30%  MaxDD=18.34%  Calmar=0.72  trades=349
-# with cash_yield_apy: 0            CAGR=9.01%   MaxDD=22.92%  Calmar=0.39  trades=348
+# expect (NSE panel, signals through 2026-03-17): CAGR=12.48%  MaxDD=24.28%  Calmar=0.51  trades=281
+# total portfolio (6% idle-cash sleeve):          CAGR=17.20%  MaxDD=15.08%  Calmar=1.14  trades=278
+# legacy yfinance panel for comparison:           CAGR=14.03%  MaxDD=15.01%  Calmar=0.93  trades=287
 ```
 
 This runs the full production path (quality filters + sector map + exits + friction).
@@ -78,9 +115,114 @@ other result.
 
 ## Rejected candidates / tested-and-failed changes (do NOT re-wire these)
 
-All parameter-comparison results below were measured before the 2026-07-12 D+1 correction.
-They are historical notes only and must be revalidated on the corrected execution model before
-they can justify any configuration decision.
+### Current validation pass (2026-07-17)
+
+All figures in this subsection use strategy-only cash yield, the honest canonical route,
+three overlapping regime folds, and the 2023+ validation slice. That slice has now been
+inspected repeatedly and is no longer described as a pristine holdout.
+
+- **Accepted entry remains: reject breakout-day `contraction_count >= 3`.** Under honest
+  execution, max count 2 produces 13.61% CAGR / 15.76% DD / 0.86 Calmar with fold
+  Calmars 0.25 / 0.70 / 1.60. Allowing 3 produces 11.64% / 16.84% / 0.69 with
+  folds 0.23 / 0.53 / 1.08; allowing all is 12.31% / 17.48% / 0.70. A cap of 1
+  becomes too selective at 9.69% / 13.33% / 0.73. Keep max count 2.
+- **Accepted exit: EMA21 → EMA10 at 5R peak close.** Plain EMA21 produces
+  12.38% / 17.30% / 0.72; the 5R hybrid produces 13.96% / 15.34% / 0.91.
+  The 4.5R and 5.5R neighbors also improve on EMA21, and 5R has the best balanced
+  fold score across the local plateau. These figures precede the stagnation exit below.
+- **Accepted stagnation exit: 15 symbol sessions, peak below +0.4R, close at/below
+  entry, execute next open.** Full history improves from 13.96% / 15.34% / 0.91 to
+  **14.03% / 15.01% / 0.93**. Fold Calmars improve 0.302→0.308, 0.802→0.840,
+  and 1.406→1.724; 2023+ improves 19.13% / 14.53% / 1.32 to
+  **21.37% / 13.90% / 1.54**. Only 7 of 287 full-history trades exit this way:
+  six later became full-stop losses, one later reached +0.67R, and none became a ≥3R winner.
+  Adjacent 15–30-session and 0.3R–0.5R tests were used to reject a sharp optimum;
+  15/0.4 is the best balanced fold/stress center, not the best full-history cell. Exact
+  comparisons are in `reports/portfolio_diagnostics/2010-01-04_2026-03-17/stagnation_exit_validation.csv`.
+- **Execution stress:** close-only stops plus same-close EMA fills reproduce the old
+  15.73% / 18.67% / 0.84 strategy-only result. Hard intraday original/breakeven
+  stops plus next-open EMA/stagnation fills produce 14.03% / 15.01% / 0.93. At
+  25 bps slippage per side this is 12.97% / 16.13% / 0.80; at 50 bps per side,
+  10.80% / 18.62% / 0.58. A conservative entry-day stop-first collision stress is
+  14.29% / 15.59% / 0.92; combined with 25 bps it is 11.69% / 16.96% / 0.69.
+  Execution quality and unknown intraday sequencing remain binding operational risks.
+- **Concentration stress:** cutting max name size from 20% to 10% reduces full-history
+  strategy-only CAGR to 9.28% and DD to 11.31% (Calmar 0.82), while improving the
+  2023+ slice to 1.79 Calmar. A two-name/40% sector cap lowers full Calmar to 0.74.
+  The committed 20% name cap remains aggressive; use smaller sizing for a lower-risk pilot.
+  Realized deployment averages 40.4% (median two positions), but reaches 100%; the largest
+  sector reached 80.0% of equity and exceeded 48.2% on 5% of sessions. Six of 17 calendar
+  years were negative, so low average exposure does not eliminate clustering/regime risk.
+
+The remaining rejection notes in this subsection were measured before the honest-execution
+switch unless they explicitly say otherwise. They justify leaving those features disabled,
+but must be rerun under `intraday_hard`/`next_open` before any future reconsideration.
+- **Rejected entry filters:** tighter `range10`, tighter volume dry-up, and their
+  combinations improved selected windows but failed the holdout or adjacent thresholds.
+  Raising breakout-volume requirements was directionally harmful in the feature cohorts.
+  Keep RS minimum 70, pending window 8 bars, `range10_max=0.08`, and `voldry_max=0.9`.
+- **Rejected exits:** earlier breakeven at 1R–2.5R, hard-stop only, EMA10-only, and the
+  phased exit. Earlier breakeven materially reduced CAGR; hard-stop only raised drawdown;
+  EMA10-only lowered drawdown but lost holdout CAGR/Calmar; phased exits were much worse.
+- **Rejected adjacent controls:** offense-score linear/band sizing, no January exclusion,
+  risk at 1.0%/1.5%/2.5%, and name caps at 15%/25%. None improved the complete
+  fold/full/holdout set. Keep quality sizing off, January excluded, 2% risk, and 20% max name.
+- **Regime and breadth gates:** tested benchmark/breadth variants did not improve robustly;
+  keep `use_regime_entry_controls: false`.
+- **Maximum hold:** 100, 120, 130, 135, 140, 145, 150, and 165-day caps were
+  compared across the same folds and holdout. A 135-day cap was the best isolated
+  cell (15.73% → 16.49% full-history CAGR), but adjacent 130/140/145-day values did
+  not preserve the gain and the earliest fold remained weak. Keep 150 days.
+- **Stop normalization:** widening tight initial stops to 2%–4%, and rejecting signals
+  below minimum stop distances, produced no stable neighborhood. The apparent 3%
+  floor improvement came with worse first-fold behavior and failed at 2.5%/3.5%; it
+  was fill-condition confounding, not reliable entry quality. Keep the structural/7%
+  capped stop and existing sizing.
+- **Failed-breakout re-entry:** a causal prototype waited for an original fill to stop,
+  then for a later close to reclaim the original entry with trend/RS/setup confirmation,
+  and entered only from the following day. It improved the favorable 2023+ holdout
+  but raised full-history drawdown to roughly 21%–26% and cut the earliest-fold Calmar.
+  Quarter- and half-risk variants still failed the complete window set. Do not add re-entry.
+- **Lagged volatility sizing:** down-only and symmetric 20-day benchmark-volatility
+  scaling slightly improved selected full-history cells but reduced holdout CAGR/Calmar.
+  Keep fixed per-trade risk; any future volatility overlay must remain lagged by one bar.
+- **Sector leadership:** point-in-time 63-day sector-return ranks at thresholds 20–80
+  all reduced full-history and/or holdout results. Keep sector caps, but no sector-alpha gate.
+- **Fundamental growth:** corrected annual-growth gates at 15%–35% all reduced canonical
+  performance on the partial local Screener dataset. The gate remains disabled. Its data
+  path now supports actual NSE broadcast timestamps and strict mode refuses lag-proxy files;
+  this is research infrastructure, not an accepted source of alpha.
+- **Episodic-pivot strategy:** the existing independent prototype was materially negative
+  in train and holdout. It remains isolated under `strategies/episodic_pivots/` and must not
+  feed SEPA re-entry or signal ranking.
+- **Large structural pass (2026-07-17):** next-open retest entries, gap filters,
+  failed-breakout exits, Chandelier/ATR trails, wider initial stops, longer holds,
+  tail-only pyramids, regime-adaptive EMA10 exits, and adaptive solo-position
+  concentration all failed the complete fold/full/validation/stress set. Do not revive
+  individual best cells without a new causal hypothesis and new data.
+- **Point-in-time fundamentals and momentum acceleration:** official NSE result-filing
+  timestamps now cover most 2013–2024 signals, but earnings-growth gates and filing-recency
+  sizing failed sealed validation. Momentum acceleration was directionally predictive at
+  trade level but hard gates, sizing tilts, and priority ordering did not improve the
+  portfolio robustly. Keep both as research features, not production alpha.
+- **Relaxing entry quality to increase opportunity supply:** raising `voldry_max` from
+  0.90 to 1.00 looked attractive on full history (14.37% / 13.89% / 1.03) but weakened
+  two of three earlier folds and had no stable neighborhood. Relaxing range, setup streak,
+  or combinations increased drawdown faster than CAGR. Keep the existing entry gates.
+- **Pullback-continuation second entry (2026-07-23): rejected.** The default EMA21
+  pullback increased average exposure only from 38.3% to 42.0% and had low same-name/month
+  overlap with breakouts (3.8%), but worsened full-history performance from
+  **12.48% / 24.28% / 0.51** to **11.57% / 30.12% / 0.38**. It failed folds 2–3,
+  the 2023+ validation slice, and both 25/50 bps stresses. Three of 54 grid cells passed
+  the full-history screen, all using SMA50 plus a 15-session de-dup window, but every one
+  failed the required fold/validation Calmar or drawdown bar and both stresses. Keep
+  `pullback.enabled: false`; details are in
+  `reports/pullback_experiment/2010-01-04_2026-03-17/validation_report.md`.
+
+### Legacy historical notes
+
+The older comparisons below predate the 2026-07-12 D+1 correction. They are retained as
+research history and must be revalidated before they justify a future configuration change.
 
 - **"27% joint candidate"** (`best_joint_params.json` → `holdout_candidate`):
   rs55 / vol_mult 1.7 / max_signals 8 / phased exit (be 2.75R, partial 3.5R, trail 0.15/0.10, time_stop 15).
@@ -129,10 +271,28 @@ they can justify any configuration decision.
    command prints this. **Ignore it.** Use the equity-curve CAGR from `--parity`.
 3. **Two signal filters.** Raw `signals` table vs `filter_signals` (rs/quality/per-day). The
    canonical path always uses `filter_signals` with the committed `rs_rank_min`.
-4. **Dead exit knobs.** When `exit_mode` is a `baseline_*` mode, the phased `ExitConfig` overrides
-   are inert. Tuning `ExitConfig` while `exit_mode=baseline_ema21` changes nothing.
+4. **Dead exit knobs.** When `exit_mode` is a `baseline_*` mode, phased `ExitConfig`
+   overrides are inert. The committed hybrid reads `backtest.baseline_tighten_r`; tuning
+   phased breakeven/partial/trail percentages changes nothing.
+5. **Benchmark omission.** Regime controls require NIFTYBEES OHLCV even when it has no
+   trade signal. `load_inputs` now appends the benchmark explicitly; do not remove it.
+6. **Pseudo point-in-time fundamentals.** A reporting deadline or `period_end + N days`
+   is not an announcement timestamp. If the experimental fundamental gate is ever enabled,
+   require actual exchange dissemination dates. The committed strict setting fails closed.
+7. **Same-close exit hindsight.** A close-confirmed EMA failure cannot normally fill at
+   that already-observed close. The committed model schedules it for the next symbol-session
+   open. Do not restore `same_close` to improve a backtest.
+8. **Soft stops disguised as hard stops.** The original/breakeven stop is an executable
+   intraday level in committed config. `close_only` is available solely to reproduce the
+   legacy research result; it is not the live risk model.
 
-## Survivorship — TESTED 2026-06-12, NOT a go-live blocker
+## Survivorship — SUPERSEDED 2026-07-19 by the daily-engine cutover
+
+> **UPDATE 2026-07-19.** This section's "not a blocker" conclusion came from a *coarse weekly
+> proxy*. The real daily engine on a survivorship-free daily NSE bhavcopy panel now shows
+> survivorship **does not inflate CAGR (−1.5 pts) but nearly doubles max drawdown (15→24%)
+> and halves Calmar (0.93→0.51)** — it was hiding risk, not return. Production has been cut
+> over to the survivorship-free panel. The weekly-proxy analysis below is retained as history.
 
 The yfinance price panel under-covers delisted NSE names: of 3,447 point-in-time EQ symbols
 (from bhavcopy snapshots), **36% (1,233) have no yfinance OHLCV**, and of 223 names the committed
@@ -179,11 +339,16 @@ wrong: it's lumpy *alpha*. Even subtracting a 6% risk-free, alpha stays +12–28
 
 ## Remaining caveat (the real one)
 
-The return and trade-profile figures below are pre-D+1 historical diagnostics and must
-be regenerated after the exit-engine correction.
+The corrected canonical strategy-only outcome set contains 287 fills: 36.2% winners,
+average winner +3.34R, average loss −1.03R, and median trade −1.00R. The best 10%
+of trades supply about 111% of net R, while the 19 trades at 5R or better supply about
+82%. This is a highly tail-dependent trend strategy: clipping exceptional
+winners or abandoning it during a quiet regime can erase most of the long-run edge.
 
-- **Regime concentration:** ~4 years (2017 +53%, 2021 +86%, 2023 +70%, 2024 +57%) carry essentially
-  the entire CAGR; 2011–2016 is flat-to-down. This is lumpy midcap-momentum beta — long dead stretches
-  punctuated by bursts. Behavioral/sizing risk (abandoning before a burst), not a data problem.
-- Trade profile: 37.4% win rate, avg win +4.56R / avg loss −0.76R, **top 10% of trades = 74% of profit**.
-  Tail-driven, as expected for breakout momentum.
+The non-aggregated research artifacts are generated by the existing
+`scripts/run_signal_quality_research.py` workflow under
+`data/backtest/signal_quality_research/`. They include per-signal fill delay, gap,
+initial risk, first stop/1R/2R/3R/5R timing, multi-horizon MFE/MAE, price/volume/regime
+features, canonical outcomes, and the strategy-only equity curve. Treat cohort results as
+hypothesis generation; configuration changes still require fold, neighborhood, and holdout
+validation in the canonical harness.

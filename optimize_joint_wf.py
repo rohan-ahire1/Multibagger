@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -112,7 +113,16 @@ def _metrics(daily_equity: pl.DataFrame, start: date, end: date):
     return {"cagr": cagr, "mdd": abs(mdd), "calmar": calmar, "final": float(e[-1])}
 
 
-def run_config(entry_ov: dict, exit_ov: dict, start: date, end: date):
+def run_config(
+    entry_ov: dict,
+    exit_ov: dict,
+    start: date,
+    end: date,
+    *,
+    simulation_ov: dict | None = None,
+    portfolio_ov: dict | None = None,
+    params_ov: dict | None = None,
+):
     """Run the production engine for a window with entry/exit overrides applied."""
     win_lo = start
     win_hi = end + timedelta(days=BUFFER_DAYS)
@@ -120,9 +130,9 @@ def run_config(entry_ov: dict, exit_ov: dict, start: date, end: date):
     ohlcv = _ohlcv.filter((pl.col("date") >= win_lo) & (pl.col("date") <= win_hi))
 
     overrides = dict(_BASE_OVERRIDES)
-    for k in ("vol_mult_min", "voldry_min"):
-        if entry_ov.get(k) is not None:
-            overrides[k] = entry_ov[k]
+    for key, value in entry_ov.items():
+        if key in overrides and value is not None:
+            overrides[key] = value
     rs_min = entry_ov.get("rs_rank_min", _settings.backtest.rs_rank_min)
     max_spd = entry_ov.get("max_signals_per_day", _settings.backtest.max_signals_per_day)
 
@@ -138,8 +148,10 @@ def run_config(entry_ov: dict, exit_ov: dict, start: date, end: date):
     esm = {d: v for d, v in _ENTRY_SIZE_MULT.items() if start <= d <= win_hi}
 
     ex = {**_BASE_EXIT, **exit_ov}
+    portfolio = {**_portfolio, **(portfolio_ov or {})}
+    params = replace(_params, **(params_ov or {}))
     res = diag.simulate_portfolio_python(
-        filt, ohlcv, _params, _portfolio, _sector_map,
+        filt, ohlcv, params, portfolio, _sector_map,
         exit_config=ex if _settings.backtest.use_extended_exit_model else None,
         entry_gate=eg, entry_size_mult=esm,
         breakeven_activation_r=ex["breakeven_activation_r"],
@@ -148,6 +160,7 @@ def run_config(entry_ov: dict, exit_ov: dict, start: date, end: date):
         trail_pct_bull=ex["trail_pct_bull"],
         trail_pct_bear=ex["trail_pct_bear"],
         trail_widen_r=ex["trail_widen_r"],
+        **(simulation_ov or {}),
     )
     m = _metrics(res["daily_equity"], start, end)
     tr = res["trades"]
@@ -167,9 +180,21 @@ def run_config(entry_ov: dict, exit_ov: dict, start: date, end: date):
 def parity():
     print("=== PARITY CHECK (base config, D+1 entry / trading-bar pending window) ===")
     m = run_config({}, {}, FULL_START, FULL_END)
+    cash_reference = run_config(
+        {}, {}, FULL_START, FULL_END, portfolio_ov={"cash_yield_apy": 0.06}
+    )
     print(f"  CAGR={m['cagr']*100:.2f}%  MaxDD={m['mdd']*100:.2f}%  Calmar={m['calmar']:.2f}  trades={m['trades']}")
-    print("  committed (cash yield 6%): CAGR=13.30%  MaxDD=18.34%  Calmar=0.72  trades=349")
-    print("  strategy-only (cash_yield_apy: 0): CAGR=9.01%  MaxDD=22.92%  Calmar=0.39  trades=348")
+    print(
+        "  committed strategy-only (cash yield 0%): "
+        f"CAGR={m['cagr']*100:.2f}%  MaxDD={m['mdd']*100:.2f}%  "
+        f"Calmar={m['calmar']:.2f}  trades={m['trades']}"
+    )
+    print(
+        "  reference only (assumed idle-cash yield 6%; excluded from SEPA metrics): "
+        f"CAGR={cash_reference['cagr']*100:.2f}%  "
+        f"MaxDD={cash_reference['mdd']*100:.2f}%  "
+        f"Calmar={cash_reference['calmar']:.2f}  trades={cash_reference['trades']}"
+    )
 
 
 def objective_value(entry_ov: dict, exit_ov: dict):

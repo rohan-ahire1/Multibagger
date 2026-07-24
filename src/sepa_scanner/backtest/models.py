@@ -27,6 +27,7 @@ class ExitMode(str, Enum):
     BASELINE_HARD = "baseline_hard"       # hard stop only, no trail
     BASELINE_EMA10 = "baseline_ema10"     # trail on 10-day EMA after breakeven
     BASELINE_EMA21 = "baseline_ema21"     # trail on 21-day EMA after breakeven
+    BASELINE_EMA_HYBRID = "baseline_ema_hybrid"  # EMA21, then EMA10 for exceptional winners
 
 
 EXIT_MODE_LABELS: dict[ExitMode, str] = {
@@ -35,6 +36,10 @@ EXIT_MODE_LABELS: dict[ExitMode, str] = {
     ExitMode.V2_TRAIL_21EMA: "V2 Trail 21-EMA",
     ExitMode.V3_TRAIL_PCT: "V3 Trail Percentage",
     ExitMode.MINERVINI_PHASED: "Minervini Phased",
+    ExitMode.BASELINE_HARD: "Baseline Hard Stop",
+    ExitMode.BASELINE_EMA10: "Baseline 10-EMA",
+    ExitMode.BASELINE_EMA21: "Baseline 21-EMA",
+    ExitMode.BASELINE_EMA_HYBRID: "Baseline EMA Hybrid",
 }
 
 
@@ -44,6 +49,7 @@ class BacktestParams:
     max_hold_days: int = 150
     target_r: float | None = None
     exit_mode: ExitMode = ExitMode.MINERVINI_PHASED
+    baseline_tighten_r: float = 7.0
     trail_activation_r: float = 2.0
     trail_pct: float = 0.20
     dead_money_days: int | None = 15
@@ -51,7 +57,13 @@ class BacktestParams:
     dead_money_min_open_r: float = 0.0
     dead_money_min_mfe_r: float = 0.75
     dead_money_extend_to_breakeven: bool = False
+    stagnation_exit_bars: int | None = None
+    stagnation_max_mfe_r: float = 0.40
+    stagnation_max_open_r: float = 0.0
     friction_enabled: bool = False
+    stop_trigger_mode: str = "close_only"
+    signal_exit_execution: str = "same_close"
+    slippage_bps: float = 10.0
 
     def __post_init__(self) -> None:
         if self.pending_days <= 0:
@@ -62,6 +74,8 @@ class BacktestParams:
             raise ValueError("target_r must be positive when provided")
         if self.trail_activation_r <= 0:
             raise ValueError("trail_activation_r must be positive")
+        if self.baseline_tighten_r <= 0:
+            raise ValueError("baseline_tighten_r must be positive")
         if self.trail_pct <= 0 or self.trail_pct >= 1.0:
             raise ValueError("trail_pct must be between 0 and 1 (exclusive)")
         if self.dead_money_days is not None and self.dead_money_days <= 0:
@@ -70,6 +84,16 @@ class BacktestParams:
             raise ValueError("dead_money_extend_days must be non-negative")
         if self.dead_money_min_mfe_r < 0:
             raise ValueError("dead_money_min_mfe_r must be non-negative")
+        if self.stagnation_exit_bars is not None and self.stagnation_exit_bars <= 0:
+            raise ValueError("stagnation_exit_bars must be positive when provided")
+        if self.stagnation_max_mfe_r < 0:
+            raise ValueError("stagnation_max_mfe_r must be non-negative")
+        if self.stop_trigger_mode not in {"close_only", "intraday_active", "intraday_hard"}:
+            raise ValueError("invalid stop_trigger_mode")
+        if self.signal_exit_execution not in {"same_close", "next_open"}:
+            raise ValueError("invalid signal_exit_execution")
+        if self.slippage_bps < 0 or self.slippage_bps >= 10_000:
+            raise ValueError("slippage_bps must be between 0 and 10,000")
 
 
 @dataclass(slots=True)
@@ -130,6 +154,7 @@ class BacktestSummary:
     avg_mae_r: float | None = None
     avg_giveback_pct: float | None = None
     dead_money_exits: int = 0
+    stagnation_exits: int = 0
     exit_mode: str = ExitMode.MINERVINI_PHASED.value
     breakeven_exits: int = 0
     partial_profit_exits: int = 0

@@ -24,4 +24,4 @@ def get_duckdb_store() -> DuckDbStore:
 @lru_cache
 def get_parquet_store() -> ParquetOhlcvStore:
     settings = get_settings()
-    return ParquetOhlcvStore(settings.runtime.data_dir / "yf_adjusted")
+    return ParquetOhlcvStore(settings.runtime.data_dir / settings.data.panel_subdir)

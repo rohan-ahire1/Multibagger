@@ -21,13 +21,16 @@ def get_backtest_signals(
     start_date: date | None,
     end_date: date | None,
     symbol: str | None = None,
+    *,
+    include_pullbacks: bool = False,
 ) -> pl.DataFrame:
+    signal_types = ["BREAKOUT", "PULLBACK"] if include_pullbacks else ["BREAKOUT"]
     query = """
         SELECT *
         FROM signals
-        WHERE signal_type = 'BREAKOUT'
+        WHERE signal_type IN (SELECT UNNEST(?))
     """
-    params: list[object] = []
+    params: list[object] = [signal_types]
     if start_date is not None:
         query += "\nAND signal_date >= ?"
         params.append(start_date)

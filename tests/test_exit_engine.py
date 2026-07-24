@@ -16,6 +16,7 @@ from sepa_scanner.backtest.exit_engine import (
     compute_trail_value,
     detect_climax_top,
     evaluate_exit,
+    evaluate_exit_baseline,
     select_trail_mode,
     tighten_trail,
     _should_tighten,
@@ -44,6 +45,46 @@ def test_exit_mode_labels_includes_minervini_phased() -> None:
 
     assert ExitMode.MINERVINI_PHASED in EXIT_MODE_LABELS
     assert EXIT_MODE_LABELS[ExitMode.MINERVINI_PHASED] == "Minervini Phased"
+
+
+def test_baseline_ema_hybrid_tightens_only_after_peak_reaches_threshold() -> None:
+    trade = TradeState(
+        symbol="ABC",
+        entry_date=date(2026, 3, 1),
+        entry_price=100.0,
+        initial_risk=5.0,
+        initial_stop=95.0,
+        planned_shares=100,
+        breakeven_activated=True,
+        active_stop=100.0,
+    )
+    slow_bar = BarData(
+        open=129.0, high=131.0, low=128.0, close=130.0, volume=1_000_000,
+        sma_50=110.0, sma_200=100.0, ema_10=125.0, ema_21=120.0,
+        ema_50=110.0, low_10d=118.0, prev_close=129.0,
+        avg_range_20=3.0, avg_volume_50=900_000.0,
+    )
+    evaluate_exit_baseline(
+        trade,
+        bar=slow_bar,
+        exit_mode=ExitMode.BASELINE_EMA_HYBRID.value,
+        tighten_r=7.0,
+    )
+    assert trade.active_stop == 120.0
+
+    fast_bar = BarData(
+        open=134.0, high=136.0, low=133.0, close=135.0, volume=1_000_000,
+        sma_50=112.0, sma_200=101.0, ema_10=130.0, ema_21=123.0,
+        ema_50=112.0, low_10d=121.0, prev_close=134.0,
+        avg_range_20=3.0, avg_volume_50=900_000.0,
+    )
+    evaluate_exit_baseline(
+        trade,
+        bar=fast_bar,
+        exit_mode=ExitMode.BASELINE_EMA_HYBRID.value,
+        tighten_r=7.0,
+    )
+    assert trade.active_stop == 130.0
 
 
 # --- ExitConfig defaults ---

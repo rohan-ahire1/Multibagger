@@ -1,0 +1,17 @@
+window,variant,cagr_pct,max_dd_pct,calmar,trades
+fold_2010_2014,baseline,3.4348,11.3930,0.3015,63
+fold_2010_2014,stagnation,3.5146,11.3930,0.3085,63
+fold_2014_2018,baseline,12.2976,15.3381,0.8018,84
+fold_2014_2018,stagnation,12.6110,15.0116,0.8401,85
+fold_2018_2022,baseline,19.9661,14.2057,1.4055,79
+fold_2018_2022,stagnation,20.6021,11.9475,1.7244,79
+validation_2023_plus,baseline,19.1309,14.5300,1.3166,92
+validation_2023_plus,stagnation,21.3651,13.8952,1.5376,92
+full,baseline,13.9553,15.3365,0.9099,287
+full,stagnation,14.0266,15.0100,0.9345,287
+full_slippage_25bps,baseline,11.5493,16.4473,0.7022,290
+full_slippage_25bps,stagnation,12.9715,16.1257,0.8044,289
+full_entry_collision,baseline,13.1430,17.3092,0.7593,293
+full_entry_collision,stagnation,14.2889,15.5946,0.9163,291
+full_both_stresses,baseline,11.3869,17.7539,0.6414,296
+full_both_stresses,stagnation,11.6902,16.9604,0.6893,296

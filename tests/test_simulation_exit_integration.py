@@ -8,7 +8,7 @@ import polars as pl
 import pytest
 
 from sepa_scanner.backtest.simulation import build_symbol_data, simulate_portfolio_python
-from sepa_scanner.backtest.models import BacktestParams
+from sepa_scanner.backtest.models import BacktestParams, ExitMode
 
 
 def _make_ohlcv(n_days: int = 250, start: date = date(2024, 1, 1)) -> pl.DataFrame:
@@ -235,3 +235,136 @@ def test_pending_entry_starts_on_d_plus_one_and_expires_after_symbol_bars():
     trade = result["trades"][0]
     assert trade.status == "not_filled"
     assert trade.entry_date is None
+
+
+def test_production_simulator_executes_hard_stop_on_intraday_touch() -> None:
+    dates = [date(2026, 3, day) for day in range(1, 5)]
+    ohlcv = pl.DataFrame({
+        "date": dates,
+        "symbol": ["REVERSAL"] * 4,
+        "open": [100.0] * 4,
+        "high": [101.0] * 4,
+        "low": [99.0, 99.0, 94.0, 99.0],
+        "close": [100.0] * 4,
+        "volume": [1_000_000] * 4,
+    }).cast({"date": pl.Date, "volume": pl.Int64})
+    signals = pl.DataFrame({
+        "signal_date": [dates[0]],
+        "symbol": ["REVERSAL"],
+        "entry_ref": [100.0],
+        "stop": [95.0],
+        "pivot": [100.0],
+        "rs_rank": [90.0],
+    }).cast({"signal_date": pl.Date})
+    params = BacktestParams(
+        pending_days=1,
+        max_hold_days=20,
+        exit_mode=ExitMode.BASELINE_HARD,
+        stop_trigger_mode="intraday_hard",
+    )
+    portfolio = {
+        "initial_capital": 100_000.0,
+        "risk_per_trade_pct": 0.01,
+        "max_positions": 5,
+        "drawdown_half_pct": 0.50,
+        "drawdown_stop_pct": 0.75,
+        "drawdown_close_pct": 0.90,
+    }
+
+    result = simulate_portfolio_python(signals, ohlcv, params, portfolio, {})
+
+    assert len(result["trades"]) == 1
+    assert result["trades"][0].status == "intraday_stop"
+    assert result["trades"][0].exit_date == dates[2]
+    assert result["trades"][0].exit_price == 95.0
+
+
+def test_production_simulator_executes_ema_close_signal_at_next_open() -> None:
+    dates = [date(2026, 1, 1) + timedelta(days=i) for i in range(24)]
+    ohlcv = pl.DataFrame({
+        "date": dates,
+        "symbol": ["TRAIL"] * 24,
+        "open": [100.0] * 21 + [115.0, 102.0, 90.0],
+        "high": [101.0] * 21 + [116.0, 103.0, 91.0],
+        "low": [99.0] * 21 + [114.0, 100.25, 89.0],
+        "close": [100.0] * 21 + [115.0, 100.5, 90.0],
+        "volume": [1_000_000] * 24,
+    }).cast({"date": pl.Date, "volume": pl.Int64})
+    signals = pl.DataFrame({
+        "signal_date": [dates[0]],
+        "symbol": ["TRAIL"],
+        "entry_ref": [100.0],
+        "stop": [95.0],
+        "pivot": [100.0],
+        "rs_rank": [90.0],
+    }).cast({"signal_date": pl.Date})
+    params = BacktestParams(
+        pending_days=1,
+        max_hold_days=150,
+        exit_mode=ExitMode.BASELINE_EMA21,
+        stop_trigger_mode="intraday_hard",
+        signal_exit_execution="next_open",
+    )
+    portfolio = {
+        "initial_capital": 100_000.0,
+        "risk_per_trade_pct": 0.01,
+        "max_positions": 5,
+        "drawdown_half_pct": 0.50,
+        "drawdown_stop_pct": 0.75,
+        "drawdown_close_pct": 0.90,
+    }
+
+    result = simulate_portfolio_python(signals, ohlcv, params, portfolio, {})
+
+    assert len(result["trades"]) == 1
+    trade = result["trades"][0]
+    assert trade.status.endswith("_next_open")
+    assert trade.exit_date == dates[23]
+    assert trade.exit_price == 90.0
+
+
+def test_production_simulator_executes_stagnation_signal_at_next_open() -> None:
+    dates = [date(2026, 3, day) for day in range(1, 20)]
+    ohlcv = pl.DataFrame({
+        "date": dates,
+        "symbol": ["STALL"] * len(dates),
+        "open": [100.0] * 17 + [98.0, 98.0],
+        "high": [103.9] * len(dates),
+        "low": [98.0] * len(dates),
+        "close": [99.0] * len(dates),
+        "volume": [1_000_000] * len(dates),
+    }).cast({"date": pl.Date, "volume": pl.Int64})
+    signals = pl.DataFrame({
+        "signal_date": [dates[0]],
+        "symbol": ["STALL"],
+        "entry_ref": [100.0],
+        "stop": [90.0],
+        "pivot": [100.0],
+        "rs_rank": [90.0],
+    }).cast({"signal_date": pl.Date})
+    params = BacktestParams(
+        pending_days=1,
+        max_hold_days=150,
+        exit_mode=ExitMode.BASELINE_HARD,
+        signal_exit_execution="next_open",
+        stagnation_exit_bars=15,
+        stagnation_max_mfe_r=0.40,
+        stagnation_max_open_r=0.0,
+    )
+    portfolio = {
+        "initial_capital": 100_000.0,
+        "risk_per_trade_pct": 0.01,
+        "max_positions": 5,
+        "drawdown_half_pct": 0.50,
+        "drawdown_stop_pct": 0.75,
+        "drawdown_close_pct": 0.90,
+    }
+
+    result = simulate_portfolio_python(signals, ohlcv, params, portfolio, {})
+
+    assert len(result["trades"]) == 1
+    trade = result["trades"][0]
+    assert trade.status == "stagnation_next_open"
+    assert trade.entry_date == dates[1]
+    assert trade.exit_date == dates[17]
+    assert trade.exit_price == 98.0

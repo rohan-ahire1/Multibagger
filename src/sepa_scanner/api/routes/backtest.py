@@ -91,6 +91,21 @@ def run_backtest(
         max_hold_days=max_hold_days,
         target_r=req.target_r,
         exit_mode=exit_mode,
+        baseline_tighten_r=getattr(settings.backtest, "baseline_tighten_r", 7.0),
+        stop_trigger_mode=getattr(settings.backtest, "stop_trigger_mode", "close_only"),
+        signal_exit_execution=getattr(
+            settings.backtest, "signal_exit_execution", "same_close"
+        ),
+        slippage_bps=getattr(settings.backtest, "slippage_bps", 10.0),
+        stagnation_exit_bars=getattr(
+            settings.exit_strategy, "stagnation_exit_bars", None
+        ),
+        stagnation_max_mfe_r=getattr(
+            settings.exit_strategy, "stagnation_max_mfe_r", 0.40
+        ),
+        stagnation_max_open_r=getattr(
+            settings.exit_strategy, "stagnation_max_open_r", 0.0
+        ),
         friction_enabled=True,
     )
     

@@ -69,16 +69,19 @@ def _compute_forward_metrics(
 
         fill_date = None
         fill_price = None
-        for bar in pending.iter_rows(named=True):
+        fill_delay_bars = None
+        for bar_number, bar in enumerate(pending.iter_rows(named=True), start=1):
             open_price = float(bar["open"])
             high_price = float(bar["high"])
             if open_price >= entry_ref:
                 fill_date = bar["date"]
                 fill_price = open_price
+                fill_delay_bars = bar_number
                 break
             if high_price >= entry_ref:
                 fill_date = bar["date"]
                 fill_price = entry_ref
+                fill_delay_bars = bar_number
                 break
 
         row = {
@@ -95,7 +98,14 @@ def _compute_forward_metrics(
             "filled": fill_price is not None,
             "fill_date": fill_date,
             "fill_price": fill_price,
+            "fill_delay_bars": fill_delay_bars,
+            "fill_gap_pct": (
+                (fill_price / entry_ref - 1.0) * 100.0
+                if fill_price is not None and entry_ref > 0.0
+                else None
+            ),
             "r_per_share": None,
+            "initial_risk_pct": None,
             "days_available": None,
             "mfe_pct": None,
             "mae_pct": None,
@@ -106,11 +116,18 @@ def _compute_forward_metrics(
             "reached_2r": None,
             "reached_3r": None,
             "reached_5r": None,
+            "first_stop_bar": None,
+            "first_1r_bar": None,
+            "first_2r_bar": None,
+            "first_3r_bar": None,
+            "first_5r_bar": None,
         }
         for d in forward_days:
             row[f"fwd_{d}d_pct"] = None
             row[f"fwd_{d}d_win"] = None
             row[f"fwd_{d}d_r"] = None
+            row[f"mfe_{d}d_r"] = None
+            row[f"mae_{d}d_r"] = None
 
         if fill_price is None:
             rows.append(row)
@@ -130,6 +147,7 @@ def _compute_forward_metrics(
         n = len(closes)
 
         row["r_per_share"] = r_per_share
+        row["initial_risk_pct"] = r_per_share / fill_price * 100.0
         row["days_available"] = n
         if n == 0:
             rows.append(row)
@@ -148,15 +166,31 @@ def _compute_forward_metrics(
         hit_stop_first = False
         hit_1r_first = False
         target_1r = fill_price + r_per_share
+        targets = {
+            "first_1r_bar": target_1r,
+            "first_2r_bar": fill_price + 2.0 * r_per_share,
+            "first_3r_bar": fill_price + 3.0 * r_per_share,
+            "first_5r_bar": fill_price + 5.0 * r_per_share,
+        }
+        stop_vs_1r_decided = False
         for i in range(n):
             low_i = float(lows[i])
             high_i = float(highs[i])
-            if low_i <= stop and not hit_1r_first:
-                hit_stop_first = True
-                break
-            if high_i >= target_1r and not hit_stop_first:
-                hit_1r_first = True
-                break
+            bar_number = i + 1
+            if row["first_stop_bar"] is None and low_i <= stop:
+                row["first_stop_bar"] = bar_number
+            for column, target in targets.items():
+                if row[column] is None and high_i >= target:
+                    row[column] = bar_number
+            if not stop_vs_1r_decided:
+                # Daily bars cannot establish intraday ordering. Treat a bar
+                # that touches both levels conservatively as stop-first.
+                if low_i <= stop:
+                    hit_stop_first = True
+                    stop_vs_1r_decided = True
+                elif high_i >= target_1r:
+                    hit_1r_first = True
+                    stop_vs_1r_decided = True
 
         row.update({
             "mfe_pct": mfe_pct,
@@ -176,6 +210,12 @@ def _compute_forward_metrics(
                 row[f"fwd_{d}d_pct"] = (fwd_close - fill_price) / fill_price * 100.0
                 row[f"fwd_{d}d_win"] = fwd_close > fill_price
                 row[f"fwd_{d}d_r"] = (fwd_close - fill_price) / r_per_share
+                row[f"mfe_{d}d_r"] = (
+                    max(float(value) for value in highs[:d]) - fill_price
+                ) / r_per_share
+                row[f"mae_{d}d_r"] = (
+                    min(float(value) for value in lows[:d]) - fill_price
+                ) / r_per_share
             else:
                 row[f"fwd_{d}d_pct"] = None
                 row[f"fwd_{d}d_win"] = None
@@ -186,6 +226,66 @@ def _compute_forward_metrics(
         return pl.DataFrame()
 
     return pl.DataFrame(rows)
+
+
+def compute_signal_metrics(
+    signals: pl.DataFrame,
+    ohlcv: pl.DataFrame,
+    diagnostics: pl.DataFrame | None = None,
+    forward_days: list[int] | None = None,
+    pending_days: int = 8,
+) -> pl.DataFrame:
+    """Return one analysis row per executable BREAKOUT signal.
+
+    This non-aggregated companion to :func:`compute_scorecard` preserves fill
+    timing, forward return paths, horizon-specific MAE/MFE, and setup
+    diagnostics for reproducible entry and exit research.
+    """
+    if forward_days is None:
+        forward_days = FORWARD_DAYS
+    if pending_days < 1:
+        raise ValueError("pending_days must be at least one trading bar")
+
+    breakouts = signals.filter(pl.col("signal_type") == "BREAKOUT")
+    if breakouts.is_empty():
+        return pl.DataFrame()
+
+    metrics = _compute_forward_metrics(breakouts, ohlcv, forward_days, pending_days)
+    if metrics.is_empty():
+        return metrics
+
+    if diagnostics is not None and not diagnostics.is_empty():
+        feature_names = [
+            "tt_pass",
+            "rs_pass",
+            "setup_pass",
+            "vcp1_range10_ok",
+            "vcp2_voldry_ok",
+            "vcp3_atr_trend_ok",
+            "vcp4_atr_contract_ok",
+            "vcp5_extension_ok",
+            "vcp6_base_depth_ok",
+            "contraction_count",
+            "contraction_quality",
+            "near_pivot",
+            "setup_active_streak",
+            "pivot_age_days",
+            "watch_fail_mask",
+            "breakout_fail_mask",
+        ]
+        available = [name for name in feature_names if name in diagnostics.columns]
+        diag_cols = diagnostics.select(
+            pl.col("diag_date").alias("signal_date"),
+            "symbol",
+            *available,
+        )
+        metrics = metrics.join(diag_cols, on=["signal_date", "symbol"], how="left")
+
+    return add_signal_score(
+        metrics,
+        ranking_mode="offense_v2",
+        score_column="offense_v2_score",
+    )
 
 
 def _bucket(col: str, edges: list[float], labels: list[str]) -> pl.Expr:
@@ -258,37 +358,15 @@ def compute_scorecard(
     if breakouts.is_empty():
         return {"error": "No BREAKOUT signals found", "total_signals": 0}
 
-    if pending_days < 1:
-        raise ValueError("pending_days must be at least one trading bar")
-
-    metrics = _compute_forward_metrics(breakouts, ohlcv, forward_days, pending_days)
+    metrics = compute_signal_metrics(
+        breakouts,
+        ohlcv,
+        diagnostics,
+        forward_days=forward_days,
+        pending_days=pending_days,
+    )
     if metrics.is_empty():
         return {"error": "No forward data available for signals", "total_signals": breakouts.height}
-
-    # Join diagnostics if available (for contraction data)
-    if diagnostics is not None and not diagnostics.is_empty():
-        diag_cols = diagnostics.select(
-            pl.col("diag_date").alias("signal_date"),
-            "symbol",
-            "tt_pass",
-            "rs_pass",
-            "setup_pass",
-            "vcp1_range10_ok",
-            "vcp2_voldry_ok",
-            "vcp3_atr_trend_ok",
-            "vcp4_atr_contract_ok",
-            "vcp5_extension_ok",
-            "vcp6_base_depth_ok",
-            "contraction_count",
-            "contraction_quality",
-            "near_pivot",
-            "setup_active_streak",
-            "pivot_age_days",
-            "watch_fail_mask",
-            "breakout_fail_mask",
-        )
-        metrics = metrics.join(diag_cols, on=["signal_date", "symbol"], how="left")
-    metrics = add_signal_score(metrics, ranking_mode="offense_v2", score_column="offense_v2_score")
 
     # Overall summary
     overall = _slice_summary(

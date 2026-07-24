@@ -80,6 +80,7 @@ def run_simulation(test_settings, start_date, end_date):
         pending_days=settings.backtest.pending_days,
         max_hold_days=settings.backtest.max_hold_days,
         exit_mode=ExitMode(test_settings.backtest.exit_mode),
+        baseline_tighten_r=test_settings.backtest.baseline_tighten_r,
         trail_activation_r=test_settings.exit_strategy.trail_activation_r,
         trail_pct=test_settings.exit_strategy.trail_pct,
         dead_money_days=test_settings.exit_strategy.dead_money_days,

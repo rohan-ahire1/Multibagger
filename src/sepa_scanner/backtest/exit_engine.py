@@ -364,6 +364,7 @@ def evaluate_exit_baseline(
     *,
     bar: BarData,
     exit_mode: str,
+    tighten_r: float = 7.0,
 ) -> list[ExitAction]:
     """Strict Minervini (TLASMW) exit — three rules only:
 
@@ -373,6 +374,8 @@ def evaluate_exit_baseline(
     3. Trail (EMA modes only, active after breakeven):
        - baseline_ema10: close below 10-day EMA → exit
        - baseline_ema21: close below 21-day EMA → exit
+       - baseline_ema_hybrid: use the 21-day EMA until peak close reaches
+         ``tighten_r``, then ratchet with the 10-day EMA
        - baseline_hard:  no trail — just hold until stopped at entry or next stop level
 
     No partial profits, no time stops, no climax sells.
@@ -394,7 +397,11 @@ def evaluate_exit_baseline(
 
     # EMA trail: ratchet stop up to EMA value (only after breakeven, only EMA modes)
     if trade.breakeven_activated and exit_mode != "baseline_hard":
-        ema_val = bar.ema_10 if exit_mode == "baseline_ema10" else bar.ema_21
+        use_fast_ema = exit_mode == "baseline_ema10"
+        if exit_mode == "baseline_ema_hybrid" and trade.initial_risk > 0:
+            peak_r = (trade.highest_close - trade.entry_price) / trade.initial_risk
+            use_fast_ema = peak_r >= tighten_r
+        ema_val = bar.ema_10 if use_fast_ema else bar.ema_21
         if ema_val > 0:
             trade.active_stop = max(trade.active_stop, ema_val)
 

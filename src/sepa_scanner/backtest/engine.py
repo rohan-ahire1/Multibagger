@@ -36,6 +36,7 @@ _PYTHON_ONLY_EXIT_MODES = {
     ExitMode.BASELINE_HARD,
     ExitMode.BASELINE_EMA10,
     ExitMode.BASELINE_EMA21,
+    ExitMode.BASELINE_EMA_HYBRID,
 }
 
 
@@ -534,11 +535,13 @@ def _simulate_signal_phased(
             ExitMode.BASELINE_HARD,
             ExitMode.BASELINE_EMA10,
             ExitMode.BASELINE_EMA21,
+            ExitMode.BASELINE_EMA_HYBRID,
         }:
             actions = evaluate_exit_baseline(
                 trade_state,
                 bar=bar_data,
                 exit_mode=params.exit_mode.value,
+                tighten_r=params.baseline_tighten_r,
             )
         else:
             actions = evaluate_exit(

@@ -5,111 +5,111 @@
   },
   "verification": {
     "rust_final_equity": null,
-    "python_final_equity": 22345786.786011614,
+    "python_final_equity": 8381822.548011799,
     "rust_trade_rows": null,
-    "python_trade_rows": 423
+    "python_trade_rows": 355
   },
   "strategy": {
-    "start_value": 1002639.1860547711,
-    "end_value": 22355924.770342093,
-    "cagr": 0.2101304938859443,
-    "max_drawdown_pct": -0.16630314423942594,
-    "calmar": 1.2635389117082496,
-    "total_return_pct": 21.345786786011615,
-    "filled_trades": 348,
-    "total_signals": 423
+    "start_value": 1000000.0,
+    "end_value": 8381822.548011799,
+    "cagr": 0.14026330058275915,
+    "max_drawdown_pct": -0.15009979452259647,
+    "calmar": 0.9344669726489432,
+    "total_return_pct": 7.381822548011799,
+    "filled_trades": 287,
+    "total_signals": 355
   },
   "benchmark": {
-    "start_value": 5587.61,
-    "end_value": 34630.88,
-    "cagr": 0.12015396897533925,
-    "max_drawdown_pct": -0.3810593207227173,
-    "calmar": 0.3153156541282212
+    "start_value": 52.393001556396484,
+    "end_value": 267.1600036621094,
+    "cagr": 0.10580762515390729,
+    "max_drawdown_pct": -0.8992681025028362,
+    "calmar": 0.11765971111332017
   },
   "rolling_3y": {
-    "strategy_latest": 0.43262948640907806,
-    "benchmark_latest": 0.1394696000034461,
-    "strategy_median": 0.14935526506677854,
-    "benchmark_median": 0.1463053320823915,
-    "strategy_best": 0.6303085820767398,
-    "benchmark_best": 0.3406904137822293,
-    "strategy_worst": 0.017719930224896485,
-    "benchmark_worst": -0.05502464568653875,
-    "strategy_beat_rate": 0.6895384615384615
+    "strategy_latest": 0.18712838941572651,
+    "benchmark_latest": 0.10693954125270388,
+    "strategy_median": 0.17532646281241648,
+    "benchmark_median": 0.12860700013946857,
+    "strategy_best": 0.4817353124178836,
+    "benchmark_best": 1.453623666416481,
+    "strategy_worst": -0.036198553524525945,
+    "benchmark_worst": -0.45289894931040553,
+    "strategy_beat_rate": 0.6077705827937095
   },
   "contribution": {
-    "total_pnl": 21345786.786011614,
-    "top10_trade_pnl": 12405786.242866507,
-    "top10_trade_share": 0.5811819619127979,
-    "pnl_2023": 5039962.494633965,
-    "pnl_2023_share": 0.2361104111625798,
-    "final_equity_ex_2023": 13130194.24735057,
-    "cagr_ex_2023": 0.17003374884370737
+    "total_pnl": 7381822.548011799,
+    "top10_trade_pnl": 5801670.947252944,
+    "top10_trade_share": 0.7859401806963716,
+    "pnl_2023": 1443288.8399801748,
+    "pnl_2023_share": 0.19551930848959603,
+    "final_equity_ex_2023": 6490168.612929577,
+    "cagr_ex_2023": 0.12239862822020964
   },
   "regime": {
     "daily": {
       "trending_market": {
-        "active_days": 2248,
-        "inactive_days": 1539,
-        "active_pnl": 24470985.004388344,
-        "inactive_pnl": 5808689.032258851,
-        "active_avg_daily_return": 0.0020072864910689525,
-        "inactive_avg_daily_return": 0.0005930712165329952
+        "active_days": 2350,
+        "inactive_days": 1430,
+        "active_pnl": 9130976.29540632,
+        "inactive_pnl": 683506.080886804,
+        "active_avg_daily_return": 0.0014565123634445443,
+        "inactive_avg_daily_return": 0.00024074411997954272
       },
       "weak_breadth": {
-        "active_days": 391,
-        "inactive_days": 3615,
-        "active_pnl": 1460789.0129979071,
-        "inactive_pnl": 29153091.566661075,
-        "active_avg_daily_return": 4.665841396040368e-05,
-        "inactive_avg_daily_return": 0.0015795594440392836
+        "active_days": 390,
+        "inactive_days": 3609,
+        "active_pnl": 68991.4140994692,
+        "inactive_pnl": 9970100.385515876,
+        "active_avg_daily_return": -0.0001804343285505312,
+        "inactive_avg_daily_return": 0.001125866207755561
       },
       "high_vol_market": {
-        "active_days": 177,
-        "inactive_days": 3809,
-        "active_pnl": 1690115.0639585666,
-        "inactive_pnl": 28923765.515700415,
-        "active_avg_daily_return": 0.0010585513876432604,
-        "inactive_avg_daily_return": 0.0014547091715536023
+        "active_days": 188,
+        "inactive_days": 3791,
+        "active_pnl": 101618.58145714086,
+        "inactive_pnl": 9937473.218158204,
+        "active_avg_daily_return": 0.0001750295039193687,
+        "inactive_avg_daily_return": 0.0010445729910098312
       },
       "sector_concentration": {
-        "active_days": 2261,
-        "inactive_days": 1898,
-        "active_pnl": 9148942.736267729,
-        "inactive_pnl": 12206982.034074364,
-        "active_avg_daily_return": 0.0008620666760779913,
-        "inactive_avg_daily_return": 0.0007916493732499676
+        "active_days": 2346,
+        "inactive_days": 1761,
+        "active_pnl": 5723316.326434745,
+        "inactive_pnl": 1658506.2215770546,
+        "active_avg_daily_return": 0.0006938131842602188,
+        "inactive_avg_daily_return": 0.00042859179744744703
       }
     },
     "trade_entries": {
       "trending_market": {
-        "trade_count": 240,
-        "win_rate": 0.37083333333333335,
-        "avg_r": 1.215380630547656,
-        "total_pnl": 16408583.81932715
+        "trade_count": 212,
+        "win_rate": 0.32547169811320753,
+        "avg_r": 0.4773544333688316,
+        "total_pnl": 5374839.828445349
       },
       "weak_breadth": {
-        "trade_count": 12,
-        "win_rate": 0.25,
-        "avg_r": -0.7101282871791242,
-        "total_pnl": -601094.8670678502
+        "trade_count": 7,
+        "win_rate": 0.2857142857142857,
+        "avg_r": -0.5141255597727987,
+        "total_pnl": -72516.12491885792
       },
       "high_vol_market": {
-        "trade_count": 6,
-        "win_rate": 0.6666666666666666,
-        "avg_r": 3.8885604589148985,
-        "total_pnl": 2302227.568160725
+        "trade_count": 8,
+        "win_rate": 0.5,
+        "avg_r": 0.38359300297312277,
+        "total_pnl": 180761.318618358
       }
     },
     "sweet_spot": {
-      "days": 2207,
-      "pnl": 23006796.85101416,
-      "avg_daily_return": 0.0020001594147801664
+      "days": 2290,
+      "pnl": 9131689.584284507,
+      "avg_daily_return": 0.0014940143546166352
     },
     "hostile": {
-      "days": 1580,
-      "pnl": 7272877.185633037,
-      "avg_daily_return": 0.0006397245605996569
+      "days": 1535,
+      "pnl": 651266.4872894965,
+      "avg_daily_return": 0.00020680579885552785
     },
     "sector_map_trade_coverage": 1.0
   }

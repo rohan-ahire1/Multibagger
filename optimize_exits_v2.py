@@ -92,6 +92,7 @@ _base_params = BacktestParams(
     max_hold_days=max(_settings.backtest.max_hold_days, 120),
     target_r=_settings.risk.target_r,
     exit_mode=ExitMode(str(_settings.backtest.exit_mode)),
+    baseline_tighten_r=_settings.backtest.baseline_tighten_r,
     trail_activation_r=_settings.exit_strategy.trail_activation_r,
     trail_pct=_settings.exit_strategy.trail_pct,
     dead_money_days=_settings.exit_strategy.dead_money_days,

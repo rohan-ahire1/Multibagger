@@ -57,6 +57,8 @@ class OpenPosition:
     partial_exit_r: float | None = None
     tighten_activated: bool = False
     target_price: float | None = None
+    pending_exit_reason: str | None = None
+    bars_held: int = 0
 
 @dataclass
 class PendingSignal:
@@ -281,13 +283,26 @@ def simulate_portfolio_python(
     entry_gate = entry_gate or {}
     entry_size_mult = entry_size_mult or {}
 
+    def executable_session_stop(pos: OpenPosition) -> float:
+        if params.stop_trigger_mode != "intraday_hard":
+            return pos.active_stop
+        baseline_ema_modes = {
+            ExitMode.BASELINE_EMA10,
+            ExitMode.BASELINE_EMA21,
+            ExitMode.BASELINE_EMA_HYBRID,
+        }
+        if params.exit_mode in baseline_ema_modes:
+            return max(pos.stop, pos.entry_price if pos.breakeven_activated else pos.stop)
+        return pos.active_stop
+
     signals_by_date: dict[date, list[dict[str, Any]]] = defaultdict(list)
     for signal in symbols:
         signals_by_date[signal["signal_date"]].append(signal)
 
     friction_enabled = getattr(params, "friction_enabled", True)
-    slippage_buy = 1.0 if not friction_enabled else 1.001
-    slippage_sell = 1.0 if not friction_enabled else 0.999
+    slippage_fraction = params.slippage_bps / 10_000.0
+    slippage_buy = 1.0 if not friction_enabled else 1.0 + slippage_fraction
+    slippage_sell = 1.0 if not friction_enabled else 1.0 - slippage_fraction
     tax_buy = 1.0 if not friction_enabled else 1.00118658
     tax_sell = 1.0 if not friction_enabled else 0.99896342
     dp_charge = 0.0 if not friction_enabled else 16.0
@@ -312,17 +327,39 @@ def simulate_portfolio_python(
 
             idx = sym_prices["date_to_idx"].get(today)
             if idx is not None:
+                pos.bars_held += 1
                 open_price = float(sym_prices["opens"][idx])
                 high_price = float(sym_prices["highs"][idx])
                 low_price = float(sym_prices["lows"][idx])
                 close_price = float(sym_prices["closes"][idx])
                 holding_days = (today - pos.entry_date).days
 
-                pos.mae_price = min(pos.mae_price, low_price)
-                pos.mfe_price = max(pos.mfe_price, high_price)
+                if pos.pending_exit_reason is not None:
+                    net_entry = pos.entry_price * slippage_buy * tax_buy
+                    net_exit = open_price * slippage_sell * tax_sell
+                    cash += pos.shares * net_exit - dp_charge
+                    closed_trades.append(
+                        close_trade_dict(
+                            symbol=pos.symbol, signal_date=pos.signal_date,
+                            status=f"{pos.pending_exit_reason}_next_open", entry_ref=pos.entry_ref,
+                            stop=pos.stop, pivot=pos.pivot,
+                            entry_date=pos.entry_date, entry_price=net_entry,
+                            exit_date=today, exit_price=net_exit,
+                            holding_days=holding_days,
+                            mae_price=pos.mae_price, mfe_price=pos.mfe_price,
+                            shares=pos.shares, sector=analysis_sector_map.get(pos.symbol, "UNKNOWN"),
+                            original_shares=pos.original_shares, realized_pnl=pos.realized_pnl,
+                        )
+                    )
+                    open_positions.pop(i)
+                    continue
+
+                session_stop = executable_session_stop(pos)
 
                 # --- Gap-down stop: if open gaps below stop, exit at open ---
-                if open_price <= pos.active_stop:
+                if open_price <= session_stop:
+                    pos.mae_price = min(pos.mae_price, open_price)
+                    pos.mfe_price = max(pos.mfe_price, open_price)
                     net_entry = pos.entry_price * slippage_buy * tax_buy
                     net_exit = open_price * slippage_sell * tax_sell
                     cash += pos.shares * net_exit - dp_charge
@@ -330,6 +367,69 @@ def simulate_portfolio_python(
                         close_trade_dict(
                             symbol=pos.symbol, signal_date=pos.signal_date,
                             status="stopped", entry_ref=pos.entry_ref,
+                            stop=pos.stop, pivot=pos.pivot,
+                            entry_date=pos.entry_date, entry_price=net_entry,
+                            exit_date=today, exit_price=net_exit,
+                            holding_days=holding_days,
+                            mae_price=pos.mae_price, mfe_price=pos.mfe_price,
+                            shares=pos.shares, sector=analysis_sector_map.get(pos.symbol, "UNKNOWN"),
+                            original_shares=pos.original_shares, realized_pnl=pos.realized_pnl,
+                        )
+                    )
+                    open_positions.pop(i)
+                    continue
+
+                pos.mae_price = min(pos.mae_price, low_price)
+                pos.mfe_price = max(pos.mfe_price, high_price)
+
+                if params.stop_trigger_mode != "close_only" and low_price <= session_stop:
+                    net_entry = pos.entry_price * slippage_buy * tax_buy
+                    net_exit = session_stop * slippage_sell * tax_sell
+                    cash += pos.shares * net_exit - dp_charge
+                    closed_trades.append(
+                        close_trade_dict(
+                            symbol=pos.symbol, signal_date=pos.signal_date,
+                            status="intraday_stop", entry_ref=pos.entry_ref,
+                            stop=pos.stop, pivot=pos.pivot,
+                            entry_date=pos.entry_date, entry_price=net_entry,
+                            exit_date=today, exit_price=net_exit,
+                            holding_days=holding_days,
+                            mae_price=pos.mae_price, mfe_price=pos.mfe_price,
+                            shares=pos.shares, sector=analysis_sector_map.get(pos.symbol, "UNKNOWN"),
+                            original_shares=pos.original_shares, realized_pnl=pos.realized_pnl,
+                        )
+                    )
+                    open_positions.pop(i)
+                    continue
+
+                peak_r = (
+                    (pos.mfe_price - pos.entry_price) / pos.initial_risk
+                    if pos.initial_risk > 0.0
+                    else 0.0
+                )
+                open_r = (
+                    (close_price - pos.entry_price) / pos.initial_risk
+                    if pos.initial_risk > 0.0
+                    else 0.0
+                )
+                if (
+                    params.stagnation_exit_bars is not None
+                    and pos.bars_held >= params.stagnation_exit_bars
+                    and peak_r < params.stagnation_max_mfe_r
+                    and open_r <= params.stagnation_max_open_r
+                ):
+                    if params.signal_exit_execution == "next_open":
+                        pos.pending_exit_reason = "stagnation"
+                        i += 1
+                        continue
+
+                    net_entry = pos.entry_price * slippage_buy * tax_buy
+                    net_exit = close_price * slippage_sell * tax_sell
+                    cash += pos.shares * net_exit - dp_charge
+                    closed_trades.append(
+                        close_trade_dict(
+                            symbol=pos.symbol, signal_date=pos.signal_date,
+                            status="stagnation", entry_ref=pos.entry_ref,
                             stop=pos.stop, pivot=pos.pivot,
                             entry_date=pos.entry_date, entry_price=net_entry,
                             exit_date=today, exit_price=net_exit,
@@ -381,12 +481,15 @@ def simulate_portfolio_python(
                 )
 
                 # --- Route to correct exit engine ---
-                _baseline_modes = {"baseline_hard", "baseline_ema10", "baseline_ema21"}
+                _baseline_modes = {
+                    "baseline_hard", "baseline_ema10", "baseline_ema21", "baseline_ema_hybrid"
+                }
                 if params.exit_mode.value in _baseline_modes:
                     actions = evaluate_exit_baseline(
                         trade_state,
                         bar=bar,
                         exit_mode=params.exit_mode.value,
+                        tighten_r=params.baseline_tighten_r,
                     )
                 else:
                     actions = evaluate_exit(
@@ -413,9 +516,12 @@ def simulate_portfolio_python(
                 exit_reason = ""
                 for action in actions:
                     if action.action == "SELL_ALL":
-                        exit_price = close_price
                         status = action.reason
                         exit_reason = action.reason
+                        if params.signal_exit_execution == "next_open":
+                            pos.pending_exit_reason = action.reason
+                        else:
+                            exit_price = close_price
                         break
                     elif action.action == "SELL_PARTIAL":
                         sell_shares = min(pos.shares, float(action.shares))
@@ -433,7 +539,11 @@ def simulate_portfolio_python(
                         pos.partial_exit_r = (net_sell - net_entry) / net_risk if net_risk > 0 else 0.0
 
                 # --- Hard max hold cap — unconditional capital release ---
-                if exit_price is None and holding_days >= params.max_hold_days:
+                if (
+                    exit_price is None
+                    and pos.pending_exit_reason is None
+                    and holding_days >= params.max_hold_days
+                ):
                     exit_price = close_price
                     status = "time_stop"
                     exit_reason = "time_stop"
@@ -678,7 +788,17 @@ def filter_signals(
     ranking_mode: str = "default",
     max_signals_per_day: int | None = None,
 ) -> pl.DataFrame:
+    pullback_enabled = bool(
+        getattr(getattr(settings, "pullback", None), "enabled", False)
+    )
+    allowed_signal_types = (
+        ["BREAKOUT", "PULLBACK"]
+        if pullback_enabled
+        else ["BREAKOUT"]
+    )
     df = signals.clone()
+    if "signal_type" in df.columns:
+        df = df.filter(pl.col("signal_type").is_in(allowed_signal_types))
     
     # RS Rank filter
     if rs_rank_min is not None:
