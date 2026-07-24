@@ -1,0 +1,18 @@
+{
+  "requested_end_date": "2026-05-29",
+  "actual_data_end_date": "2026-05-29",
+  "baseline_cagr_pct": 62.0519,
+  "baseline_max_drawdown_pct": -38.2189,
+  "realistic_cagr_pct": -29.9565,
+  "realistic_max_drawdown_pct": -99.6737,
+  "oos_2023_latest_cagr_pct": -27.4689,
+  "checks": {
+    "no_negative_cash_realistic": true,
+    "realistic_cagr_positive": false,
+    "realistic_drawdown_under_35pct": false,
+    "oos_cagr_positive": false,
+    "realistic_has_enough_fills": true
+  },
+  "passed": false,
+  "note": "This validates mechanics and robustness, not a live trading promise. Market does not sign affidavits, sadly."
+}

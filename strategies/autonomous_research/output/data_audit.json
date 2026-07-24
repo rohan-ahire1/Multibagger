@@ -1,0 +1,105 @@
+{
+  "schema": {
+    "date": "Date",
+    "symbol": "String",
+    "open": "Float64",
+    "high": "Float64",
+    "low": "Float64",
+    "close": "Float64",
+    "volume": "Int64",
+    "turnover": "Float64"
+  },
+  "rows": 6659662,
+  "symbols": 2831,
+  "min_date": "2010-01-04",
+  "max_date": "2026-05-29",
+  "invalid_ohlc_rows": 4104,
+  "zero_volume_rows": 426691,
+  "zero_turnover_rows": 406308,
+  "extreme_abs_daily_return_gt_45pct": 1284,
+  "symbols_with_calendar_gaps_gt_14d": 42,
+  "universe_snapshot_files": 1111,
+  "sample_symbol_lifetimes": [
+    {
+      "symbol": "ASAHIINDIA",
+      "rows": 4054,
+      "first_date": "2010-01-04",
+      "last_date": "2026-05-29",
+      "zero_volume_days": 7,
+      "zero_turnover_days": 7
+    },
+    {
+      "symbol": "ALEMBICLTD",
+      "rows": 4053,
+      "first_date": "2010-01-04",
+      "last_date": "2026-05-29",
+      "zero_volume_days": 6,
+      "zero_turnover_days": 6
+    },
+    {
+      "symbol": "IVC",
+      "rows": 4053,
+      "first_date": "2010-01-04",
+      "last_date": "2026-05-29",
+      "zero_volume_days": 6,
+      "zero_turnover_days": 6
+    },
+    {
+      "symbol": "AHLUCONT",
+      "rows": 4051,
+      "first_date": "2010-01-04",
+      "last_date": "2026-05-29",
+      "zero_volume_days": 2006,
+      "zero_turnover_days": 2006
+    },
+    {
+      "symbol": "AXISCADES",
+      "rows": 4051,
+      "first_date": "2010-01-04",
+      "last_date": "2026-05-29",
+      "zero_volume_days": 52,
+      "zero_turnover_days": 52
+    },
+    {
+      "symbol": "BSOFT",
+      "rows": 4051,
+      "first_date": "2010-01-04",
+      "last_date": "2026-05-29",
+      "zero_volume_days": 6,
+      "zero_turnover_days": 6
+    },
+    {
+      "symbol": "HCLTECH",
+      "rows": 4051,
+      "first_date": "2010-01-04",
+      "last_date": "2026-05-29",
+      "zero_volume_days": 18,
+      "zero_turnover_days": 18
+    },
+    {
+      "symbol": "SHILPAMED",
+      "rows": 4051,
+      "first_date": "2010-01-04",
+      "last_date": "2026-05-29",
+      "zero_volume_days": 6,
+      "zero_turnover_days": 6
+    },
+    {
+      "symbol": "TEXRAIL",
+      "rows": 4051,
+      "first_date": "2010-01-04",
+      "last_date": "2026-05-29",
+      "zero_volume_days": 6,
+      "zero_turnover_days": 6
+    },
+    {
+      "symbol": "VINATIORGA",
+      "rows": 4051,
+      "first_date": "2010-01-04",
+      "last_date": "2026-05-29",
+      "zero_volume_days": 6,
+      "zero_turnover_days": 6
+    }
+  ],
+  "rust_core": "Multibagger Rust Core is online!"
+}

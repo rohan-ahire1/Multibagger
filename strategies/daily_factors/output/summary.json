@@ -1,0 +1,334 @@
+{
+  "config": {
+    "start": "2010-01-04",
+    "end": "2026-03-17",
+    "initial_capital": 1000000.0,
+    "slippage_bps": 10.0,
+    "universe_size": 200,
+    "alpha_universe_size": 150,
+    "momentum_holdings": 20,
+    "high_52w_holdings": 20,
+    "alpha_holdings": 30,
+    "combined_holdings": 30,
+    "alpha_weight_cap": 0.05,
+    "liquidity_lookback": 63,
+    "benchmark_symbol": "NIFTYBEES"
+  },
+  "universe": {
+    "method": "latest NSE EQ snapshot on/before signal date, then top trailing-63-session turnover",
+    "proxy_warning": "This is point-in-time and survivorship-aware, but is not exact historical Nifty 200 membership because that file is unavailable locally.",
+    "snapshot_max_lag_days": 8
+  },
+  "results": [
+    {
+      "strategy": "equal_weight_universe",
+      "start": "2010-01-04",
+      "end": "2026-03-17",
+      "start_equity": 1000000.0,
+      "final_equity": 4250021.801543643,
+      "total_return_pct": 325.0021801543642,
+      "cagr": 0.0934417836835455,
+      "max_drawdown": 0.5264988540337133,
+      "calmar": 0.17747765824683473,
+      "sharpe": 0.5788255269587356,
+      "orders": 31549,
+      "annualized_turnover_x": 2.211185018264375,
+      "friction_cost": 385525.3421232338
+    },
+    {
+      "strategy": "momentum_12_1_top20",
+      "start": "2010-01-04",
+      "end": "2026-03-17",
+      "start_equity": 1000000.0,
+      "final_equity": 16259894.519936778,
+      "total_return_pct": 1525.989451993678,
+      "cagr": 0.1878786774315302,
+      "max_drawdown": 0.4943383699939675,
+      "calmar": 0.38006088306239083,
+      "sharpe": 0.8201292382457691,
+      "orders": 5042,
+      "annualized_turnover_x": 8.452246514600917,
+      "friction_cost": 1413127.0966414572
+    },
+    {
+      "strategy": "high_52w_top20",
+      "start": "2010-01-04",
+      "end": "2026-03-17",
+      "start_equity": 1000000.0,
+      "final_equity": 6551691.705767172,
+      "total_return_pct": 555.1691705767173,
+      "cagr": 0.1230525993741598,
+      "max_drawdown": 0.3620382581877213,
+      "calmar": 0.3398883863548905,
+      "sharpe": 0.7538600569431839,
+      "orders": 6462,
+      "annualized_turnover_x": 16.825301270848865,
+      "friction_cost": 1820802.2787281307
+    },
+    {
+      "strategy": "alpha_low_vol_top30",
+      "start": "2010-01-04",
+      "end": "2026-03-17",
+      "start_equity": 1000000.0,
+      "final_equity": 12643056.285431707,
+      "total_return_pct": 1164.3056285431708,
+      "cagr": 0.16957004015453014,
+      "max_drawdown": 0.3177230175323845,
+      "calmar": 0.5337039836506223,
+      "sharpe": 1.1592429295066005,
+      "orders": 1363,
+      "annualized_turnover_x": 1.9253460887212992,
+      "friction_cost": 332467.70165652985
+    },
+    {
+      "strategy": "high_52w_alpha_low_vol_top30",
+      "start": "2010-01-04",
+      "end": "2026-03-17",
+      "start_equity": 1000000.0,
+      "final_equity": 11534437.207229123,
+      "total_return_pct": 1053.4437207229123,
+      "cagr": 0.16296226327919094,
+      "max_drawdown": 0.33288525289718873,
+      "calmar": 0.489544856255683,
+      "sharpe": 1.067474859988834,
+      "orders": 8144,
+      "annualized_turnover_x": 11.326920461950753,
+      "friction_cost": 1783769.1009324323
+    },
+    {
+      "strategy": "nifty_500_tri",
+      "start": "2010-01-04",
+      "end": "2026-03-17",
+      "start_equity": 1000000.0,
+      "final_equity": 5923696.922424292,
+      "total_return_pct": 492.3696922424292,
+      "cagr": 0.11608790161983618,
+      "max_drawdown": 0.3810593207227173,
+      "calmar": 0.30464522269042993,
+      "sharpe": 0.772442898570973,
+      "orders": 0,
+      "annualized_turnover_x": 0.0,
+      "friction_cost": 0.0
+    },
+    {
+      "strategy": "sepa_canonical",
+      "cagr": 0.14026330058275915,
+      "max_drawdown": 0.15009979452259647,
+      "calmar": 0.9344669726489432,
+      "orders": 287,
+      "final_equity": 8381822.548011799
+    }
+  ],
+  "period_results": [
+    {
+      "strategy": "equal_weight_universe",
+      "period": "2010_2014",
+      "start": "2010-01-04",
+      "end": "2014-12-31",
+      "cagr": 0.052591386525190575,
+      "max_drawdown": 0.4713204604215605,
+      "calmar": 0.11158307551119584,
+      "sharpe": 0.36890186295394717
+    },
+    {
+      "strategy": "equal_weight_universe",
+      "period": "2015_2019",
+      "start": "2015-01-01",
+      "end": "2019-12-31",
+      "cagr": 0.030637304954841404,
+      "max_drawdown": 0.3456969630637464,
+      "calmar": 0.08862474429430234,
+      "sharpe": 0.2627960039228602
+    },
+    {
+      "strategy": "equal_weight_universe",
+      "period": "2020_2026",
+      "start": "2020-01-01",
+      "end": "2026-03-17",
+      "cagr": 0.1811083825641897,
+      "max_drawdown": 0.38818837426129504,
+      "calmar": 0.466547672657201,
+      "sharpe": 0.9751517112091276
+    },
+    {
+      "strategy": "momentum_12_1_top20",
+      "period": "2010_2014",
+      "start": "2010-01-04",
+      "end": "2014-12-31",
+      "cagr": 0.1868215935477351,
+      "max_drawdown": 0.3852314970247448,
+      "calmar": 0.48495929068784027,
+      "sharpe": 0.9141419705472602
+    },
+    {
+      "strategy": "momentum_12_1_top20",
+      "period": "2015_2019",
+      "start": "2015-01-01",
+      "end": "2019-12-31",
+      "cagr": 0.043461322401899594,
+      "max_drawdown": 0.3594655383508919,
+      "calmar": 0.12090539360542225,
+      "sharpe": 0.3022280136127186
+    },
+    {
+      "strategy": "momentum_12_1_top20",
+      "period": "2020_2026",
+      "start": "2020-01-01",
+      "end": "2026-03-17",
+      "cagr": 0.31690495095625226,
+      "max_drawdown": 0.41268042157544216,
+      "calmar": 0.7679185500161142,
+      "sharpe": 1.1200517287136622
+    },
+    {
+      "strategy": "high_52w_top20",
+      "period": "2010_2014",
+      "start": "2010-01-04",
+      "end": "2014-12-31",
+      "cagr": 0.14381330751335586,
+      "max_drawdown": 0.31761615306333524,
+      "calmar": 0.4527896523092713,
+      "sharpe": 1.0071559594115664
+    },
+    {
+      "strategy": "high_52w_top20",
+      "period": "2015_2019",
+      "start": "2015-01-01",
+      "end": "2019-12-31",
+      "cagr": 0.055427916741884076,
+      "max_drawdown": 0.28038626600826877,
+      "calmar": 0.19768413599919146,
+      "sharpe": 0.4046223029967553
+    },
+    {
+      "strategy": "high_52w_top20",
+      "period": "2020_2026",
+      "start": "2020-01-01",
+      "end": "2026-03-17",
+      "cagr": 0.16153526484414948,
+      "max_drawdown": 0.31383306046366877,
+      "calmar": 0.5147171703500301,
+      "sharpe": 0.8535153770292241
+    },
+    {
+      "strategy": "alpha_low_vol_top30",
+      "period": "2010_2014",
+      "start": "2010-01-04",
+      "end": "2014-12-31",
+      "cagr": 0.18548202691031546,
+      "max_drawdown": 0.17767128323567927,
+      "calmar": 1.0439617676666144,
+      "sharpe": 1.4793967897947515
+    },
+    {
+      "strategy": "alpha_low_vol_top30",
+      "period": "2015_2019",
+      "start": "2015-01-01",
+      "end": "2019-12-31",
+      "cagr": 0.14410243427953628,
+      "max_drawdown": 0.16632766191828063,
+      "calmar": 0.8663768408548667,
+      "sharpe": 1.1032393597148165
+    },
+    {
+      "strategy": "alpha_low_vol_top30",
+      "period": "2020_2026",
+      "start": "2020-01-01",
+      "end": "2026-03-17",
+      "cagr": 0.17817169571079816,
+      "max_drawdown": 0.3177230175323845,
+      "calmar": 0.5607767957593367,
+      "sharpe": 1.0460312327325012
+    },
+    {
+      "strategy": "high_52w_alpha_low_vol_top30",
+      "period": "2010_2014",
+      "start": "2010-01-04",
+      "end": "2014-12-31",
+      "cagr": 0.19440950840042626,
+      "max_drawdown": 0.21532829203496795,
+      "calmar": 0.9028516715715897,
+      "sharpe": 1.476391279326867
+    },
+    {
+      "strategy": "high_52w_alpha_low_vol_top30",
+      "period": "2015_2019",
+      "start": "2015-01-01",
+      "end": "2019-12-31",
+      "cagr": 0.09940537085806134,
+      "max_drawdown": 0.2309393100030409,
+      "calmar": 0.4304393689266345,
+      "sharpe": 0.7399287221893704
+    },
+    {
+      "strategy": "high_52w_alpha_low_vol_top30",
+      "period": "2020_2026",
+      "start": "2020-01-01",
+      "end": "2026-03-17",
+      "cagr": 0.1904144621449193,
+      "max_drawdown": 0.3258911275036812,
+      "calmar": 0.5842885739280166,
+      "sharpe": 1.0682339136284855
+    },
+    {
+      "strategy": "nifty_500_tri",
+      "period": "2010_2014",
+      "start": "2010-01-04",
+      "end": "2014-12-31",
+      "cagr": 0.10410509278281421,
+      "max_drawdown": 0.310594402060256,
+      "calmar": 0.33518019672040833,
+      "sharpe": 0.7008141234167611
+    },
+    {
+      "strategy": "nifty_500_tri",
+      "period": "2015_2019",
+      "start": "2015-01-01",
+      "end": "2019-12-31",
+      "cagr": 0.09080258056979762,
+      "max_drawdown": 0.20063229735667787,
+      "calmar": 0.45258207061434186,
+      "sharpe": 0.710534257249251
+    },
+    {
+      "strategy": "nifty_500_tri",
+      "period": "2020_2026",
+      "start": "2020-01-01",
+      "end": "2026-03-17",
+      "cagr": 0.1462483874539766,
+      "max_drawdown": 0.3810593207227173,
+      "calmar": 0.3837942795274023,
+      "sharpe": 0.8696505471152798
+    },
+    {
+      "strategy": "sepa_canonical",
+      "period": "2010_2014",
+      "start": "2010-01-04",
+      "end": "2014-12-31",
+      "cagr": 0.035145465050723024,
+      "max_drawdown": 0.11393035156092601,
+      "calmar": 0.3084820205433005,
+      "sharpe": 0.30968288977483255
+    },
+    {
+      "strategy": "sepa_canonical",
+      "period": "2015_2019",
+      "start": "2015-01-01",
+      "end": "2019-12-31",
+      "cagr": 0.11059988910582175,
+      "max_drawdown": 0.14128890530254112,
+      "calmar": 0.7827924554231264,
+      "sharpe": 0.5844125719613569
+    },
+    {
+      "strategy": "sepa_canonical",
+      "period": "2020_2026",
+      "start": "2020-01-01",
+      "end": "2026-03-17",
+      "cagr": 0.25977106031398733,
+      "max_drawdown": 0.13886828157429165,
+      "calmar": 1.8706291844982268,
+      "sharpe": 1.471464065754563
+    }
+  ]
+}

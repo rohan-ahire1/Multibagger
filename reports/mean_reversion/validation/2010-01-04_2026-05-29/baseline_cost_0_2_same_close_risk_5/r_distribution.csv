@@ -1,0 +1,7 @@
+bucket,count
+<-2R,4
+-2R_to_-1R,28
+-1R_to_0R,1709
+0R_to_1R,3337
+1R_to_2R,35
+>2R,6

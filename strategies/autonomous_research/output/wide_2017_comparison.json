@@ -1,0 +1,52 @@
+{
+  "strategy": {
+    "strategy": "mom_126_hold84_r150",
+    "start": "2017-01-01",
+    "end": "2026-05-29",
+    "cagr": 0.17517452350944307,
+    "post_tax_cagr": 0.12515673264024718,
+    "total_return_pct": 356.3299170090125,
+    "max_drawdown_pct": -29.753871931967613,
+    "sharpe": 0.5800299207113445,
+    "win_rate": 36.84210526315789,
+    "avg_holding_days": 57.33805668016194,
+    "turnover": 111.98942525069491,
+    "trades": 494,
+    "final_equity": 4563299.170090125,
+    "avg_trade_return_pct": 7.700523010902016
+  },
+  "benchmark": {
+    "name": "NIFTYBEES adjusted close proxy",
+    "start": "2017-01-02",
+    "end": "2026-05-29",
+    "cagr": 0.13193962070150667,
+    "post_tax_cagr": 0.12179668368551266,
+    "total_return_pct": 220.6523615940648,
+    "post_tax_total_return_pct": 194.6333163948067,
+    "max_drawdown_pct": -89.92681025028362,
+    "sharpe": 0.34064847021177763,
+    "final_equity": 3206523.615940648,
+    "post_tax_final_equity": 2946333.163948067,
+    "tax": 260190.45199258102
+  },
+  "spread": {
+    "post_tax_cagr": 0.003360048954734518,
+    "pre_tax_cagr": 0.043234902807936404,
+    "max_drawdown_pct_points": 60.172938318316014,
+    "sharpe": 0.23938145049956688
+  },
+  "cost_decomposition": {
+    "gross_no_friction_pnl": 3823606.4665978067,
+    "slippage_cost": 167960.83933778433,
+    "explicit_costs": 92346.45716989865,
+    "net_trade_pnl": 3563299.170090124,
+    "slippage_pct_initial": 16.796083933778434,
+    "explicit_costs_pct_initial": 9.234645716989865,
+    "annual_slippage_pct_initial": 1.785959143176877,
+    "annual_explicit_costs_pct_initial": 0.9819372192519792,
+    "annual_friction_pct_initial": 2.7678963624288566,
+    "avg_cash_pct": 56.122403432254465,
+    "cash_drag_est_annual_pct": 7.404768621708589,
+    "turnover_x": 111.98942525069491
+  }
+}

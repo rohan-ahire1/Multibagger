@@ -306,6 +306,7 @@ def _evaluate_current_defaults(
         max_hold_days=settings.backtest.max_hold_days,
         target_r=settings.risk.target_r,
         exit_mode=ExitMode(settings.backtest.exit_mode),
+        baseline_tighten_r=settings.backtest.baseline_tighten_r,
         trail_activation_r=settings.exit_strategy.trail_activation_r,
         trail_pct=settings.exit_strategy.trail_pct,
         dead_money_days=settings.exit_strategy.dead_money_days,

@@ -1,0 +1,53 @@
+{
+  "note": "NIFTYBEES local adjusted series has a 2019 split/adjustment discontinuity; using clean local Nifty 500 TRI reference for this wider check, matched to its available end date.",
+  "strategy": {
+    "strategy": "mom_126_hold84_r150",
+    "start": "2017-01-01",
+    "end": "2026-03-17",
+    "cagr": 0.1793005992226393,
+    "post_tax_cagr": 0.12804136450526693,
+    "total_return_pct": 356.3299170090125,
+    "max_drawdown_pct": -29.753871931967613,
+    "sharpe": 0.5863645219342953,
+    "win_rate": 36.84210526315789,
+    "avg_holding_days": 57.33805668016194,
+    "turnover": 111.98942525069491,
+    "trades": 494,
+    "final_equity": 4563299.170090125,
+    "avg_trade_return_pct": 7.700523010902016
+  },
+  "benchmark": {
+    "name": "Nifty 500 TRI local reference",
+    "start": "2017-01-02",
+    "end": "2026-03-17",
+    "cagr": 0.14300077517683052,
+    "post_tax_cagr": 0.13216869020742172,
+    "total_return_pct": 242.08913057436519,
+    "post_tax_total_return_pct": 213.39048925256952,
+    "max_drawdown_pct": -38.10593207227172,
+    "sharpe": 0.9206375383062231,
+    "final_equity": 3420891.305743652,
+    "post_tax_final_equity": 3133904.8925256953,
+    "tax": 286986.4132179565
+  },
+  "spread": {
+    "post_tax_cagr": -0.004127325702154794,
+    "pre_tax_cagr": 0.03629982404580878,
+    "max_drawdown_pct_points": 8.352060140304108,
+    "sharpe": -0.33427301637192774
+  },
+  "cost_decomposition": {
+    "gross_no_friction_pnl": 3823606.4665978067,
+    "slippage_cost": 167960.83933778433,
+    "explicit_costs": 92346.45716989865,
+    "net_trade_pnl": 3563299.170090124,
+    "slippage_pct_initial": 16.796083933778434,
+    "explicit_costs_pct_initial": 9.234645716989865,
+    "annual_slippage_pct_initial": 1.8247381489626926,
+    "annual_explicit_costs_pct_initial": 1.0032582832036134,
+    "annual_friction_pct_initial": 2.8279964321663065,
+    "avg_cash_pct": 55.16049996618248,
+    "cash_drag_est_annual_pct": 0.0,
+    "turnover_x": 111.98942525069491
+  }
+}
