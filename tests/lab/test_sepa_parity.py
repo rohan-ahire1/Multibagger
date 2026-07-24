@@ -56,18 +56,35 @@ def test_committed_run_excludes_idle_cash_income(full_bundle) -> None:
 
 
 @pytest.mark.slow
-def test_broken_benchmark_suppresses_alpha_instead_of_fabricating_it(full_bundle) -> None:
-    """NIFTYBEES split 1:10 on 2019-12-19 and was never adjusted for.
+def test_benchmark_is_adjusted_and_alpha_is_plausible(full_bundle) -> None:
+    """The benchmark must be corporate-action adjusted before alpha means anything.
 
-    Its raw curve implies a ~90% loss over the window, which would surface as
-    roughly +16 points of invented alpha. Publish nothing rather than that.
+    NIFTYBEES split 1:10 on 2019-12-19 and was missing from the CA feed, so the
+    raw curve implied a ~90% loss and produced roughly +16 points of invented
+    alpha. With the split applied via config/corporate_actions.csv the benchmark
+    compounds at a plausible rate and the strategy's edge over it is small.
+
+    The suppression guard still exists (unit-tested in
+    tests/lab/test_contracts_and_registry.py); on a healthy panel it has nothing
+    to suppress, which is what this asserts.
     """
     result = run_backtest("sepa_breakout", FULL_START, FULL_END, bundle=full_bundle)
+    m = result.metrics
 
-    assert result.metrics.benchmark_cagr_pct is None
-    assert result.metrics.excess_cagr_pct is None
-    assert any("unadjusted price discontinuit" in w for w in result.warnings)
-    assert all(p.benchmark_equity is None for p in result.equity_curve)
+    assert not any("unadjusted price discontinuit" in w for w in result.warnings)
+    assert m.benchmark_cagr_pct is not None
+    # A long-horizon Indian equity benchmark belongs in single-to-low-double
+    # digits. The pre-fix series scored about -4%.
+    assert 5.0 < m.benchmark_cagr_pct < 20.0, (
+        f"benchmark CAGR {m.benchmark_cagr_pct:.2f}% is implausible — "
+        "the benchmark series is probably unadjusted again"
+    )
+    assert m.excess_cagr_pct == pytest.approx(
+        m.cagr_pct - m.benchmark_cagr_pct, abs=1e-9
+    )
+    # Real edge is a couple of points, not the ~16 the broken series implied.
+    assert abs(m.excess_cagr_pct) < 10.0
+    assert any(p.benchmark_equity is not None for p in result.equity_curve)
 
 
 @pytest.mark.slow

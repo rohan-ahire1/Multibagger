@@ -29,11 +29,99 @@ RAW_ZIP_ROOT = Path("data/nse_bhavcopy_raw")
 RAW_PANEL_ROOT = Path("data/nse_raw")
 OUT_ROOT = Path("data/nse_adjusted")
 CA_PATH = Path("data/reference/nse_corporate_actions.parquet")
+CA_OVERRIDES_PATH = Path("config/corporate_actions.csv")
 QUARANTINE = Path("reports/data_audit/adjustment_quarantine.csv")
+
+# Columns the adjustment engine reads. Overrides are normalised to this shape.
+_CA_COLUMNS = (
+    "symbol",
+    "isin",
+    "ex_date",
+    "action_type",
+    "ratio_num",
+    "ratio_den",
+    "old_face_value",
+    "new_face_value",
+    "dividend_amount",
+    "raw_purpose",
+    "source",
+)
+
+
+def _load_ca_overrides() -> pl.DataFrame | None:
+    """Manually curated corporate actions, merged over the fetched CA feed.
+
+    The NSE equity CA feed does not cover every instrument — ETFs in particular.
+    NIFTYBEES split 1:10 on 2019-12-19 and appears nowhere in
+    ``nse_corporate_actions.parquet``, which left the configured benchmark with
+    an unadjusted 10x cliff. This file is tracked in git (unlike ``data/``) so a
+    panel rebuild is reproducible.
+    """
+    if not CA_OVERRIDES_PATH.exists():
+        return None
+
+    raw = pl.read_csv(CA_OVERRIDES_PATH, try_parse_dates=True)
+    if raw.is_empty():
+        return None
+
+    # Only rows explicitly marked source="manual" are applied. The legacy
+    # source="seed" rows predate the bhavcopy CA feed, were never consumed by
+    # this pipeline, and several disagree with it: IRCTC is dated 2022-10-28
+    # against the feed's 2021-10-28, and TCS 2018-07-18 against 2018-05-31.
+    # Because the de-duplicating anti-join matches on ex_date, a wrong date
+    # would not replace the feed event but stack on top of it and adjust the
+    # symbol twice. They stay inert until someone verifies them.
+    if "source" not in raw.columns:
+        return None
+    frame = raw.filter(pl.col("source") == "manual")
+    if frame.is_empty():
+        return None
+
+    frame = frame.with_columns(pl.col("ex_date").cast(pl.Date))
+    if "raw_purpose" not in frame.columns:
+        source = "description" if "description" in frame.columns else None
+        frame = frame.with_columns(
+            (pl.col(source) if source else pl.lit(None, dtype=pl.Utf8)).alias("raw_purpose")
+        )
+    for column, dtype in (
+        ("isin", pl.Utf8),
+        ("ratio_num", pl.Float64),
+        ("ratio_den", pl.Float64),
+        ("old_face_value", pl.Float64),
+        ("new_face_value", pl.Float64),
+        ("dividend_amount", pl.Float64),
+        ("source", pl.Utf8),
+    ):
+        if column not in frame.columns:
+            frame = frame.with_columns(pl.lit(None, dtype=dtype).alias(column))
+        else:
+            frame = frame.with_columns(pl.col(column).cast(dtype))
+
+    return frame.select(_CA_COLUMNS)
 
 
 def _load_ca(dividends: bool, raw: pl.DataFrame | None = None) -> pl.DataFrame:
     ca = pl.read_parquet(CA_PATH)
+
+    overrides = _load_ca_overrides()
+    if overrides is not None:
+        # Drop fetched events that an override replaces, so a correction wins
+        # rather than double-applying alongside the feed.
+        keys = overrides.select("symbol", "ex_date", "action_type").unique()
+        ca = ca.join(keys, on=["symbol", "ex_date", "action_type"], how="anti")
+        # Adopt the feed's dtypes so the concat cannot fail on, say, ratio_num
+        # being Int64 upstream and Float64 in the CSV.
+        overrides = overrides.with_columns(
+            [
+                pl.col(name).cast(dtype)
+                for name, dtype in ca.schema.items()
+                if name in overrides.columns
+            ]
+        )
+        ca = pl.concat([ca, overrides], how="diagonal")
+        LOGGER.info(
+            "merged %d manual CA override(s) from %s", overrides.height, CA_OVERRIDES_PATH
+        )
     keep = ["split", "bonus", "face_value", "bonus_split"] + (
         ["dividend"] if dividends else []
     )
@@ -56,11 +144,27 @@ def _load_ca(dividends: bool, raw: pl.DataFrame | None = None) -> pl.DataFrame:
 
 
 def _quarantine_bad_jumps(panel: pl.DataFrame, max_jump: float = 4.0) -> None:
-    """Flag adjusted single-day jumps > max_jump not backed by a CA (audit guardrail)."""
+    """Flag adjusted single-day jumps not backed by a CA (audit guardrail).
+
+    Checks the price *ratio*, not the return. The previous version tested
+    ``abs(ret) > max_jump`` with ``ret = close/prev - 1``, which can only ever
+    fire upwards: a fall is bounded at ``ret = -1``, so no threshold above 1
+    detects one. An unadjusted split is always a fall — a 1:10 split is
+    ``ret = -0.9`` — so the check was structurally blind to the exact class of
+    error it exists to catch. NIFTYBEES's 2019-12-19 split passed it silently.
+
+    A ratio outside ``[1/max_jump, max_jump]`` is flagged in either direction.
+    """
     d = panel.sort(["symbol", "date"]).with_columns(
-        (pl.col("close") / pl.col("close").shift(1).over("symbol") - 1).alias("ret")
+        (pl.col("close") / pl.col("close").shift(1).over("symbol")).alias("ratio")
+    ).with_columns((pl.col("ratio") - 1).alias("ret"))
+    bad = d.filter(
+        (
+            pl.col("ratio").is_not_null()
+            & ((pl.col("ratio") > max_jump) | (pl.col("ratio") < 1.0 / max_jump))
+        )
+        | (pl.col("close") <= 0)
     )
-    bad = d.filter((pl.col("ret").abs() > max_jump) | (pl.col("close") <= 0))
     ensure_directory(QUARANTINE.parent)
     bad.select("symbol", "date", "close", "ret").write_csv(QUARANTINE)
     if bad.height:
