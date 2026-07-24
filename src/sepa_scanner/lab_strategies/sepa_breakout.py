@@ -21,7 +21,12 @@ from typing import Any
 
 import polars as pl
 
-from sepa_scanner.lab.contracts import ParamSpec, StrategyContext, StrategyKind
+from sepa_scanner.lab.contracts import (
+    DataRequirement,
+    ParamSpec,
+    StrategyContext,
+    StrategyKind,
+)
 from sepa_scanner.lab.engines.portfolio_sim import (
     build_entry_controls,
     compute_regime_inputs,
@@ -47,6 +52,7 @@ class SepaBreakout:
     id = "sepa_breakout"
     name = "SEPA breakout"
     kind = StrategyKind.SIGNAL
+    data_requirement = DataRequirement.SIGNALS
     description = (
         "Minervini/SEPA trend-template breakouts from VCP bases, sized by risk "
         "with sector and heat caps, exited on a trailing EMA with a stagnation "

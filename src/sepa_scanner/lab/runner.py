@@ -12,6 +12,7 @@ import polars as pl
 
 from sepa_scanner.lab.contracts import (
     SIGNAL_REQUIRED_COLUMNS,
+    DataRequirement,
     WEIGHT_REQUIRED_COLUMNS,
     Strategy,
     StrategyContext,
@@ -23,7 +24,12 @@ from sepa_scanner.lab.engines.signal_engine import (
     to_trade_records,
 )
 from sepa_scanner.lab.metrics import build_equity_points, summarize
-from sepa_scanner.lab.panel import DataBundle, detect_price_discontinuities, load_bundle
+from sepa_scanner.lab.panel import (
+    DataBundle,
+    detect_price_discontinuities,
+    load_bundle,
+    load_panel_bundle,
+)
 from sepa_scanner.lab.registry import get_strategy, resolve_params
 from sepa_scanner.lab.result import BacktestRunResult
 
@@ -81,7 +87,13 @@ def run_backtest(
     strategy: Strategy = get_strategy(strategy_id)
 
     if bundle is None:
-        bundle = load_bundle(start_date, end_date)
+        requirement = getattr(strategy, "data_requirement", DataRequirement.PANEL)
+        loader = (
+            load_bundle
+            if requirement is DataRequirement.SIGNALS
+            else load_panel_bundle
+        )
+        bundle = loader(start_date, end_date)
 
     resolved = resolve_params(strategy, bundle.settings, params)
 

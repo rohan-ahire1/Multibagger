@@ -17,6 +17,16 @@ from typing import Any, Literal, Protocol, runtime_checkable
 import polars as pl
 
 
+class DataRequirement(str, Enum):
+    """Which inputs a strategy needs the runner to load."""
+
+    SIGNALS = "signals"
+    """Precomputed signals from the DuckDB signals table (SEPA's scan output)."""
+
+    PANEL = "panel"
+    """Raw OHLCV only; the strategy computes its own signals."""
+
+
 class StrategyKind(str, Enum):
     """How a strategy expresses its intent, which selects the engine."""
 
@@ -134,6 +144,7 @@ class Strategy(Protocol):
     name: str
     kind: StrategyKind
     description: str
+    data_requirement: DataRequirement
 
     @property
     def param_specs(self) -> list[ParamSpec]: ...
