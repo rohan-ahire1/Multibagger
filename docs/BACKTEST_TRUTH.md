@@ -98,6 +98,36 @@ The prior parity report (13.30% / 18.34% / 0.72) was invalid for the configured 
 The route is now covered by a regression test. The repaired, like-for-like EMA21 baseline
 before the accepted entry/exit changes was 16.36% / 17.13% / 0.96 with cash yield.
 
+## The strategy lab (multi-strategy harness)
+
+`sepa_scanner.lab` is the canonical place to run **any** strategy. One contract, one
+portfolio engine, one set of metrics — all computed from the daily equity curve, which is
+what makes a breakout system and a factor portfolio comparable at all. It replaces the
+per-strategy simulators under `strategies/`, each of which carried its own sizing,
+friction, and metric definitions and therefore produced numbers that could not be set
+side by side.
+
+```bash
+sepa lab list --params                  # registered strategies and their parameters
+sepa lab run sepa_breakout --start 2010-01-04 --end 2026-03-17
+sepa lab runs                           # leaderboard
+uv run pytest -m slow tests/lab         # the parity gate
+```
+
+Runs persist to `lab_runs` / `lab_equity` / `lab_trades` in the same DuckDB file, so the
+CLI, the API, and the `/lab` page in the terminal all read one history.
+
+**This does not replace the SEPA canonical check.** `optimize_joint_wf.py --parity`
+remains authoritative for the committed strategy, and `tests/lab/test_sepa_parity.py`
+asserts the lab reproduces it exactly — CAGR 12.48% / MaxDD 24.28% / Calmar 0.51 / 281
+trades. If those two ever disagree, the lab is wrong, not the harness.
+
+Metrics for every strategy come from `lab/metrics.py`, whose CAGR / max-drawdown /
+Calmar arithmetic is a line-for-line port of the parity harness. Do not "improve" it: a
+different-but-defensible definition silently moves the committed baseline.
+
+---
+
 ### How to reproduce (the ONLY authoritative command)
 
 ```bash

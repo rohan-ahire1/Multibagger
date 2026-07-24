@@ -851,6 +851,12 @@ def ui(
     run_ui_command(config_dir=config_dir, host=host, port=port)
 
 
+# The strategy lab lives in its own sub-app: `sepa lab list|run|runs|show`.
+from sepa_scanner.lab.cli import app as lab_app  # noqa: E402
+
+app.add_typer(lab_app, name="lab")
+
+
 @app.command("backtest")
 def backtest_command(
     start: str = typer.Option(..., help="Start date YYYY-MM-DD"),

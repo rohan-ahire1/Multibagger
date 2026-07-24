@@ -24,6 +24,8 @@ metrics/reports. Alert-only; no live order execution.
 - `indicators/` — Polars indicator builders: `atr`, `sma`, `rs` (relative strength ranks), `contraction`, `tightness`, `highs_lows`, `volume`.
 - `strategy/` — the signal engine and its parts: `signal_engine` (orchestrates the scan), `trend_template` (Minervini trend), `vcp_setup`, `patterns`, `ranking`, `sector_rs`, `market_filter`/`market_regime`, `explainer`.
 - `backtest/` — trade simulation: `engine` (entry/exit simulation, optional Rust path), `portfolio` (`PortfolioManager`, sizing/sector caps), `exit_engine` (phased exits), `regime_gate`, `metrics`, `signal_analysis`/`signal_scorecard`, `models`, `queries`.
+- `lab/` — the strategy lab: `contracts` (Strategy protocol, ParamSpec), `registry`, `runner`, `result`/`metrics` (one result shape, equity-curve metrics), `panel` (data loading), `store` (DuckDB run history), `jobs` (single-worker queue), `cli`, and `engines/portfolio_sim.py` — **the canonical portfolio simulator**, moved here from `scripts/portfolio_diagnostics.py` (which is now a re-export shim).
+- `lab_strategies/` — registered strategies, one module each; discovery is explicit imports in its `__init__`.
 - `alerts/` — `console` + `telegram` sinks, `formatters`.
 - `api/` — FastAPI app (`app.py`) and routes (`scanner`, `backtest`, `ohlcv`, `analysis`); served by `sepa ui`.
 - `settings.py` — Pydantic settings loaded from `config/config.yaml` (single source of truth).
@@ -98,7 +100,8 @@ Optuna studies persist to SQLite `.db` files at repo root; resume with `load_if_
 
 ### Tests
 ```bash
-uv run pytest tests/        # ~34 test files; ignore any test_ui_* (dead Streamlit refs)
+uv run pytest tests/        # fast suite; slow tests are deselected by default
+uv run pytest -m slow tests/  # the SEPA parity gate and full-history lab runs
 ```
 `pyproject.toml` sets `pythonpath = ["src"]`, `testpaths = ["tests"]`. The `mean_reversion`
 strategy has its own tests under `strategies/mean_reversion/tests/`.
@@ -126,6 +129,7 @@ strategy has its own tests under `strategies/mean_reversion/tests/`.
 uv pip install -e ".[dev]"                       # install
 cd rust_core && maturin develop --release        # build Rust core
 sepa scan / update / run / ui / health           # pipeline + UI
+sepa lab list / run / runs / show                # strategy lab
 sepa backtest --start ... --end ...              # CLI backtest (headline CAGR is inflated)
 uv run python optimize_joint_wf.py --parity      # canonical backtest truth
 uv run pytest tests/                             # tests
