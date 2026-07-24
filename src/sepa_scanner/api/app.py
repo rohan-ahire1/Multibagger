@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from sepa_scanner.api.routes import ohlcv, scanner, analysis, backtest
+from sepa_scanner.api.routes import ohlcv, scanner, analysis, backtest, lab
 
 
 def create_app() -> FastAPI:
@@ -20,6 +20,7 @@ def create_app() -> FastAPI:
     app.include_router(scanner.router)
     app.include_router(analysis.router)
     app.include_router(backtest.router)
+    app.include_router(lab.router)
 
     @app.get("/api/health")
     def health():

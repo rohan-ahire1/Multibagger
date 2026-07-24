@@ -130,3 +130,59 @@ CREATE INDEX IF NOT EXISTS idx_signals_symbol_date ON signals(symbol, signal_dat
 
 -- Speed up watchlist reviews lookup
 CREATE INDEX IF NOT EXISTS idx_reviews_symbol_date ON setup_reviews(symbol, scan_date);
+
+CREATE TABLE IF NOT EXISTS lab_runs (
+  run_id        TEXT PRIMARY KEY,
+  strategy_id   TEXT NOT NULL,
+  label         TEXT,
+  params_json   TEXT NOT NULL,
+  params_hash   TEXT NOT NULL,
+  start_date    DATE NOT NULL,
+  end_date      DATE NOT NULL,
+  kind          TEXT NOT NULL,
+  data_source   TEXT NOT NULL,
+  status        TEXT NOT NULL,
+  progress_pct  DOUBLE DEFAULT 0,
+  stage         TEXT,
+  error         TEXT,
+  metrics_json  TEXT,
+  extras_json   TEXT,
+  warnings_json TEXT,
+  created_at    TIMESTAMP NOT NULL,
+  finished_at   TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS lab_equity (
+  run_id           TEXT NOT NULL,
+  d                DATE NOT NULL,
+  equity           DOUBLE NOT NULL,
+  drawdown_pct     DOUBLE NOT NULL,
+  benchmark_equity DOUBLE
+);
+
+CREATE TABLE IF NOT EXISTS lab_trades (
+  run_id      TEXT NOT NULL,
+  symbol      TEXT NOT NULL,
+  direction   TEXT NOT NULL,
+  signal_date DATE,
+  entry_date  DATE,
+  exit_date   DATE,
+  entry_price DOUBLE,
+  exit_price  DOUBLE,
+  shares      DOUBLE,
+  stop        DOUBLE,
+  r_multiple  DOUBLE,
+  pnl         DOUBLE,
+  pnl_pct     DOUBLE,
+  mfe_r       DOUBLE,
+  mae_r       DOUBLE,
+  hold_days   INTEGER,
+  exit_reason TEXT,
+  status      TEXT,
+  sector      TEXT,
+  meta_json   TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_lab_equity_run ON lab_equity(run_id);
+CREATE INDEX IF NOT EXISTS idx_lab_trades_run ON lab_trades(run_id);
+CREATE INDEX IF NOT EXISTS idx_lab_runs_strategy ON lab_runs(strategy_id, created_at);
