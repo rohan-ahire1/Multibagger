@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
@@ -17,6 +18,7 @@ from sepa_scanner.indicators.volume import add_volume_columns
 from sepa_scanner.settings import AppSettings
 from sepa_scanner.strategy.market_filter import classify_market_regime
 from sepa_scanner.strategy.market_regime import MarketRegime
+from sepa_scanner.strategy.pullback_setup import add_pullback_setup_columns
 from sepa_scanner.strategy.ranking import rank_signals
 from sepa_scanner.strategy.sector_rs import compute_sector_rs
 from sepa_scanner.strategy.trend_template import add_trend_template_columns
@@ -37,6 +39,7 @@ BREAKOUT_FAIL_BELOW_PIVOT = 16
 BREAKOUT_FAIL_VOL_LOW = 32
 BREAKOUT_FAIL_NOT_FIRST_DAY = 64
 BREAKOUT_FAIL_OVEREXTENDED = 128
+BREAKOUT_FAIL_CONTRACTION_EXHAUSTED = 256
 
 
 @dataclass(slots=True)
@@ -159,6 +162,15 @@ def _prepare_frame(frame: pl.DataFrame, settings: AppSettings) -> pl.DataFrame:
         pl.col("setup_pass").shift(1).over("symbol").alias("setup_pass_prev")
     )
 
+    if settings.pullback.enabled:
+        prepared = prepared.with_columns(
+            pl.col("close")
+            .ewm_mean(span=21, adjust=False)
+            .over("symbol")
+            .alias("ema21")
+        )
+        prepared = add_pullback_setup_columns(prepared, settings.pullback)
+
     ema_period = settings.market_filter.benchmark_ema_period
     prepared = prepared.with_columns(
         pl.col("close")
@@ -278,6 +290,10 @@ def _build_diagnostics(
             + pl.when(
                 pl.col("close") > pl.col("sma50") * (1.0 + settings.breakout.max_extension_breakout_pct)
             ).then(BREAKOUT_FAIL_OVEREXTENDED).otherwise(0)
+            + pl.when(
+                pl.col("contraction_count").fill_null(0)
+                > settings.setup_vcp.contraction_max_count
+            ).then(BREAKOUT_FAIL_CONTRACTION_EXHAUSTED).otherwise(0)
         ).cast(pl.Int32).alias("breakout_fail_mask"),
     )
 
@@ -325,6 +341,7 @@ def scan_for_date(
     _prepared: pl.DataFrame | None = None,
     _lifecycle: pl.DataFrame | None = None,
     _rs_scores: pl.DataFrame | None = None,
+    _recent_breakout_symbols: set[str] | None = None,
 ) -> ScanResult:
     prepared = _prepared if _prepared is not None else _prepare_frame(frame, settings)
 
@@ -466,6 +483,18 @@ def scan_for_date(
 
     scan_rows = scan_rows.with_columns(breakout_buffer_expr, entry_ref_expr)
 
+    if settings.pullback.enabled:
+        if entry_atr_mult is not None:
+            pullback_entry_ref_expr = (
+                pl.col("pullback_pivot")
+                * (1.0 + pl.col("atr_pct").fill_null(0.0) * entry_atr_mult)
+            ).alias("pullback_entry_ref")
+        else:
+            pullback_entry_ref_expr = (
+                pl.col("pullback_pivot") * (1.0 + settings.risk.entry_buffer_pct)
+            ).alias("pullback_entry_ref")
+        scan_rows = scan_rows.with_columns(pullback_entry_ref_expr)
+
     # ATR-based structural stop (Optional override)
     # If struct_stop_atr_mult is configured, struct_stop = entry_ref - ATR * mult
     struct_atr_mult = settings.risk.struct_stop_atr_mult
@@ -491,7 +520,20 @@ def scan_for_date(
         & (pl.col("volume") <= pl.col("vol50") * settings.breakout.breakout_vol_max_mult)
         & (pl.col("prev_close") < pl.col("_breakout_level"))
         & (pl.col("close") <= pl.col("sma50") * (1.0 + settings.breakout.max_extension_breakout_pct))
+        & (
+            pl.col("contraction_count").fill_null(0)
+            <= settings.setup_vcp.contraction_max_count
+        )
     )
+    prior_breakout_symbols = _recent_breakout_symbols or set()
+    pullback_mask = (
+        pl.lit(settings.pullback.enabled)
+        & pl.col("trend_template_pass")
+        & (pl.col("rs_rank").fill_null(0.0) >= settings.pullback.rs_pullback_min)
+        & pl.col("pullback_setup_pass").fill_null(False)
+        & ~breakout_mask
+        & ~pl.col("symbol").is_in(sorted(prior_breakout_symbols))
+    ) if settings.pullback.enabled else pl.lit(False)
     watch_mask = (
         pl.col("trend_template_pass")
         & pl.col("rs_pass")
@@ -503,6 +545,7 @@ def scan_for_date(
 
     enriched = scan_rows.with_columns(
         breakout_mask.alias("breakout_signal"),
+        pullback_mask.alias("pullback_signal"),
         watch_mask.alias("watch_signal"),
     ).with_columns(
         (pl.col("entry_ref") * (1.0 - settings.risk.max_stop_pct)).alias("max_loss_stop"),
@@ -519,6 +562,31 @@ def scan_for_date(
         (pl.col("entry_ref") - pl.col("stop")).alias("r_per_share"),
         (pl.col("entry_ref") - pl.col("stop_breakout")).alias("r_per_share_breakout"),
     )
+
+    if settings.pullback.enabled:
+        enriched = enriched.with_columns(
+            (
+                pl.col("pullback_entry_ref")
+                * (1.0 - settings.risk.max_stop_pct)
+            ).alias("pullback_max_loss_stop")
+        ).with_columns(
+            pl.coalesce(
+                pl.max_horizontal(
+                    "pullback_stop",
+                    "struct_stop",
+                    "pullback_max_loss_stop",
+                ),
+                pl.col("pullback_max_loss_stop"),
+            ).alias("pullback_final_stop")
+        ).with_columns(
+            (
+                pl.col("pullback_entry_ref") - pl.col("pullback_final_stop")
+            ).alias("pullback_r_per_share"),
+            (
+                (pl.col("pullback_pivot") - pl.col("close"))
+                / pl.col("pullback_pivot")
+            ).alias("pullback_near_pivot"),
+        )
 
     # If adjusted, use raw_close for signal display fields
     if "raw_close" in enriched.columns:
@@ -562,8 +630,26 @@ def scan_for_date(
         .select(_signal_cols)
     )
 
+    signal_frames = [watch_signals, breakout_signals]
+    if settings.pullback.enabled:
+        pullback_signals = (
+            enriched.filter(
+                pl.col("pullback_signal") & (pl.col("pullback_r_per_share") > 0)
+            )
+            .with_columns(
+                pl.lit("PULLBACK").alias("signal_type"),
+                pl.col("pullback_pivot").alias("pivot"),
+                pl.col("pullback_near_pivot").alias("near_pivot"),
+                pl.col("pullback_entry_ref").alias("entry_ref"),
+                pl.col("pullback_final_stop").alias("stop"),
+                pl.col("pullback_r_per_share").alias("r_per_share"),
+            )
+            .select(_signal_cols)
+        )
+        signal_frames.append(pullback_signals)
+
     signals = rank_signals(
-        pl.concat([watch_signals, breakout_signals], how="vertical"),
+        pl.concat(signal_frames, how="vertical"),
         settings.alerts.max_alerts_per_day,
         ranking_mode=settings.alerts.signal_ranking_mode,
     )
@@ -618,8 +704,13 @@ def scan_batch(
         skip_recent_days=settings.relative_strength.skip_recent_days,
     )
 
+    recent_breakouts: deque[set[str]] = deque(
+        maxlen=settings.pullback.dedup_days
+    )
+
     for scan_date in scan_dates:
         try:
+            recent_breakout_symbols = set().union(*recent_breakouts) if recent_breakouts else set()
             result = scan_for_date(
                 frame,
                 settings,
@@ -627,7 +718,16 @@ def scan_batch(
                 _prepared=prepared,
                 _lifecycle=lifecycle,
                 _rs_scores=rs_scores,
+                _recent_breakout_symbols=recent_breakout_symbols,
             )
+            if settings.pullback.enabled:
+                recent_breakouts.append(
+                    set(
+                        result.signals.filter(pl.col("signal_type") == "BREAKOUT")[
+                            "symbol"
+                        ].to_list()
+                    )
+                )
             yield (scan_date, result, None)
         except Exception as exc:
             yield (scan_date, None, str(exc))

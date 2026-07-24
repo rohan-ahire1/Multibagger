@@ -200,6 +200,33 @@ class DuckDbStore:
         columns = [desc[0] for desc in conn.description]
         return [dict(zip(columns, row, strict=False)) for row in rows]
 
+    def fetch_recent_breakout_symbols(
+        self,
+        before_date: date,
+        session_count: int,
+    ) -> set[str]:
+        """Return symbols with a breakout in the prior successful scan sessions."""
+        if session_count <= 0:
+            return set()
+        self.initialize()
+        rows = self._connect().execute(
+            """
+            WITH recent_sessions AS (
+                SELECT DISTINCT CAST(scan_date AS DATE) AS scan_date
+                FROM runs
+                WHERE status = 'success' AND scan_date < ?
+                ORDER BY scan_date DESC
+                LIMIT ?
+            )
+            SELECT DISTINCT s.symbol
+            FROM signals s
+            INNER JOIN recent_sessions r ON r.scan_date = s.signal_date
+            WHERE s.signal_type = 'BREAKOUT'
+            """,
+            [before_date, session_count],
+        ).fetchall()
+        return {str(row[0]) for row in rows}
+
     def fetch_scan_sessions(self) -> list[dict]:
         """Return valid scan dates with their persisted signal activity."""
         self.initialize()

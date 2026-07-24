@@ -57,7 +57,9 @@ def resolve_settings(config_dir: Path | None = None) -> AppSettings:
 
 def _stores(settings: AppSettings, *, read_only: bool = False) -> tuple[ParquetOhlcvStore, DuckDbStore]:
     data_dir = ensure_directory(settings.runtime.data_dir)
-    parquet_store = ParquetOhlcvStore(root=ensure_directory(data_dir / "yf_adjusted"))
+    parquet_store = ParquetOhlcvStore(
+        root=ensure_directory(data_dir / settings.data.panel_subdir)
+    )
     duckdb_store = DuckDbStore(
         db_path=ensure_directory(data_dir / "db") / "sepa.duckdb",
         read_only=read_only
@@ -402,7 +404,20 @@ def run_scan_command(
 
     started_at = datetime.now(UTC)
     try:
-        result = scan_for_date(frame=frame, settings=settings, scan_date=actual_scan_date)
+        recent_breakout_symbols = (
+            duckdb_store.fetch_recent_breakout_symbols(
+                actual_scan_date,
+                settings.pullback.dedup_days,
+            )
+            if settings.pullback.enabled
+            else set()
+        )
+        result = scan_for_date(
+            frame=frame,
+            settings=settings,
+            scan_date=actual_scan_date,
+            _recent_breakout_symbols=recent_breakout_symbols,
+        )
         duckdb_store.upsert_signals(_signal_dataclasses(result))
         duckdb_store.replace_watchlist_candidates(
             actual_scan_date,
@@ -563,9 +578,24 @@ def run_backtest_command(
         max_hold_days=max_hold_days,
         target_r=target_r,
         exit_mode=ExitMode(settings.backtest.exit_mode),
+        baseline_tighten_r=getattr(settings.backtest, "baseline_tighten_r", 7.0),
+        stop_trigger_mode=getattr(settings.backtest, "stop_trigger_mode", "close_only"),
+        signal_exit_execution=getattr(
+            settings.backtest, "signal_exit_execution", "same_close"
+        ),
+        slippage_bps=getattr(settings.backtest, "slippage_bps", 10.0),
         trail_activation_r=settings.exit_strategy.trail_activation_r,
         trail_pct=settings.exit_strategy.trail_pct,
         dead_money_days=settings.exit_strategy.dead_money_days,
+        stagnation_exit_bars=getattr(
+            settings.exit_strategy, "stagnation_exit_bars", None
+        ),
+        stagnation_max_mfe_r=getattr(
+            settings.exit_strategy, "stagnation_max_mfe_r", 0.40
+        ),
+        stagnation_max_open_r=getattr(
+            settings.exit_strategy, "stagnation_max_open_r", 0.0
+        ),
         friction_enabled=True,
     )
     

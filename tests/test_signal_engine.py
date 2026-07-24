@@ -13,6 +13,7 @@ from sepa_scanner.settings import (
     DataSettings,
     MarketFilterSettings,
     MarketSettings,
+    PullbackSettings,
     RelativeStrengthSettings,
     RiskSettings,
     RuntimeSettings,
@@ -165,6 +166,81 @@ def test_signal_engine_emits_watch_and_breakout_with_prev_day_setup(tmp_path: Pa
     assert breakout_row["voldry"] < settings.setup_vcp.max_vol_dryup_ratio
 
     assert day61.signals.filter(pl.col("symbol") == "BREAKME").is_empty()
+
+
+def test_pullback_disabled_preserves_committed_signal_rows(tmp_path: Path) -> None:
+    dates = _dates(61)
+    benchmark = _symbol_frame(
+        "NIFTYBEES",
+        dates,
+        [100.0 + 0.5 * idx for idx in range(61)],
+        [1_000_000] * 61,
+    )
+    leader = _symbol_frame(
+        "LEADER",
+        dates,
+        [70.0 + idx for idx in range(50)]
+        + [119.2, 119.5, 119.8, 120.0, 120.1, 120.2, 120.25, 120.3, 120.35, 120.4, 120.45],
+        [450_000] * 50 + [180_000] * 11,
+    )
+    weak = _symbol_frame(
+        "WEAK",
+        dates,
+        [90.0 + 0.1 * idx for idx in range(61)],
+        [300_000] * 61,
+    )
+    frame = pl.concat([benchmark, leader, weak], how="vertical")
+    settings = _settings(tmp_path)
+
+    baseline = scan_for_date(frame=frame, settings=settings, scan_date=dates[59]).signals
+    settings.pullback = PullbackSettings(enabled=False)
+    disabled = scan_for_date(frame=frame, settings=settings, scan_date=dates[59]).signals
+
+    assert baseline.equals(disabled)
+    assert "PULLBACK" not in disabled["signal_type"].to_list()
+
+
+def test_signal_engine_emits_pullback_when_enabled(tmp_path: Path) -> None:
+    dates = _dates(61)
+    benchmark = _symbol_frame(
+        "NIFTYBEES",
+        dates,
+        [100.0 + 0.5 * idx for idx in range(61)],
+        [1_000_000] * 61,
+    )
+    leader = _symbol_frame(
+        "LEADER",
+        dates,
+        [70.0 + idx for idx in range(50)]
+        + [119.2, 119.5, 119.8, 120.0, 120.1, 120.2, 120.25, 120.3, 120.35, 120.4, 120.45],
+        [450_000] * 50 + [180_000] * 11,
+    )
+    weak = _symbol_frame(
+        "WEAK",
+        dates,
+        [90.0 + 0.1 * idx for idx in range(61)],
+        [300_000] * 61,
+    )
+    frame = pl.concat([benchmark, leader, weak], how="vertical")
+    settings = _settings(tmp_path)
+    settings.pullback = PullbackSettings(
+        enabled=True,
+        rs_pullback_min=0,
+        leader_min_days=5,
+        ma_touch_pct=0.05,
+        pullback_voldry_max=2.0,
+        reversal_upper_range_frac=0.50,
+    )
+
+    result = scan_for_date(frame=frame, settings=settings, scan_date=dates[59])
+    pullbacks = result.signals.filter(
+        (pl.col("symbol") == "LEADER") & (pl.col("signal_type") == "PULLBACK")
+    )
+
+    assert pullbacks.height == 1
+    row = pullbacks.to_dicts()[0]
+    assert row["entry_ref"] > row["pivot"]
+    assert row["stop"] < row["entry_ref"]
 
 
 def test_watch_rejects_above_pivot(tmp_path: Path) -> None:

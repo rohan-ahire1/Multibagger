@@ -56,6 +56,16 @@ breakout:
   breakout_vol_max_mult: 20.0
   max_extension_breakout_pct: 0.30
 
+pullback:
+  enabled: false
+  rs_pullback_min: 70
+  leader_min_days: 20
+  anchor_ma: ema21
+  ma_touch_pct: 0.02
+  pullback_voldry_max: 0.9
+  reversal_upper_range_frac: 0.6666666667
+  dedup_days: 10
+
 risk:
   entry_buffer_pct: 0.003
   entry_buffer_atr_mult: 0.5

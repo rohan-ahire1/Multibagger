@@ -255,6 +255,7 @@ def test_run_scan_command_bootstraps_plain_nse_session(monkeypatch, tmp_path: Pa
         relative_strength=SimpleNamespace(lookbacks=[63, 126, 189, 252]),
         alerts=SimpleNamespace(channels=[]),
         telegram=SimpleNamespace(enabled=False),
+        pullback=SimpleNamespace(enabled=False, dedup_days=10),
     )
 
     sentinel_raw_session = object()
@@ -287,7 +288,7 @@ def test_run_scan_command_bootstraps_plain_nse_session(monkeypatch, tmp_path: Pa
     monkeypatch.setattr("sepa_scanner.main.load_cm_holidays", fake_load_cm_holidays)
     monkeypatch.setattr(
         "sepa_scanner.main.scan_for_date",
-        lambda *, frame, settings, scan_date: ScanResult(
+        lambda *, frame, settings, scan_date, **kwargs: ScanResult(
             scan_date=scan_date,
             market_filter_on=True,
             num_symbols=1,
