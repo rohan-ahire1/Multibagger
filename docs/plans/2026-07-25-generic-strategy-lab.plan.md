@@ -30,6 +30,10 @@ runs on the shared engine, and lands on the same leaderboard.
   `strategies/mean_reversion/live/`).
 - The existing `/api/backtest/*` routes and `/backtest` page are **not** removed. They remain the
   SEPA-specific deep-dive (signal scorecard, signal-quality analysis). The lab is additive.
+  They are, however, **re-pointed** at the canonical engine in step 14 — today they run the stale
+  `backtest/simulation.py` fork and therefore report numbers that cannot reproduce
+  `BACKTEST_TRUTH.md`. Re-pointing changes what the existing `/backtest` page displays; that is
+  intended, and is a bug fix rather than a regression.
 
 ### Hard constraint: parity
 
@@ -477,6 +481,15 @@ Ordered; each step is independently reviewable and leaves the repo working.
 
 12. **CLI.** `sepa lab` sub-app in `main.py` as specified above.
 
+14. **Converge the two simulators (bug fix).** Re-point `api/routes/backtest.py` at the canonical
+    engine (`lab/engines/portfolio_sim.py`) and delete
+    `src/sepa_scanner/backtest/simulation.py`'s duplicate `simulate_portfolio_python`, keeping the
+    helpers other modules import. Until this lands the repo has two engines that disagree, which is
+    exactly the failure `BACKTEST_TRUTH.md` was written to prevent, and the `/backtest` page shows
+    numbers that cannot be reproduced by the canonical harness. Expect the page's figures to
+    change; that is the fix landing, not a regression. **Gate:** the step-4 parity test and
+    `optimize_joint_wf.py --parity` both still produce 12.48% / 24.28% / 281.
+
 13. **Docs + cleanup.** Update `docs/BACKTEST_TRUTH.md` with a "Strategy Lab" section naming the
     lab runner as the canonical multi-strategy harness and restating that
     `optimize_joint_wf.py --parity` remains the SEPA canonical check (and that the lab must match
@@ -593,3 +606,38 @@ Ordered; each step is independently reviewable and leaves the repo working.
 6. Adding a sixth strategy requires exactly one new module in `lab_strategies/` plus its import
    line — no changes to the engine, API, or UI.
 7. `optimize_joint_wf.py --parity` and the pre-existing test suite are unaffected.
+
+---
+
+## Status (2026-07-25)
+
+Steps 1-4 are **implemented and committed** (`b23d76a`), with these deltas from the plan as written:
+
+- The canonical simulator was moved by pure `git mv` to
+  `src/sepa_scanner/lab/engines/portfolio_sim.py`, with `scripts/portfolio_diagnostics.py` left as
+  a re-export shim. Verified: `optimize_joint_wf.py --parity` unchanged, all five importers and the
+  `python scripts/portfolio_diagnostics.py` CLI still work.
+- **`sepa_breakout` reads precomputed signals from DuckDB rather than computing them on demand.**
+  This contradicts the "compute on demand, cache by hash" decision. Reproducing the scan in-process
+  is not guaranteed to yield byte-identical signals, and parity is the harder constraint. The
+  signal cache (`lab/signal_cache.py`) is therefore **not yet built**. Moving to on-demand
+  generation remains the goal and is gated on the same parity test.
+- `lab/store.py`, `lab/jobs.py`, `lab/friction.py`, and the rebalance engine are **not built**.
+  `runner.run_backtest` raises `NotImplementedError` for `REBALANCE` strategies.
+- Metrics gained a benchmark-integrity guard that the plan did not anticipate: see below.
+
+**Parity gate passes** — `pytest -m slow` reproduces CAGR 12.48% / MaxDD 24.28% / Calmar 0.51 /
+281 trades through the lab, plus the 17.20% / 15.08% idle-cash reference row.
+
+### Data bug found while implementing
+
+`NIFTYBEES` (the configured benchmark) split 1:10 on 2019-12-19 and is **absent from
+`config/corporate_actions.csv`**, so the panel carries an unadjusted 10x discontinuity. Its raw
+curve implies a ~90% loss across 2010-2026, which would have been published as roughly +16 points
+of invented alpha. Runs now detect unadjusted discontinuities and suppress benchmark-relative
+metrics with a warning rather than reporting a fabricated number.
+
+The committed strategy is unaffected because `use_regime_entry_controls: false` means the benchmark
+never enters the simulated path — but **the underlying series is still wrong**, and turning regime
+entry controls on would feed garbage regime tags across the split. Fixing the adjustment is
+follow-up work and should land before any regime-gated configuration is trusted.
