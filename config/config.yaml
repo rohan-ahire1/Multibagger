@@ -133,6 +133,8 @@ fundamental_gate:
   min_yoy_growth: 0.25
   reporting_lag_days: 75
   pass_if_missing: true
+  availability_date_column: available_date
+  require_actual_announcement_date: true
 
 watchlist:
   max_candidates: 1000

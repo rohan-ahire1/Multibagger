@@ -6,12 +6,13 @@ import sys
 from types import SimpleNamespace
 
 import polars as pl
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scripts.portfolio_diagnostics import filter_signals, simulate_portfolio_python
 from sepa_scanner.backtest.models import BacktestParams, ExitMode
-from sepa_scanner.backtest.signal_scorecard import compute_scorecard
+from sepa_scanner.backtest.signal_scorecard import compute_scorecard, compute_signal_metrics
 from sepa_scanner.strategy.ranking import add_signal_score, add_signal_size_multiplier
 
 
@@ -139,6 +140,35 @@ def test_offense_v2_score_threshold_filters_using_diagnostics() -> None:
     )
 
     assert ranked["symbol"].to_list() == ["ALPHA"]
+
+
+def test_contraction_exhaustion_filter_rejects_three_plus_peaks() -> None:
+    signals = pl.DataFrame(
+        {
+            "signal_date": [date(2026, 3, 1), date(2026, 3, 1)],
+            "symbol": ["KEEP", "EXHAUSTED"],
+            "rs_rank": [90.0, 90.0],
+            "vol_mult": [1.5, 1.5],
+            "range10": [0.06, 0.06],
+            "voldry": [0.6, 0.6],
+        }
+    )
+    diagnostics = pl.DataFrame(
+        {
+            "diag_date": [date(2026, 3, 1), date(2026, 3, 1)],
+            "symbol": ["KEEP", "EXHAUSTED"],
+            "contraction_count": [2, 3],
+        }
+    )
+
+    filtered = filter_signals(
+        signals,
+        settings=_settings(),
+        diagnostics=diagnostics,
+        quality_overrides={"contraction_count_max": 2},
+    )
+
+    assert filtered["symbol"].to_list() == ["KEEP"]
 
 
 def test_offense_v2_size_tilt_assigns_larger_multiplier_to_better_setups() -> None:
@@ -272,6 +302,315 @@ def test_simulate_portfolio_python_uses_signal_size_multiplier_for_position_sizi
     assert round(trades["ALPHA"]["shares"] / trades["BETA"]["shares"], 3) == round(1.4 / 0.6, 3)
 
 
+def test_diagnostics_simulator_handles_empty_signal_set() -> None:
+    signals = pl.DataFrame(schema={
+        "signal_date": pl.Date,
+        "symbol": pl.String,
+        "entry_ref": pl.Float64,
+        "stop": pl.Float64,
+        "pivot": pl.Float64,
+        "rs_rank": pl.Float64,
+    })
+    ohlcv = pl.DataFrame({
+        "date": [date(2026, 3, 1), date(2026, 3, 2)],
+        "symbol": ["BENCH", "BENCH"],
+        "open": [100.0, 100.0],
+        "high": [101.0, 101.0],
+        "low": [99.0, 99.0],
+        "close": [100.0, 100.0],
+        "volume": [1_000_000, 1_000_000],
+    })
+    params = BacktestParams(
+        pending_days=1,
+        max_hold_days=20,
+        target_r=None,
+        exit_mode=ExitMode.BASELINE_EMA21,
+    )
+    portfolio = {
+        "initial_capital": 100_000.0,
+        "risk_per_trade_pct": 0.01,
+        "max_positions": 5,
+        "max_heat_pct": 1.0,
+        "drawdown_half_pct": 0.50,
+        "drawdown_stop_pct": 0.75,
+        "drawdown_close_pct": 0.90,
+    }
+
+    result = simulate_portfolio_python(signals, ohlcv, params, portfolio, {})
+
+    assert result["trades"].is_empty()
+    assert {"signal_date", "symbol", "entry_date", "r_multiple"}.issubset(
+        result["trades"].columns
+    )
+    assert result["final_equity"] == 100_000.0
+
+
+def test_diagnostics_simulator_intraday_stop_uses_prior_active_stop() -> None:
+    dates = [date(2026, 3, day) for day in range(1, 5)]
+    signals = pl.DataFrame({
+        "signal_date": [dates[0]],
+        "symbol": ["REVERSAL"],
+        "entry_ref": [100.0],
+        "stop": [95.0],
+        "pivot": [100.0],
+        "rs_rank": [90.0],
+    })
+    ohlcv = pl.DataFrame({
+        "date": dates,
+        "symbol": ["REVERSAL"] * 4,
+        "open": [100.0, 100.0, 100.0, 100.0],
+        "high": [101.0, 101.0, 101.0, 101.0],
+        "low": [99.0, 99.0, 94.0, 99.0],
+        "close": [100.0, 100.0, 100.0, 100.0],
+        "volume": [1_000_000] * 4,
+    })
+    params = BacktestParams(
+        pending_days=1,
+        max_hold_days=20,
+        target_r=None,
+        exit_mode=ExitMode.BASELINE_HARD,
+    )
+    portfolio = {
+        "initial_capital": 100_000.0,
+        "risk_per_trade_pct": 0.01,
+        "max_positions": 5,
+        "max_heat_pct": 1.0,
+        "drawdown_half_pct": 0.50,
+        "drawdown_stop_pct": 0.75,
+        "drawdown_close_pct": 0.90,
+    }
+
+    close_only = simulate_portfolio_python(signals, ohlcv, params, portfolio, {})
+    intraday = simulate_portfolio_python(
+        signals,
+        ohlcv,
+        params,
+        portfolio,
+        {},
+        stop_trigger_mode="intraday",
+    )
+
+    assert close_only["trades"]["status"].item() == "open"
+    assert intraday["trades"]["status"].item() == "intraday_stop"
+    assert intraday["trades"]["exit_date"].item() == dates[2]
+    assert intraday["trades"]["exit_price"].item() == 95.0
+
+
+def test_diagnostics_simulator_can_execute_close_signal_at_next_open() -> None:
+    from datetime import timedelta
+
+    dates = [date(2026, 1, 1) + timedelta(days=i) for i in range(24)]
+    closes = [100.0] * 21 + [115.0, 100.5, 90.0]
+    opens = [100.0] * 21 + [115.0, 102.0, 90.0]
+    highs = [101.0] * 21 + [116.0, 103.0, 91.0]
+    lows = [99.0] * 21 + [114.0, 100.25, 89.0]
+    signals = pl.DataFrame({
+        "signal_date": [dates[0]],
+        "symbol": ["TRAIL"],
+        "entry_ref": [100.0],
+        "stop": [95.0],
+        "pivot": [100.0],
+        "rs_rank": [90.0],
+    })
+    ohlcv = pl.DataFrame({
+        "date": dates,
+        "symbol": ["TRAIL"] * len(dates),
+        "open": opens,
+        "high": highs,
+        "low": lows,
+        "close": closes,
+        "volume": [1_000_000] * len(dates),
+    })
+    params = BacktestParams(
+        pending_days=1,
+        max_hold_days=150,
+        target_r=None,
+        exit_mode=ExitMode.BASELINE_EMA21,
+    )
+    portfolio = {
+        "initial_capital": 100_000.0,
+        "risk_per_trade_pct": 0.01,
+        "max_positions": 5,
+        "max_heat_pct": 1.0,
+        "drawdown_half_pct": 0.50,
+        "drawdown_stop_pct": 0.75,
+        "drawdown_close_pct": 0.90,
+    }
+
+    same_close = simulate_portfolio_python(signals, ohlcv, params, portfolio, {})
+    next_open = simulate_portfolio_python(
+        signals,
+        ohlcv,
+        params,
+        portfolio,
+        {},
+        stop_trigger_mode="intraday_hard",
+        signal_exit_execution="next_open",
+    )
+
+    assert same_close["trades"]["exit_date"].item() == dates[22]
+    assert same_close["trades"]["exit_price"].item() == 100.5
+    assert next_open["trades"]["exit_date"].item() == dates[23]
+    assert next_open["trades"]["exit_price"].item() == 90.0
+    assert next_open["trades"]["status"].item().endswith("_next_open")
+
+
+def test_diagnostics_stagnation_exit_uses_symbol_sessions_and_next_open() -> None:
+    dates = [date(2026, 3, day) for day in range(1, 20)]
+    signals = pl.DataFrame({
+        "signal_date": [dates[0]],
+        "symbol": ["STALL"],
+        "entry_ref": [100.0],
+        "stop": [90.0],
+        "pivot": [100.0],
+        "rs_rank": [90.0],
+    })
+    ohlcv = pl.DataFrame({
+        "date": dates,
+        "symbol": ["STALL"] * len(dates),
+        "open": [100.0] * 17 + [98.0, 98.0],
+        "high": [103.9] * len(dates),
+        "low": [98.0] * len(dates),
+        "close": [99.0] * len(dates),
+        "volume": [1_000_000] * len(dates),
+    })
+    params = BacktestParams(
+        pending_days=1,
+        max_hold_days=150,
+        exit_mode=ExitMode.BASELINE_HARD,
+        signal_exit_execution="next_open",
+        stagnation_exit_bars=15,
+        stagnation_max_mfe_r=0.40,
+        stagnation_max_open_r=0.0,
+    )
+    portfolio = {
+        "initial_capital": 100_000.0,
+        "risk_per_trade_pct": 0.01,
+        "max_positions": 5,
+        "max_heat_pct": 1.0,
+        "drawdown_half_pct": 0.50,
+        "drawdown_stop_pct": 0.75,
+        "drawdown_close_pct": 0.90,
+    }
+
+    result = simulate_portfolio_python(signals, ohlcv, params, portfolio, {})
+    trade = result["trades"].filter(pl.col("entry_date").is_not_null()).row(0, named=True)
+
+    assert trade["status"] == "stagnation_next_open"
+    assert trade["entry_date"] == dates[1]
+    assert trade["exit_date"] == dates[17]
+    assert trade["exit_price"] == 98.0
+
+
+def test_diagnostics_stagnation_exit_preserves_trade_that_reached_threshold() -> None:
+    dates = [date(2026, 3, day) for day in range(1, 20)]
+    signals = pl.DataFrame({
+        "signal_date": [dates[0]],
+        "symbol": ["PROGRESS"],
+        "entry_ref": [100.0],
+        "stop": [90.0],
+        "pivot": [100.0],
+        "rs_rank": [90.0],
+    })
+    highs = [103.9] * len(dates)
+    highs[5] = 104.1
+    ohlcv = pl.DataFrame({
+        "date": dates,
+        "symbol": ["PROGRESS"] * len(dates),
+        "open": [100.0] * len(dates),
+        "high": highs,
+        "low": [98.0] * len(dates),
+        "close": [99.0] * len(dates),
+        "volume": [1_000_000] * len(dates),
+    })
+    params = BacktestParams(
+        pending_days=1,
+        max_hold_days=150,
+        exit_mode=ExitMode.BASELINE_HARD,
+        signal_exit_execution="next_open",
+        stagnation_exit_bars=15,
+        stagnation_max_mfe_r=0.40,
+        stagnation_max_open_r=0.0,
+    )
+    portfolio = {
+        "initial_capital": 100_000.0,
+        "risk_per_trade_pct": 0.01,
+        "max_positions": 5,
+        "max_heat_pct": 1.0,
+        "drawdown_half_pct": 0.50,
+        "drawdown_stop_pct": 0.75,
+        "drawdown_close_pct": 0.90,
+    }
+
+    result = simulate_portfolio_python(signals, ohlcv, params, portfolio, {})
+
+    assert not result["trades"].filter(
+        pl.col("status").str.starts_with("stagnation")
+    ).height
+    assert result["open_positions"][0]["symbol"] == "PROGRESS"
+
+
+def test_diagnostics_simulator_honors_baseline_exit_mode() -> None:
+    dates = [date(2026, 1, day) for day in range(1, 31)]
+    signals = pl.DataFrame(
+        {
+            "signal_date": [dates[0]],
+            "symbol": ["FLAT"],
+            "entry_ref": [100.0],
+            "stop": [95.0],
+            "pivot": [100.0],
+            "rs_rank": [90.0],
+            "range10": [0.05],
+            "voldry": [0.50],
+        }
+    )
+    ohlcv = pl.DataFrame(
+        {
+            "date": dates,
+            "symbol": ["FLAT"] * len(dates),
+            "open": [100.0] * len(dates),
+            "high": [101.0] * len(dates),
+            "low": [99.0] * len(dates),
+            "close": [100.0] * len(dates),
+            "volume": [1_000_000] * len(dates),
+        }
+    )
+    params = BacktestParams(
+        pending_days=1,
+        max_hold_days=20,
+        target_r=None,
+        exit_mode=ExitMode.BASELINE_EMA21,
+        friction_enabled=False,
+    )
+    portfolio = {
+        "initial_capital": 100_000.0,
+        "risk_per_trade_pct": 0.01,
+        "max_positions": 5,
+        "max_sector_positions": 0,
+        "max_sector_pct": 1.0,
+        "max_name_pct": 1.0,
+        "max_heat_pct": 1.0,
+        "drawdown_half_pct": 0.50,
+        "drawdown_stop_pct": 0.75,
+        "drawdown_close_pct": 0.90,
+        "cash_yield_apy": 0.0,
+        "pyramid_max_adds": 0,
+    }
+
+    result = simulate_portfolio_python(
+        signals,
+        ohlcv,
+        params,
+        portfolio,
+        {"FLAT": "TECH"},
+    )
+
+    filled = result["trades"].filter(pl.col("entry_date").is_not_null())
+    assert filled.height == 1
+    assert filled["status"].item() == "max_hold"
+    assert filled["holding_days"].item() == 20
+
+
 def test_offense_v2_band_tilt_peaks_near_midpoint_score() -> None:
     frame = pl.DataFrame(
         {
@@ -400,3 +739,17 @@ def test_scorecard_reports_multi_r_outcomes_and_quality_sections() -> None:
     assert result["overall"]["reached_3r_pct"] == 100.0
     assert "by_setup_streak" in result
     assert "by_offense_v2_score" in result
+
+    metrics = compute_signal_metrics(
+        signals,
+        ohlcv,
+        diagnostics,
+        forward_days=[1, 3, 5],
+        pending_days=3,
+    )
+    assert metrics.height == 1
+    assert metrics["fill_delay_bars"].item() == 1
+    assert metrics["first_1r_bar"].item() == 1
+    assert metrics["first_3r_bar"].item() == 2
+    assert metrics["mfe_3d_r"].item() == pytest.approx((121.0 - 105.0) / 5.0)
+    assert metrics["mae_3d_r"].item() == pytest.approx((103.0 - 105.0) / 5.0)

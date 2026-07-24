@@ -194,25 +194,43 @@ def add_signal_size_multiplier(
 
 
 def _sort_for_mode(frame: pl.DataFrame, ranking_mode: str, primary_group_col: str) -> pl.DataFrame:
+    priority_col = "_signal_type_priority"
+    has_priority = priority_col in frame.columns
     if ranking_mode == "championship":
+        sort_cols = [primary_group_col, "_signal_score", "rs_rank"]
+        descending = [False, True, True]
+        if has_priority:
+            sort_cols.append(priority_col)
+            descending.append(False)
+        sort_cols.extend(["vol_mult", "range10", "symbol"])
+        descending.extend([True, False, False])
         return add_signal_score(frame, ranking_mode=ranking_mode).sort(
-            by=[primary_group_col, "_signal_score", "rs_rank", "vol_mult", "range10", "symbol"],
-            descending=[False, True, True, True, False, False],
+            by=sort_cols,
+            descending=descending,
         )
     if ranking_mode in {"offense_v2", "sector_alpha"}:
         ranked = add_signal_score(frame, ranking_mode=ranking_mode)
-        sort_cols = [primary_group_col, "_signal_score", "rs_rank", "contraction_quality", "range10", "symbol"]
-        descending = [False, True, True, True, False, False]
+        sort_cols = [primary_group_col, "_signal_score", "rs_rank"]
+        descending = [False, True, True]
+        if has_priority:
+            sort_cols.append(priority_col)
+            descending.append(False)
+        sort_cols.extend(["contraction_quality", "range10", "symbol"])
+        descending.extend([True, False, False])
         available_cols = [col for col in sort_cols if col in ranked.columns]
         available_desc = [desc for col, desc in zip(sort_cols, descending, strict=True) if col in ranked.columns]
         return ranked.sort(
             by=available_cols,
             descending=available_desc,
         )
-    return frame.sort(
-        by=[primary_group_col, "rs_rank", "vol_mult", "range10", "symbol"],
-        descending=[False, True, True, False, False],
-    )
+    sort_cols = [primary_group_col, "rs_rank"]
+    descending = [False, True]
+    if has_priority:
+        sort_cols.append(priority_col)
+        descending.append(False)
+    sort_cols.extend(["vol_mult", "range10", "symbol"])
+    descending.extend([True, False, False])
+    return frame.sort(by=sort_cols, descending=descending)
 
 
 def rank_signals(frame: pl.DataFrame, max_alerts_per_day: int, ranking_mode: str = "default") -> pl.DataFrame:
@@ -233,11 +251,19 @@ def select_top_signals_by_day(
 ) -> pl.DataFrame:
     if frame.is_empty():
         return frame
-    ranked = _sort_for_mode(frame, ranking_mode, "signal_date")
+    ranked_input = frame
+    if "signal_type" in frame.columns:
+        ranked_input = frame.with_columns(
+            pl.when(pl.col("signal_type") == "BREAKOUT")
+            .then(pl.lit(0))
+            .otherwise(pl.lit(1))
+            .alias("_signal_type_priority")
+        )
+    ranked = _sort_for_mode(ranked_input, ranking_mode, "signal_date")
     if max_signals_per_day is None or max_signals_per_day <= 0:
-        return ranked.drop("_signal_score", strict=False)
+        return ranked.drop("_signal_score", "_signal_type_priority", strict=False)
     return (
         ranked.group_by("signal_date", maintain_order=True)
         .head(max_signals_per_day)
-        .drop("_signal_score", strict=False)
+        .drop("_signal_score", "_signal_type_priority", strict=False)
     )

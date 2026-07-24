@@ -1,0 +1,86 @@
+{
+  "window": {
+    "start": "2010-01-04",
+    "end": "2026-03-17"
+  },
+  "data_source": "nse_bhavcopy",
+  "signal_funnel": {
+    "definition": "raw D+1-fillable BREAKOUT reaching +5R before original stop and >=50% MFE within 120 symbol sessions",
+    "raw_breakouts": 1860,
+    "raw_fillable": 1850,
+    "canonical_selected": 354,
+    "portfolio_entered": 281,
+    "major_signal_opportunities": 159,
+    "major_selected": 50,
+    "major_entered": 39,
+    "major_filter_recall": 0.31446540880503143,
+    "major_portfolio_capture": 0.24528301886792453,
+    "three_r_opportunities": 564,
+    "three_r_selected": 119,
+    "three_r_entered": 97,
+    "three_r_filter_recall": 0.21099290780141844,
+    "three_r_portfolio_capture": 0.17198581560283688,
+    "five_r_opportunities": 367,
+    "five_r_selected": 83,
+    "five_r_entered": 66,
+    "five_r_filter_recall": 0.22615803814713897,
+    "five_r_portfolio_capture": 0.17983651226158037,
+    "rejected_major_overlapping_reasons": {
+      "january_exclusion": 3,
+      "rs_below_min": 30,
+      "range10_above_max": 42,
+      "voldry_above_max": 33,
+      "contraction_count_above_max": 32,
+      "setup_streak_above_max": 17
+    },
+    "canonical_trade_statuses": {
+      "intraday_stop": 157,
+      "trail_baseline_ema_hybrid_next_open": 85,
+      "not_filled": 73,
+      "stopped": 17,
+      "max_hold": 14,
+      "stagnation_next_open": 8
+    }
+  },
+  "winner_episode_coverage": {
+    "definition": "non-overlapping eligible symbol-month anchors reaching +50% within 120 sessions",
+    "episodes": 3767,
+    "raw_breakout_20d": 52,
+    "raw_breakout_60d": 222,
+    "raw_breakout_120d": 559,
+    "canonical_breakout_20d": 5,
+    "canonical_breakout_60d": 63,
+    "canonical_breakout_120d": 192,
+    "raw_recall_120d": 0.1483939474382798,
+    "canonical_recall_120d": 0.05096894080169896,
+    "missed_completely": 3208
+  },
+  "oracle_exit_bound": {
+    "definition": "same canonical entries/sizes; best pre-original-stop high within 120 sessions",
+    "important_limitations": [
+      "hindsight exit, therefore not tradable",
+      "holds position sizes fixed and ignores reinvestment",
+      "ignores overlapping-capital and opportunity-cost changes caused by later exits",
+      "uses the original hard stop but ignores tighter trailing exits"
+    ],
+    "trades": 281,
+    "actual_trade_pnl": 5636309.915925658,
+    "feasible_oracle_trade_pnl": 24214391.172947347,
+    "actual_to_oracle_pnl_ratio": 0.23276694737725315,
+    "oracle_equivalent_terminal_equity": 25214391.172947347,
+    "oracle_equivalent_cagr": 0.22049742573236109,
+    "median_actual_r": -1.0003182912650228,
+    "median_feasible_oracle_r": 1.231022405338303,
+    "mean_actual_r": 0.574493729491846,
+    "mean_feasible_oracle_r": 3.1132782527017557,
+    "trades_with_3r_feasible": 92,
+    "trades_with_5r_feasible": 59
+  },
+  "conclusion": {
+    "headline": "Primary bottleneck: entry signal supply. Raw winner-episode recall=14.8%; major-signal filter recall=31.4%; actual/oracle P&L capture=23.3%.",
+    "primary_bottleneck": "entry signal supply",
+    "interpretation": "The breakout generator misses most major eligible-universe runs; exit tuning cannot monetize opportunities that never become entries.",
+    "exit_only_can_justify_30pct": "No; even the fixed-size hindsight bound remains below 30% CAGR.",
+    "recommended_next_experiment": "the pre-registered pullback-continuation stream, behind a disabled config flag, because it directly targets missing entry supply"
+  }
+}

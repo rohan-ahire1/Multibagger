@@ -20,6 +20,13 @@ class DataSettings(BaseModel):
     bhavcopy_api_key: str = "favCapital"
     http_timeout_sec: int
     max_retries: int
+    # Price panel source. "yfinance" = legacy survivorship-biased panel (default);
+    # "nse_bhavcopy" = self-built survivorship-free adjusted panel (data/nse_adjusted).
+    source: str = "yfinance"
+
+    @property
+    def panel_subdir(self) -> str:
+        return "nse_adjusted" if self.source == "nse_bhavcopy" else "yf_adjusted"
 
 
 class UniverseSettings(BaseModel):
@@ -70,7 +77,7 @@ class SetupVcpSettings(BaseModel):
     contraction_smooth_window: int = 5
     contraction_min_peak_pct: float = 0.02
     contraction_min_count: int = 2
-    contraction_max_count: int = 99  # New: Filter out exhaustion
+    contraction_max_count: int = 99  # config lowers this when exhaustion filtering is enabled
     contraction_standard_count: int = 3  # for high-conviction signals
     require_progressive: bool = False  # gate setup on true VCP progressive narrowing (each contraction >=20% tighter)
 
@@ -82,6 +89,49 @@ class BreakoutSettings(BaseModel):
     breakout_vol_mult: float
     breakout_vol_max_mult: float = 999.0 # New: Hard ceiling
     max_extension_breakout_pct: float = 0.15
+
+
+class PullbackSettings(BaseModel):
+    enabled: bool = False
+    rs_pullback_min: float = 70.0
+    leader_min_days: int = 20
+    anchor_ma: str = "ema21"
+    ma_touch_pct: float = 0.02
+    pullback_voldry_max: float = 0.90
+    reversal_upper_range_frac: float = 2.0 / 3.0
+    dedup_days: int = 10
+
+    @field_validator("anchor_ma")
+    @classmethod
+    def validate_anchor_ma(cls, value: str) -> str:
+        if value not in {"ema21", "sma50"}:
+            raise ValueError("pullback.anchor_ma must be 'ema21' or 'sma50'")
+        return value
+
+    @field_validator("leader_min_days", "dedup_days")
+    @classmethod
+    def validate_positive_days(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("pullback day windows must be positive")
+        return value
+
+    @field_validator(
+        "ma_touch_pct",
+        "pullback_voldry_max",
+        "reversal_upper_range_frac",
+    )
+    @classmethod
+    def validate_positive_ratio(cls, value: float) -> float:
+        if value <= 0.0:
+            raise ValueError("pullback ratios must be positive")
+        return value
+
+    @field_validator("reversal_upper_range_frac")
+    @classmethod
+    def validate_range_fraction(cls, value: float) -> float:
+        if value > 1.0:
+            raise ValueError("pullback.reversal_upper_range_frac must be <= 1")
+        return value
 
 
 class RiskSettings(BaseModel):
@@ -96,6 +146,10 @@ class BacktestSettings(BaseModel):
     pending_days: int = 8
     max_hold_days: int = 150
     exit_mode: str = "advanced_sepa"
+    baseline_tighten_r: float = 7.0
+    stop_trigger_mode: str = "close_only"
+    signal_exit_execution: str = "same_close"
+    slippage_bps: float = 10.0
     rs_rank_min: float | None = None
     rs_rank_max: float | None = None
     signal_ranking_mode: str = "default"
@@ -140,11 +194,15 @@ class ExitStrategySettings(BaseModel):
     trail_pct: float = 0.10
     trail_pct_bull: float = 0.25
     trail_pct_bear: float = 0.15
+    trail_widen_r: float = 3.0
     dead_money_days: int | None = 17
     dead_money_extend_days: int = 0
     dead_money_min_open_r: float = 0.0
     dead_money_min_mfe_r: float = 0.75
     dead_money_extend_to_breakeven: bool = False
+    stagnation_exit_bars: int | None = None
+    stagnation_max_mfe_r: float = 0.40
+    stagnation_max_open_r: float = 0.0
     time_stop_days: int | None = 15
     max_hold_before_tighten: int = 40
     climax_min_hold_days: int = 15
@@ -154,19 +212,20 @@ class ExitStrategySettings(BaseModel):
 
 
 class FundamentalGateSettings(BaseModel):
-    """Minervini earnings-growth gate on breakout signals (default off).
+    """Experimental earnings-growth gate on breakout signals (default off).
 
-    Validated via prototype (2026-06): gating breakouts on point-in-time
-    earnings growth improves realized Calmar/drawdown through the engine.
-    Off by default until full survivorship-clean data is sourced. Signals for
-    symbols without point-in-time data are kept (pass_if_missing).
+    Corrected testing on the partial local data did not improve the canonical
+    strategy. Keep this off until survivorship-clean filings with actual NSE
+    dissemination dates are available.
     """
     enabled: bool = False
     data_path: str = "data/reference/screener_annual.csv"
     freq: str | None = "annual"          # filter the data file's freq column if present
     min_yoy_growth: float = 0.25         # Minervini "code 33"; cohort ~median
-    reporting_lag_days: int = 75         # annual results known ~75d after FY end (45 for quarterly)
+    reporting_lag_days: int = 75         # legacy research fallback; prohibited when strict
     pass_if_missing: bool = True         # keep signals with no point-in-time fundamental data
+    availability_date_column: str = "available_date"
+    require_actual_announcement_date: bool = True
 
 
 class AlertsSettings(BaseModel):
@@ -206,7 +265,7 @@ class PortfolioSettings(BaseModel):
     initial_capital: float = 1_000_000.0
     risk_per_trade_pct: float = 0.035    # 3.5% risk per trade
     max_name_pct: float = 0.20           # hard cap: single position <= 20% of equity
-    cash_yield_apy: float = 0.06         # idle cash parked in liquid fund/LIQUIDBEES; 0 disables
+    cash_yield_apy: float = 0.0          # strategy metrics exclude assumed idle-cash income
     regime_gate_enabled: bool = True
     regime_high_volatility_threshold: float = 0.25  # 20D ann. realized vol on benchmark
     regime_cooldown_days: int = 0
@@ -261,6 +320,7 @@ class AppSettings(BaseModel):
     relative_strength: RelativeStrengthSettings
     setup_vcp: SetupVcpSettings
     breakout: BreakoutSettings
+    pullback: PullbackSettings = Field(default_factory=PullbackSettings)
     risk: RiskSettings
     backtest: BacktestSettings = Field(default_factory=BacktestSettings)
     exit_strategy: ExitStrategySettings = Field(default_factory=ExitStrategySettings)
@@ -346,6 +406,7 @@ def load_settings(config_dir: Path | None = None) -> AppSettings:
         ),
         setup_vcp=SetupVcpSettings.model_validate(config_values["setup_vcp"]),
         breakout=BreakoutSettings.model_validate(config_values["breakout"]),
+        pullback=PullbackSettings.model_validate(config_values.get("pullback", {})),
         risk=RiskSettings.model_validate(config_values["risk"]),
         backtest=BacktestSettings.model_validate(config_values.get("backtest", {})),
         exit_strategy=ExitStrategySettings.model_validate(config_values.get("exit_strategy", {})),
