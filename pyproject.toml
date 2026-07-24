@@ -42,3 +42,10 @@ packages = ["src/sepa_scanner"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+# Slow tests load the full price panel and run multi-minute simulations, so they
+# are opt-in: `pytest -m slow` (or `-m ""` for everything). The lab parity gate
+# lives there — run it before trusting any backtest change.
+addopts = "-m 'not slow'"
+markers = [
+  "slow: loads the full panel and runs a full-history simulation (minutes)",
+]
