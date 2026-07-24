@@ -9,7 +9,7 @@ import polars as pl
 from sepa_scanner.main import resolve_settings, _stores
 from sepa_scanner.backtest.queries import get_backtest_signals, get_backtest_ohlcv
 from sepa_scanner.backtest.models import BacktestParams, ExitMode
-from sepa_scanner.backtest.simulation import simulate_portfolio_python, filter_signals
+from sepa_scanner.backtest import simulate_portfolio_python, filter_signals
 
 start, end = date(2010, 1, 1), date(2026, 3, 17)
 settings = resolve_settings(None)

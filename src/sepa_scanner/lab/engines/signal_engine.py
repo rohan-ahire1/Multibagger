@@ -80,9 +80,23 @@ def _float(value: Any) -> float | None:
     return result
 
 
-def to_trade_records(
-    trades: pl.DataFrame, *, status: str = "closed"
-) -> list[TradeRecord]:
+# The simulator's `trades` frame is not purely closed trades: a position still
+# open at the end of the window appears with status "open" (marked to market),
+# and an expired trigger appears as "not_filled". Counting either as a closed
+# trade would contaminate win rate, average R, and expectancy.
+_OPEN_STATUSES = frozenset({"open"})
+_UNFILLED_STATUSES = frozenset({"not_filled", "pending_entry", "expired"})
+
+
+def lifecycle_status(raw_status: str | None) -> str:
+    if raw_status in _OPEN_STATUSES:
+        return "open"
+    if raw_status in _UNFILLED_STATUSES:
+        return "not_filled"
+    return "closed"
+
+
+def to_trade_records(trades: pl.DataFrame) -> list[TradeRecord]:
     """Map simulator trade rows into the unified record shape."""
     if trades is None or trades.is_empty():
         return []
@@ -110,7 +124,7 @@ def to_trade_records(
                 mae_r=_float(row.get("mae_r")),
                 hold_days=int(hold) if hold is not None else None,
                 exit_reason=row.get("status"),
-                status=status,
+                status=lifecycle_status(row.get("status")),
                 sector=row.get("sector"),
                 meta={
                     key: row[key]

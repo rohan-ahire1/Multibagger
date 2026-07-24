@@ -15,14 +15,13 @@ import numpy as np
 import polars as pl
 import requests
 
-from sepa_scanner.backtest import (
-    BacktestParams,
-    ExitMode,
-    simulate_portfolio_python,
-    build_entry_controls,
-    compute_regime_inputs,
-    filter_signals,
-)
+# Import from the submodule, not the package: sepa_scanner.backtest re-exports
+# this module's own functions, so going through the package __init__ would make
+# the import order load-bearing. simulate_portfolio_python, filter_signals,
+# build_entry_controls, and compute_regime_inputs used to be imported here and
+# then immediately shadowed by this module's own definitions below — they were
+# dead imports, and this module is where the canonical versions live.
+from sepa_scanner.backtest.models import BacktestParams, ExitMode
 from sepa_scanner.backtest.queries import (
     get_backtest_diagnostics,
     get_backtest_ohlcv,

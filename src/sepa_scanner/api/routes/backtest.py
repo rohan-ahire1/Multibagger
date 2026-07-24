@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, fields, is_dataclass
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -13,7 +13,7 @@ from sepa_scanner.backtest.engine import simulate_breakout_backtest
 from sepa_scanner.backtest.metrics import build_equity_curve, summarize_backtest
 from sepa_scanner.backtest.signal_analysis import analyze_post_entry_returns, analyze_signal_quality
 from sepa_scanner.backtest.signal_scorecard import compute_scorecard
-from sepa_scanner.backtest.models import BacktestParams, ExitMode
+from sepa_scanner.backtest.models import BacktestParams, BacktestTrade, ExitMode
 from sepa_scanner.backtest.queries import get_backtest_ohlcv, get_backtest_signals
 from sepa_scanner.settings import AppSettings
 from sepa_scanner.backtest.portfolio import PortfolioManager
@@ -53,6 +53,25 @@ def _serialize_trade(trade) -> dict:
     d.pop("mae_price", None)
     d.pop("mfe_price", None)
     return d
+
+
+_TRADE_FIELDS = {f.name for f in fields(BacktestTrade)}
+
+
+def _trades_from_frame(frame) -> list[BacktestTrade]:
+    """Build BacktestTrade rows from the canonical engine's trades frame.
+
+    The engine's column names already match the dataclass, apart from
+    `giveback_r` / `peak_gain_capture_pct` / `initial_risk_price`, which the UI
+    payload does not use. Unknown columns are dropped rather than passed
+    through, so an engine-side column addition cannot break the endpoint.
+    """
+    if frame is None or getattr(frame, "is_empty", lambda: True)():
+        return []
+    return [
+        BacktestTrade(**{k: v for k, v in row.items() if k in _TRADE_FIELDS})
+        for row in frame.to_dicts()
+    ]
 
 
 def _settings_object_dict(value) -> dict:
@@ -209,12 +228,12 @@ def run_backtest(
         entry_size_mult=entry_size_mult,
     )
 
-    # Map sim_result back to expected UI format
-    trades = sim_result["trades"]
-    active_trades = [
-        *sim_result.get("open_trades", []),
-        *sim_result.get("pending_trades", []),
-    ]
+    # The canonical engine returns `trades` as a polars frame that already
+    # includes still-open positions (status "open") and expired triggers
+    # ("not_filled"); the retired fork returned dataclasses plus separate
+    # open_trades / pending_trades snapshots. Convert once here so the summary,
+    # post-entry analysis, and serialisation below are unchanged.
+    trades = _trades_from_frame(sim_result["trades"])
     equity_curve = sim_result["daily_equity"]
 
     signal_analysis_raw = analyze_signal_quality(
@@ -225,13 +244,9 @@ def run_backtest(
 
     summary = summarize_backtest(trades, exit_mode=params.exit_mode)
 
-    # Use standard serialization
-    # Active/pending snapshots are appended only to the UI payload. Summary
-    # metrics continue to use closed trades exclusively.
-    trades_json = [
-        *[_serialize_trade(t) for t in trades],
-        *[_serialize_trade(t) for t in active_trades],
-    ]
+    # Open positions ride along in `trades` with status "open"; summarize_backtest
+    # filters to closed trades, so summary metrics stay closed-trade only.
+    trades_json = [_serialize_trade(t) for t in trades]
     equity_json = []
     for row in equity_curve.to_dicts():
         # Convert date and map to UI cumulativeR field (using equity as proxy)

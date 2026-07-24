@@ -7,7 +7,8 @@ from datetime import date, timedelta
 import polars as pl
 import pytest
 
-from sepa_scanner.backtest.simulation import build_symbol_data, simulate_portfolio_python
+from sepa_scanner.backtest import simulate_portfolio_python
+from sepa_scanner.backtest.simulation import build_symbol_data
 from sepa_scanner.backtest.models import BacktestParams, ExitMode
 
 
@@ -121,6 +122,10 @@ def test_simulation_uses_phased_exit_engine():
         "initial_capital": 1_000_000,
         "risk_per_trade_pct": 0.01,
         "max_positions": 10,
+        # The canonical engine reads max_heat_pct directly; the retired fork
+        # defaulted it. 1.0 keeps the heat cap non-binding, which is what these
+        # exit-behaviour tests assumed.
+        "max_heat_pct": 1.0,
         "drawdown_half_pct": 0.10,
         "drawdown_stop_pct": 0.15,
         "drawdown_close_pct": 0.20,
@@ -135,20 +140,20 @@ def test_simulation_uses_phased_exit_engine():
         analysis_sector_map={"WINNER": "TestSector"},
     )
     trades = result["trades"]
-    assert len(trades) >= 1
-    filled = [t for t in trades if t.entry_date is not None]
+    assert trades.height >= 1
+    filled = trades.filter(pl.col("entry_date").is_not_null()).to_dicts()
     assert len(filled) == 1
     trade = filled[0]
     # With a steadily rising stock at 0.8/day and risk of ~6,
     # the trade should be held well past 15 days
-    assert trade.holding_days > 15, f"Trade held only {trade.holding_days} days — exit engine not wired"
-    assert trade.r_multiple > 1.0, f"R-multiple is {trade.r_multiple} — should be >1R on a rising stock"
-    # The phased exit engine should have set exit_reason (the inline logic doesn't)
-    assert trade.exit_reason is not None, "exit_reason not set — phased exit engine not wired"
-    assert trade.status != "time_stop" or trade.holding_days == params.max_hold_days, f"Trade was time-stopped early at {trade.holding_days} days — exit engine should trail instead"
+    assert trade["holding_days"] > 15, f"Trade held only {trade['holding_days']} days — exit engine not wired"
+    assert trade["r_multiple"] > 1.0, f"R-multiple is {trade['r_multiple']} — should be >1R on a rising stock"
+    # The canonical engine records the exit reason in `status`.
+    assert trade["status"] is not None, "status not set — exit engine not wired"
+    assert trade["status"] != "time_stop" or trade["holding_days"] == params.max_hold_days, f"Trade was time-stopped early at {trade['holding_days']} days — exit engine should trail instead"
 
 
-def test_simulation_exposes_open_and_pending_snapshots_without_counting_them_as_closed():
+def test_simulation_exposes_open_positions_without_counting_them_as_closed():
     ohlcv = _make_trending_ohlcv(n_days=5, daily_gain=1.0)
     signals = pl.DataFrame({
         "signal_date": [date(2024, 1, 1), date(2024, 1, 5)],
@@ -164,6 +169,10 @@ def test_simulation_exposes_open_and_pending_snapshots_without_counting_them_as_
         "initial_capital": 1_000_000,
         "risk_per_trade_pct": 0.01,
         "max_positions": 10,
+        # The canonical engine reads max_heat_pct directly; the retired fork
+        # defaulted it. 1.0 keeps the heat cap non-binding, which is what these
+        # exit-behaviour tests assumed.
+        "max_heat_pct": 1.0,
         "drawdown_half_pct": 0.10,
         "drawdown_stop_pct": 0.15,
         "drawdown_close_pct": 0.20,
@@ -177,18 +186,24 @@ def test_simulation_exposes_open_and_pending_snapshots_without_counting_them_as_
         analysis_sector_map={"WINNER": "TestSector"},
     )
 
-    assert result["trades"] == []
-    assert len(result["open_trades"]) == 1
-    assert result["open_trades"][0].status == "open"
-    assert result["open_trades"][0].entry_date == date(2024, 1, 2)
-    assert result["open_trades"][0].exit_date is None
-    assert result["open_trades"][0].return_pct is not None
-    assert result["open_trades"][0].return_pct > 0
+    # A position still open at the end of the window appears in `trades` with
+    # status "open" (marked to market) *and* in `open_positions`. It must never
+    # be treated as a closed trade. The retired fork also returned a
+    # `pending_trades` snapshot; the canonical engine exposes none, so a signal
+    # still inside its pending window is simply absent until it fills or expires.
+    trades = result["trades"].to_dicts()
+    assert len(trades) == 1
+    assert trades[0]["status"] == "open"
+    assert trades[0]["entry_date"] == date(2024, 1, 2)
 
-    assert len(result["pending_trades"]) == 1
-    assert result["pending_trades"][0].status == "pending_entry"
-    assert result["pending_trades"][0].entry_date is None
-    assert result["pending_trades"][0].entry_ref == 1_000.0
+    closed = [t for t in trades if t["status"] not in {"open", "not_filled"}]
+    assert closed == []
+
+    open_positions = result["open_positions"]
+    assert len(open_positions) == 1
+    assert open_positions[0]["entry_date"] == date(2024, 1, 2)
+    assert open_positions[0]["symbol"] == "WINNER"
+    assert open_positions[0]["shares"] > 0
 
 
 def test_pending_entry_starts_on_d_plus_one_and_expires_after_symbol_bars():
@@ -218,6 +233,10 @@ def test_pending_entry_starts_on_d_plus_one_and_expires_after_symbol_bars():
         "initial_capital": 1_000_000,
         "risk_per_trade_pct": 0.01,
         "max_positions": 10,
+        # The canonical engine reads max_heat_pct directly; the retired fork
+        # defaulted it. 1.0 keeps the heat cap non-binding, which is what these
+        # exit-behaviour tests assumed.
+        "max_heat_pct": 1.0,
         "drawdown_half_pct": 0.10,
         "drawdown_stop_pct": 0.15,
         "drawdown_close_pct": 0.20,
@@ -231,10 +250,10 @@ def test_pending_entry_starts_on_d_plus_one_and_expires_after_symbol_bars():
         analysis_sector_map={"TEST": "TestSector"},
     )
 
-    assert len(result["trades"]) == 1
-    trade = result["trades"][0]
-    assert trade.status == "not_filled"
-    assert trade.entry_date is None
+    assert result["trades"].height == 1
+    trade = result["trades"].to_dicts()[0]
+    assert trade["status"] == "not_filled"
+    assert trade["entry_date"] is None
 
 
 def test_production_simulator_executes_hard_stop_on_intraday_touch() -> None:
@@ -266,6 +285,7 @@ def test_production_simulator_executes_hard_stop_on_intraday_touch() -> None:
         "initial_capital": 100_000.0,
         "risk_per_trade_pct": 0.01,
         "max_positions": 5,
+        "max_heat_pct": 1.0,
         "drawdown_half_pct": 0.50,
         "drawdown_stop_pct": 0.75,
         "drawdown_close_pct": 0.90,
@@ -273,10 +293,11 @@ def test_production_simulator_executes_hard_stop_on_intraday_touch() -> None:
 
     result = simulate_portfolio_python(signals, ohlcv, params, portfolio, {})
 
-    assert len(result["trades"]) == 1
-    assert result["trades"][0].status == "intraday_stop"
-    assert result["trades"][0].exit_date == dates[2]
-    assert result["trades"][0].exit_price == 95.0
+    assert result["trades"].height == 1
+    trade = result["trades"].to_dicts()[0]
+    assert trade["status"] == "intraday_stop"
+    assert trade["exit_date"] == dates[2]
+    assert trade["exit_price"] == 95.0
 
 
 def test_production_simulator_executes_ema_close_signal_at_next_open() -> None:
@@ -309,6 +330,7 @@ def test_production_simulator_executes_ema_close_signal_at_next_open() -> None:
         "initial_capital": 100_000.0,
         "risk_per_trade_pct": 0.01,
         "max_positions": 5,
+        "max_heat_pct": 1.0,
         "drawdown_half_pct": 0.50,
         "drawdown_stop_pct": 0.75,
         "drawdown_close_pct": 0.90,
@@ -316,11 +338,11 @@ def test_production_simulator_executes_ema_close_signal_at_next_open() -> None:
 
     result = simulate_portfolio_python(signals, ohlcv, params, portfolio, {})
 
-    assert len(result["trades"]) == 1
-    trade = result["trades"][0]
-    assert trade.status.endswith("_next_open")
-    assert trade.exit_date == dates[23]
-    assert trade.exit_price == 90.0
+    assert result["trades"].height == 1
+    trade = result["trades"].to_dicts()[0]
+    assert trade["status"].endswith("_next_open")
+    assert trade["exit_date"] == dates[23]
+    assert trade["exit_price"] == 90.0
 
 
 def test_production_simulator_executes_stagnation_signal_at_next_open() -> None:
@@ -355,6 +377,7 @@ def test_production_simulator_executes_stagnation_signal_at_next_open() -> None:
         "initial_capital": 100_000.0,
         "risk_per_trade_pct": 0.01,
         "max_positions": 5,
+        "max_heat_pct": 1.0,
         "drawdown_half_pct": 0.50,
         "drawdown_stop_pct": 0.75,
         "drawdown_close_pct": 0.90,
@@ -362,9 +385,9 @@ def test_production_simulator_executes_stagnation_signal_at_next_open() -> None:
 
     result = simulate_portfolio_python(signals, ohlcv, params, portfolio, {})
 
-    assert len(result["trades"]) == 1
-    trade = result["trades"][0]
-    assert trade.status == "stagnation_next_open"
-    assert trade.entry_date == dates[1]
-    assert trade.exit_date == dates[17]
-    assert trade.exit_price == 98.0
+    assert result["trades"].height == 1
+    trade = result["trades"].to_dicts()[0]
+    assert trade["status"] == "stagnation_next_open"
+    assert trade["entry_date"] == dates[1]
+    assert trade["exit_date"] == dates[17]
+    assert trade["exit_price"] == 98.0
