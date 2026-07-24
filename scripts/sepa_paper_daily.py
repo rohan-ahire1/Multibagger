@@ -158,7 +158,10 @@ def main() -> None:
         run_scan_command(config_dir=None, scan_date=latest, export_parquet=True,
                          export_csv=False, no_telegram=True)
 
-    latest_date = ParquetOhlcvStore(_ROOT / "data" / "yf_adjusted").latest_date()
+    from sepa_scanner.settings import load_settings
+
+    _panel_subdir = load_settings().data.panel_subdir
+    latest_date = ParquetOhlcvStore(_ROOT / "data" / _panel_subdir).latest_date()
     if latest_date is None:
         print("No OHLCV data found.")
         return

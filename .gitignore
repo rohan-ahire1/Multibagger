@@ -29,3 +29,10 @@ data/tmp/screener_cookies.txt
 data/raw/screener_xlsx/
 data/us/
 data/us_small/
+
+# Optuna study stores (regenerable; churn on every run)
+optuna_*.db
+
+# Local runtime noise
+uvicorn.log
+.antigravitycli/

@@ -68,6 +68,38 @@ def test_duckdb_store_initializes_and_upserts_records(tmp_path: Path) -> None:
     assert health["signals_on_latest_date"] == 1
 
 
+def test_duckdb_store_fetches_recent_breakouts_by_scan_session(tmp_path: Path) -> None:
+    store = DuckDbStore(tmp_path / "sepa.duckdb")
+    store.initialize()
+    conn = store._connect()
+    conn.execute(
+        """
+        INSERT INTO runs (
+            run_id, started_at, scan_date, num_symbols, num_eligible,
+            num_watch, num_breakout, status
+        ) VALUES
+            ('d1', NOW(), '2026-03-02', 100, 80, 0, 1, 'success'),
+            ('d2', NOW(), '2026-03-03', 100, 80, 0, 0, 'success'),
+            ('d3', NOW(), '2026-03-04', 100, 80, 0, 1, 'success')
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO signals (
+            signal_date, symbol, signal_type, close, "pivot", near_pivot,
+            volume, vol50, vol_mult, rs_rank, range10, voldry, atr_pct,
+            adv50, entry_ref, stop, r_per_share, created_at
+        ) VALUES
+            ('2026-03-02', 'OLD', 'BREAKOUT', 100, 99, 0, 1000, 500, 2, 90, 0.05, 0.5, 0.02, 1000000, 100, 95, 5, NOW()),
+            ('2026-03-04', 'RECENT', 'BREAKOUT', 100, 99, 0, 1000, 500, 2, 90, 0.05, 0.5, 0.02, 1000000, 100, 95, 5, NOW())
+        """
+    )
+
+    symbols = store.fetch_recent_breakout_symbols(date(2026, 3, 5), 2)
+
+    assert symbols == {"RECENT"}
+
+
 def test_duckdb_store_upserts_and_fetches_watchlist_candidates(tmp_path: Path) -> None:
     db_path = tmp_path / "sepa.duckdb"
     store = DuckDbStore(db_path)

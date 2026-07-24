@@ -11,15 +11,16 @@ research surface (multiple `optimize_*.py` scripts, Optuna studies, alternate st
 exists for tuning and validating the strategy. There is also a performance-critical Rust
 core (`rust_core`, a pyo3/maturin extension) that re-implements the hot backtest loop.
 
-Domain: NSE daily OHLCV (yfinance-adjusted) → indicators → signals → portfolio backtest →
+Domain: NSE daily OHLCV (survivorship-free bhavcopy panel, corporate-action adjusted,
+total-return basis) → indicators → signals → portfolio backtest →
 metrics/reports. Alert-only; no live order execution.
 
 ## Architecture
 
 ### Python package — `src/sepa_scanner/` (installable as `sepa`)
 - `main.py` — Typer CLI entrypoint (`sepa` command): `backfill`, `update`, `scan`, `run`, `backtest`, `ui`, `health`, `build-universe`.
-- `data_sources/` — `yfinance_adjusted` (primary OHLCV source), `nse_bhavcopy`/`nse_universe`/`nse_meta` (symbol discovery + optional validation), `vix`, `fundamentals`.
-- `storage/` — `parquet_store` (`ParquetOhlcvStore`, history in `data/yf_adjusted/ohlcv_all.parquet`) and `duckdb_store` (runs/signals/watchlist in `data/db/sepa.duckdb`, `schema.sql`).
+- `data_sources/` — `nse_bhavcopy` (**primary** OHLCV source since the 2026-07-19 cutover) plus `adjustment` (corporate-action adjustment), `nse_universe`/`nse_meta` (symbol discovery), `yfinance_adjusted` (legacy, still used by `sepa update`), `vix`, `fundamentals`.
+- `storage/` — `parquet_store` (`ParquetOhlcvStore`, history in `data/nse_adjusted/ohlcv_all.parquet`; legacy panel at `data/yf_adjusted/`), `bhav_raw_store` (raw bhavcopy snapshots) and `duckdb_store` (runs/signals/watchlist in `data/db/sepa.duckdb`, `schema.sql`).
 - `indicators/` — Polars indicator builders: `atr`, `sma`, `rs` (relative strength ranks), `contraction`, `tightness`, `highs_lows`, `volume`.
 - `strategy/` — the signal engine and its parts: `signal_engine` (orchestrates the scan), `trend_template` (Minervini trend), `vcp_setup`, `patterns`, `ranking`, `sector_rs`, `market_filter`/`market_regime`, `explainer`.
 - `backtest/` — trade simulation: `engine` (entry/exit simulation, optional Rust path), `portfolio` (`PortfolioManager`, sizing/sector caps), `exit_engine` (phased exits), `regime_gate`, `metrics`, `signal_analysis`/`signal_scorecard`, `models`, `queries`.
@@ -42,11 +43,11 @@ accelerator, not a hard dependency.
 - `optimize_engine.py` — broader engine param search (`optuna_fast_study.db`).
 - `diagnose_entry_exit.py`, `regime_forensics.py` — analysis helpers.
 - `scripts/` — ~50 research/utility scripts: data pipeline (`yf_bulk_download`, `yf_daily_update`, `backfill_*`), validation (`survivorship_test`, `alpha_vs_beta`, `walkforward_validation`), the production diagnostics engine `portfolio_diagnostics.py` (the harness `optimize_joint_wf.py` builds on), and sweeps.
-- `strategies/` — alternate/parallel strategies, each self-contained with its own engine, config, and `output/`: `mean_reversion/` (full strategy + live paper runner + tests), `episodic_pivots/`, `autonomous_research/`.
+- `strategies/` — alternate/parallel strategies, each self-contained with its own engine, config, and `output/`: `mean_reversion/` (full strategy + live paper runner + tests), `episodic_pivots/`, `daily_factors/` (monthly-rebalance factor portfolios), `autonomous_research/`.
 
 ### Other directories
 - `config/` — `config.yaml` (primary params), `universe.yaml`, `alert_channels.yaml`, `glossary.yaml`, `corporate_actions.csv`.
-- `data/` — local artifacts: `yf_adjusted/` (parquet OHLCV), `db/` (DuckDB), `signals/`, `reference/` (sector maps, universe), `optuna/`, `us/`/`us_small/` (US experiments), `cache/`, `tmp/`.
+- `data/` — local artifacts: `nse_adjusted/` (primary parquet OHLCV), `yf_adjusted/` (legacy panel), `db/` (DuckDB), `signals/`, `reference/` (sector maps, universe), `optuna/`, `us/`/`us_small/` (US experiments), `cache/`, `tmp/`.
 - `reports/` — generated CSV/markdown/PNG analysis output (`portfolio_diagnostics`, `walkforward`, `sector_cap_sweep`, `mean_reversion`, etc.).
 - `sepa-terminal/` — React/TypeScript + MUI 7 terminal UI (Vite, Node 22), the frontend launched by `sepa ui`.
 - `tradingview/`, `sepa_entry_indicator.pine` — Pine Script ports of the entry logic for TradingView.
@@ -58,7 +59,8 @@ accelerator, not a hard dependency.
 - `config/config.yaml` is the **single source of truth** for parameters everywhere (terminal, paper runner, UI, harness). Do not fork params into JSON sidecars or per-script constants.
 - The **only** authoritative backtest command:
   `uv run python optimize_joint_wf.py --parity`
-  Expected committed baseline: **CAGR 21.18% / MaxDD 16.63% / Calmar 1.27 / 348 trades** (full history 2010-01-04 → 2026-03-17).
+  Expected committed baseline: **CAGR 12.48% / MaxDD 24.28% / Calmar 0.51 / 281 trades** (full history 2010-01-04 → 2026-03-17, strategy-only with `cash_yield_apy: 0`).
+  With a 6% idle-cash sleeve the total-portfolio figures are 17.20% / 15.08% / 1.14 — tracked separately, never counted as SEPA alpha.
 - **Ignore** the CLI `sepa backtest` headline CAGR — it uses a serial-R-compound metric (`metrics.estimate_compounded_cagr`) that inflates results. Use the equity-curve CAGR from `--parity`.
 - Do NOT create new backtest scripts or new param JSON sidecars. Any number not from the canonical harness is invalid and must not justify config changes.
 - `best_joint_params.json`'s "27% holdout candidate" was tested and **rejected** (sub-window artifact). Pyramiding was tested and rejected (`pyramid_max_adds: 0`).
@@ -102,7 +104,8 @@ uv run pytest tests/        # ~34 test files; ignore any test_ui_* (dead Streaml
 strategy has its own tests under `strategies/mean_reversion/tests/`.
 
 ## Key data / artifacts
-- `data/yf_adjusted/ohlcv_all.parquet` — normalized adjusted OHLCV (the price panel).
+- `data/nse_adjusted/ohlcv_all.parquet` — survivorship-free, corporate-action-adjusted OHLCV (the price panel).
+- `data/yf_adjusted/ohlcv_all.parquet` — legacy yfinance panel (survivor-biased; kept for comparison).
 - `data/db/sepa.duckdb` — runs, signals, watchlist (use `read_only=True` for concurrent reads).
 - `optuna_joint_wf.db`, `optuna_exits_v2.db`, `optuna_fast_study.db` — Optuna study stores.
 - `best_joint_params.json`, `best_exit_params.json` — optimizer outputs (informational; config.yaml remains authoritative).
@@ -110,9 +113,9 @@ strategy has its own tests under `strategies/mean_reversion/tests/`.
 - `reports/` — generated analysis artifacts.
 
 ## Conventions (from AGENTS.md / GEMINI.md / README)
-- yfinance is the single source of truth for OHLCV; bhavcopy is optional validation only. Corporate-actions code was removed (yfinance is pre-adjusted). NSE tickers use `.NS` suffix.
+- The self-built NSE bhavcopy panel is the source of truth for OHLCV (`config.data.source: nse_bhavcopy`); yfinance is legacy and still feeds `sepa update` until a daily bhavcopy refresh is wired. Corporate-action adjustment is applied by `data_sources/adjustment.py` (rebuilt via `scripts/nse_corporate_actions_fetch.py` + `nse_build_adjusted_panel.py`). NSE tickers use `.NS` suffix.
 - Scanner and backtester always operate on the **full** symbol universe — never add single-symbol filtering to the default UI flow.
-- Charts render **all** available history (not just a window); indicator overlays computed from full data.
+- Charts render a selectable timeframe window centred on the trade (`CandleChart.chartVisibleRange`), preserving the requested duration at either edge of history; indicator overlays are still computed from full data.
 - Update `docs/STRATEGY.md` whenever strategy behavior changes; `docs/UI_BIBLE.md` when UI patterns change.
 - When given a `.plan.md`, implement exactly; never edit the plan file. Workspace `CLAUDE.md` (in `Personal_Projects/`) says Claude plans, Codex implements.
 - Commit messages: no AI/Claude/co-author trailers (user override).

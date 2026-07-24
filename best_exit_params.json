@@ -1,0 +1,14 @@
+{
+  "breakeven_activation_r": 2.2,
+  "partial_profit_r": 5.0,
+  "partial_profit_pct": 0.35,
+  "trail_pct": 0.24000000000000002,
+  "trail_pct_bull": 0.15,
+  "trail_pct_bear": 0.14,
+  "trail_widen_r": 4.5,
+  "time_stop_days": 12,
+  "time_stop_min_r": 0.2,
+  "max_hold_before_tighten": 80,
+  "soft_expiry_days": 70,
+  "soft_expiry_gain": 0.2
+}

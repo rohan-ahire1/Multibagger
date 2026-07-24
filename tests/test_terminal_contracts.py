@@ -10,37 +10,47 @@ def _read(relative_path: str) -> str:
     return (PROJECT_ROOT / relative_path).read_text(encoding="utf-8")
 
 
-def test_terminal_app_exposes_only_scanner_and_backtest() -> None:
+def test_terminal_app_exposes_only_supported_routes() -> None:
     app_source = _read("sepa-terminal/src/App.tsx")
 
+    assert 'path="/"' in app_source
+    assert 'path="/scanner"' in app_source
+    assert 'path="/symbol/:symbol"' in app_source
+    assert 'path="/backtest"' in app_source
+
     assert "RegimeStrip" not in app_source
-    assert "Analysis" not in app_source
     assert "Portfolio" not in app_source
-    assert "{activeWorkspace === 1 && <MarketScanner />}" in app_source
-    assert "{activeWorkspace === 2 && <Backtest />}" in app_source
-    assert "activeWorkspace === 3" not in app_source
-    assert "activeWorkspace === 4" not in app_source
 
 
-def test_workspace_navigation_is_limited_to_two_supported_views() -> None:
+def test_navigation_is_limited_to_supported_views() -> None:
     top_bar = _read("sepa-terminal/src/components/layout/TopBar.tsx")
-    shortcuts = _read("sepa-terminal/src/hooks/useWorkspaceSwitch.ts")
-    ui_store = _read("sepa-terminal/src/stores/ui.ts")
 
-    assert "Analysis" not in top_bar
+    assert "to: '/scanner'" in top_bar
+    assert "to: '/backtest'" in top_bar
+
     assert "Portfolio" not in top_bar
-    assert "label: 'Scanner'" in top_bar
-    assert "label: 'Backtest'" in top_bar
-    assert "setWorkspace(3)" not in shortcuts
-    assert "setWorkspace(4)" not in shortcuts
-    assert "activeWorkspace: 1 | 2" in ui_store
+    assert "/portfolio" not in top_bar
 
 
-def test_price_chart_uses_full_history_instead_of_signal_window() -> None:
-    chart_source = _read("sepa-terminal/src/components/chart/PriceChart.tsx")
+def test_candle_chart_windows_on_a_selectable_timeframe() -> None:
+    """The chart deliberately shows a timeframe window rather than all history.
 
-    assert "setVisibleRange" not in chart_source
-    assert "fitContent()" in chart_source
+    Superseded the old "always fitContent()" contract when the terminal was
+    rebuilt: a trade is far easier to read centred in a fixed-duration window
+    than as a blip in fifteen years of bars. The invariant that survives is
+    that the requested duration is preserved when the window hits either edge
+    of the available history, so the chart never silently shrinks.
+    """
+    chart_source = _read("sepa-terminal/src/components/chart/CandleChart.tsx")
+
+    assert "chartVisibleRange" in chart_source
+    assert "setVisibleRange(chartVisibleRange(" in chart_source
+    assert "TIMEFRAME_MONTHS" in chart_source
+
+    # Edge clamping: running past either end shifts the window instead of
+    # truncating it.
+    assert "fromTime -= toTimeMs - lastTime" in chart_source
+    assert "toTimeMs + (firstTime - fromTime)" in chart_source
 
 
 def test_scan_date_picker_uses_successful_diagnostic_dates() -> None:

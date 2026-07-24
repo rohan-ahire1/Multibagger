@@ -59,6 +59,14 @@ used only for symbol discovery (`sepa build-universe`) and optional price valida
 yfinance is the sole runtime price source. Corporate-action adjustment logic was removed
 because yfinance data is pre-adjusted.
 
+Fundamental data is an optional, disabled side input. `data_sources/fundamentals.py`
+can collect NSE financial-result listing metadata and headline detail values. It derives
+`available_date` from the exchange broadcast timestamp using the 16:10 IST EOD-scanner
+cutoff; filings after that cutoff become usable on the next calendar date (and therefore
+the next trading session in an as-of join). The experimental growth gate supports a strict
+mode that raises if actual availability metadata is absent or precedes the period end.
+The old `period_end + reporting_lag_days` approximation is legacy research only.
+
 ### 2. Indicators (Polars)
 `indicators/` builds derived columns with lazy Polars expressions: ATR, SMAs (50/150/200),
 relative-strength ranks (`rs`, percentile across the universe per date), volatility
@@ -72,6 +80,10 @@ pure column transforms over the panel and feed the strategy layer.
 - `rs` ranks + `sector_rs` apply relative-strength and sector-RS gating.
 - `market_filter` / `market_regime` classify the broad-market regime (benchmark `NIFTYBEES`).
 - `ranking` orders candidates.
+
+If the experimental fundamental gate is enabled, it is applied later by the canonical
+`filter_signals` step. It is disabled in committed config because the current local
+Screener history is partial/survivorship-biased and corrected fold/holdout tests worsened.
 
 It emits two signal classes with bitmask failure-reason diagnostics:
 - **WATCH** — setup quality met on day D (pre-breakout watchlist).
@@ -87,11 +99,17 @@ and exported to `data/signals/YYYY-MM-DD_signals.parquet`.
   sector ranking. The canonical path always runs this filter; raw signals are not traded directly.
 - `PortfolioManager` (`portfolio.py`) handles sizing (`risk_per_trade_pct`), position caps
   (`max_positions`, `max_name_pct`), and sector caps (`max_sector_positions`).
-- `exit_engine.py` runs the exit model. The committed config uses a `baseline_ema21` exit;
+- `exit_engine.py` runs the exit model. The committed config uses a `baseline_ema_hybrid`
+  exit (EMA21 after 3R, EMA10 after a 5R peak close). Original and breakeven hard
+  stops execute on an intraday touch; EMA failures are close-confirmed and fill at the
+  next symbol-session open. A second close-confirmed rule recycles a trade after 15
+  post-entry symbol sessions only when MFE stayed below +0.4R and the close is at/below
+  entry; it also fills next open;
   a richer **phased** `ExitConfig` (breakeven activation, partial profit, bull/bear trail,
   time stop, trail-widen) exists but is **inert unless `use_extended_exit_model: true`**.
 - `regime_gate.py` optionally gates/sizes entries by exogenous benchmark regime.
 - Friction (slippage + STT/charges + DP fee) is applied to produce an honest result.
+  Assumed idle-cash income is disabled and excluded from strategy CAGR.
 
 Two metric paths exist and historically disagreed (see Known Traps below). The trustworthy
 one is the **equity-curve** CAGR/MaxDD/Calmar computed from the real `daily_equity` curve of
@@ -155,8 +173,10 @@ only, maximize Calmar on a fixed window, `optuna_exits_v2.db`); `optimize_engine
    every trade reinvests the full bankroll → inflated. The CLI prints this; ignore it.
 3. **Two signal filters.** Raw `signals` table vs `filter_signals` (rs/quality/per-day). The
    canonical path always applies `filter_signals` with the committed `rs_rank_min`.
-4. **Dead exit knobs.** With `exit_mode = baseline_ema21` (committed) the phased `ExitConfig`
-   overrides are inert.
+4. **Dead exit knobs.** With a committed `baseline_*` exit mode, phased `ExitConfig`
+   overrides are inert; the hybrid reads `backtest.baseline_tighten_r` instead.
+5. **Fundamental availability.** Reporting periods and statutory deadlines are not
+   decision dates. Strict fundamental research must use actual NSE dissemination dates.
 
 ## Strategy abstraction & extension points
 

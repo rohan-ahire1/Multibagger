@@ -91,6 +91,7 @@ def main() -> None:
         max_hold_days=max(settings.backtest.max_hold_days, 90),
         target_r=settings.risk.target_r,
         exit_mode=ExitMode(settings.backtest.exit_mode),
+        baseline_tighten_r=settings.backtest.baseline_tighten_r,
         trail_activation_r=es.trail_activation_r,
         trail_pct=es.trail_pct,
         dead_money_days=es.dead_money_days,

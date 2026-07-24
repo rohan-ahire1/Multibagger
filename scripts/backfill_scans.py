@@ -86,6 +86,19 @@ def main(
         typer.echo("No OHLCV data in range.")
         raise typer.Exit(code=1)
     typer.echo(f"Loaded {frame.height:,} rows, {frame['symbol'].n_unique():,} symbols.")
+
+    # Data-driven trading calendar: drop weekday dates with no panel rows (NSE holidays).
+    # trading_days_between() is weekday-only, so holidays would otherwise fail every scan
+    # with "Missing benchmark data" and pollute the runs table with error rows.
+    traded_dates = set(frame["date"].unique().to_list())
+    non_trading = [d for d in dates if d not in traded_dates]
+    if non_trading:
+        typer.echo(f"Skipping {len(non_trading)} non-trading days (holidays, no panel data).")
+        dates = [d for d in dates if d in traded_dates]
+    if not dates:
+        typer.echo("No trading days with data in range.")
+        raise typer.Exit(code=0)
+
     typer.echo("Preparing indicators (one-time) ...")
 
     total = len(dates)
