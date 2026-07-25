@@ -41,6 +41,8 @@ export function LabRun() {
 
   const { run, equityCurve, trades } = data
   const m = run.metrics
+  // Only rebalance runs lack per-trade R. Reversion runs have stops and
+  // R-multiples like signal runs; only their exit rule differs.
   const isRebalance = run.kind === 'rebalance'
 
   return (

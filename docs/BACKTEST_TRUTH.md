@@ -115,7 +115,28 @@ uv run pytest -m slow tests/lab         # the parity gate
 ```
 
 Runs persist to `lab_runs` / `lab_equity` / `lab_trades` in the same DuckDB file, so the
-CLI, the API, and the `/lab` page in the terminal all read one history.
+CLI, the API, and the `/lab` page in the terminal all read one history. That store is
+single-writer: a running `sepa ui` holds the lock, so stop it before a CLI run.
+
+Three engine kinds, all summarised by the same equity-curve metrics:
+
+| kind | exits on | strategies |
+|---|---|---|
+| `signal` | trailing EMA / hard stop / holding limit | `sepa_breakout`, `episodic_pivots`, `research_momentum` |
+| `reversion` | the reversion completing (close above the 5-day mean, RSI-2 back above 70) | `mean_reversion` |
+| `rebalance` | nothing — periodic target weights, no per-trade stop | `daily_factors` |
+
+`reversion` exists because the shared simulator has no reversion exit, and adding one
+would mean changing the code the parity check depends on. R-multiple statistics are
+reported for `signal` and `reversion` and omitted for `rebalance`, where a per-trade R
+does not exist.
+
+**Migrated strategies do not reproduce their old recorded numbers, and mostly for one
+reason: survivorship.** Each carries a migration note in its own directory. The short
+version: `daily_factors` loses 3.5-7.5 CAGR points moving off the legacy yfinance panel,
+`mean_reversion` fails under honest costs exactly as its own realism validation already
+recorded, and `episodic_pivots` loses money under both engines. Do not quote the numbers
+in `strategies/*/output/`.
 
 **This does not replace the SEPA canonical check.** `optimize_joint_wf.py --parity`
 remains authoritative for the committed strategy, and `tests/lab/test_sepa_parity.py`

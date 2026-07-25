@@ -18,6 +18,11 @@ from sepa_scanner.lab.contracts import (
     StrategyContext,
     StrategyKind,
 )
+from sepa_scanner.lab.engines.reversion_engine import (
+    reversion_daily_equity,
+    reversion_trade_records,
+    run_reversion_engine,
+)
 from sepa_scanner.lab.engines.rebalance_engine import (
     orders_to_trade_records,
     run_rebalance_engine,
@@ -50,9 +55,8 @@ def params_hash(strategy_id: str, params: dict[str, Any], data_source: str) -> s
 
 def validate_intent(frame: pl.DataFrame, kind: StrategyKind, strategy_id: str) -> None:
     """Fail with a clear authoring error rather than deep inside the simulator."""
-    required = (
-        SIGNAL_REQUIRED_COLUMNS if kind is StrategyKind.SIGNAL else WEIGHT_REQUIRED_COLUMNS
-    )
+    signal_like = kind in (StrategyKind.SIGNAL, StrategyKind.REVERSION)
+    required = SIGNAL_REQUIRED_COLUMNS if signal_like else WEIGHT_REQUIRED_COLUMNS
     missing = [c for c in required if c not in frame.columns]
     if missing:
         raise ValueError(
@@ -63,7 +67,7 @@ def validate_intent(frame: pl.DataFrame, kind: StrategyKind, strategy_id: str) -
     if frame.is_empty():
         raise ValueError(f"strategy {strategy_id!r} produced no rows for this window")
 
-    if kind is StrategyKind.SIGNAL:
+    if signal_like:
         duplicates = frame.group_by(["symbol", "signal_date"]).len().filter(pl.col("len") > 1)
         if not duplicates.is_empty():
             raise ValueError(
@@ -142,6 +146,12 @@ def run_backtest(
         records = to_trade_records(trades_df)
         daily_equity = raw["daily_equity"]
         trade_count = count_entries_in_window(trades_df, start_date, end_date)
+        include_trade_stats = True
+    elif strategy.kind is StrategyKind.REVERSION:
+        raw = run_reversion_engine(intent, bundle.ohlcv, config)
+        records = reversion_trade_records(raw)
+        daily_equity = reversion_daily_equity(raw)
+        trade_count = len([r for r in records if r.entry_date is not None])
         include_trade_stats = True
     else:
         # Target weights are executed at the next open after each rebalance

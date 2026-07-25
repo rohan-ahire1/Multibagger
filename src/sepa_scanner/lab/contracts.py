@@ -36,6 +36,11 @@ class StrategyKind(str, Enum):
     REBALANCE = "rebalance"
     """Periodic target weights. No per-trade stop, so R-multiples do not apply."""
 
+    REVERSION = "reversion"
+    """Dated entries with a stop, but exits on reversion completion rather than a
+    trend break. Uses the same signal frame as SIGNAL; only the executor differs,
+    because the shared portfolio simulator has no reversion exit."""
+
 
 ParamType = Literal["int", "float", "bool", "enum", "date", "str"]
 

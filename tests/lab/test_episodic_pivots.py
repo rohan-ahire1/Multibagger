@@ -46,7 +46,7 @@ def test_episodic_pivots_respects_max_signals_per_day():
     result = run_backtest(
         "episodic_pivots", START, date(2016, 12, 31), params={"max_signals_per_day": 1}
     )
-    assert result.extras["signals_after_filter"] > 0
+    assert result.extras["intent_rows"] > 0
 
     by_day: dict[date, int] = {}
     for trade in result.trades:

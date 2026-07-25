@@ -25,7 +25,8 @@ metrics/reports. Alert-only; no live order execution.
 - `strategy/` — the signal engine and its parts: `signal_engine` (orchestrates the scan), `trend_template` (Minervini trend), `vcp_setup`, `patterns`, `ranking`, `sector_rs`, `market_filter`/`market_regime`, `explainer`.
 - `backtest/` — trade simulation: `engine` (entry/exit simulation, optional Rust path), `portfolio` (`PortfolioManager`, sizing/sector caps), `exit_engine` (phased exits), `regime_gate`, `metrics`, `signal_analysis`/`signal_scorecard`, `models`, `queries`.
 - `lab/` — the strategy lab: `contracts` (Strategy protocol, ParamSpec), `registry`, `runner`, `result`/`metrics` (one result shape, equity-curve metrics), `panel` (data loading), `store` (DuckDB run history), `jobs` (single-worker queue), `cli`, and `engines/portfolio_sim.py` — **the canonical portfolio simulator**, moved here from `scripts/portfolio_diagnostics.py` (which is now a re-export shim).
-- `lab_strategies/` — registered strategies, one module each; discovery is explicit imports in its `__init__`.
+- `lab_strategies/` — registered strategies, one module each; discovery is explicit imports in its `__init__`. Five: `sepa_breakout`, `episodic_pivots`, `research_momentum` (signal), `mean_reversion` (reversion), `daily_factors` (rebalance).
+- Three engine kinds under `lab/engines/`: `portfolio_sim` (canonical signal engine), `reversion_engine` (mean-reversion exits the canonical engine cannot express), `rebalance_engine` (target weights). All share `lab/metrics.py`.
 - `alerts/` — `console` + `telegram` sinks, `formatters`.
 - `api/` — FastAPI app (`app.py`) and routes (`scanner`, `backtest`, `ohlcv`, `analysis`); served by `sepa ui`.
 - `settings.py` — Pydantic settings loaded from `config/config.yaml` (single source of truth).

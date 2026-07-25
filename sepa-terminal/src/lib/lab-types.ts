@@ -3,7 +3,7 @@
 
 export type ParamType = 'int' | 'float' | 'bool' | 'enum' | 'date' | 'str'
 
-export type StrategyKind = 'signal' | 'rebalance'
+export type StrategyKind = 'signal' | 'rebalance' | 'reversion'
 
 export type RunStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
 
