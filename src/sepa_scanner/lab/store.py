@@ -18,6 +18,11 @@ from sepa_scanner.lab.result import BacktestRunResult
 _ACTIVE_STATUSES = ("queued", "running")
 
 
+class LabStoreLocked(RuntimeError):
+    """The lab database is held by another process (usually a running API)."""
+
+
+
 class LabStore:
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
@@ -26,7 +31,20 @@ class LabStore:
         # Always the same configuration. DuckDB refuses a second connection to
         # an open database when the config differs, so mixing a read_only
         # reader with the job worker's writer breaks every read mid-run.
-        return duckdb.connect(str(self.db_path))
+        try:
+            return duckdb.connect(str(self.db_path))
+        except duckdb.IOException as exc:
+            if "lock" not in str(exc).lower():
+                raise
+            # DuckDB is single-writer *across processes*. The usual cause is a
+            # running `sepa ui` (its API holds the lock), so say that instead of
+            # surfacing a raw IO error about lock files.
+            raise LabStoreLocked(
+                f"{self.db_path} is locked by another process. The lab store is "
+                "single-writer: stop `sepa ui` (or whatever else holds the "
+                "database) before running a lab backtest from the CLI.\n\n"
+                f"original error: {exc}"
+            ) from exc
 
     def initialize(self) -> None:
         schema = (

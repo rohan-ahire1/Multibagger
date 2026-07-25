@@ -125,10 +125,19 @@ def load_point_in_time_membership(
     return membership, source_dates
 
 
-def load_and_build_features(config: ResearchConfig) -> tuple[pl.DataFrame, list[date], dict[date, date]]:
+def load_and_build_features(
+    config: ResearchConfig, ohlcv_path: Path = DEFAULT_OHLCV
+) -> tuple[pl.DataFrame, list[date], dict[date, date]]:
+    """Build the feature panel.
+
+    ``ohlcv_path`` defaults to the legacy yfinance panel, which is what the
+    recorded results in ``output/`` were produced from. The strategy lab passes
+    the configured survivorship-free panel instead; features and execution must
+    come from the same panel or targeted symbols go missing at fill time.
+    """
     columns = ["date", "symbol", "open", "close", "turnover"]
     panel = (
-        pl.scan_parquet(DEFAULT_OHLCV)
+        pl.scan_parquet(ohlcv_path)
         .select(columns)
         .filter(pl.col("date") <= config.end)
         .collect()
@@ -138,7 +147,7 @@ def load_and_build_features(config: ResearchConfig) -> tuple[pl.DataFrame, list[
     # calendar. Yahoo contains a handful of sparse special sessions (notably
     # 2015-02-28) with too few stocks to support a cross-sectional rebalance.
     full_benchmark_calendar = (
-        pl.scan_parquet(DEFAULT_OHLCV)
+        pl.scan_parquet(ohlcv_path)
         .group_by("date")
         .agg(pl.col("symbol").n_unique().alias("symbols"))
         .filter(pl.col("symbols") >= 100)

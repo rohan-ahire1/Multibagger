@@ -12,7 +12,8 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': 'http://127.0.0.1:8000',
+      // Override with SEPA_API_URL when port 8000 is taken by something else.
+      '/api': process.env.SEPA_API_URL ?? 'http://127.0.0.1:8000',
     },
   },
 })

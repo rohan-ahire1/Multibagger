@@ -15,7 +15,7 @@ from rich.table import Table
 
 from sepa_scanner.lab.registry import get_strategy, list_strategies, resolve_params
 from sepa_scanner.lab.runner import run_backtest
-from sepa_scanner.lab.store import LabStore
+from sepa_scanner.lab.store import LabStore, LabStoreLocked
 from sepa_scanner.settings import load_settings
 
 import sepa_scanner.lab_strategies  # noqa: F401  (registers strategies)
@@ -27,7 +27,12 @@ console = Console()
 def _store() -> LabStore:
     settings = load_settings()
     store = LabStore(settings.runtime.data_dir / "db" / "sepa.duckdb")
-    store.initialize()
+    try:
+        store.initialize()
+    except LabStoreLocked as exc:
+        # A traceback here tells the user nothing actionable; the message does.
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
     return store
 
 

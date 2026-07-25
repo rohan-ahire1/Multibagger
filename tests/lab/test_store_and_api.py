@@ -181,8 +181,21 @@ def test_submit_rejects_unknown_strategy(store):
 
 
 @pytest.fixture
-def client() -> TestClient:
-    return TestClient(create_app())
+def client(tmp_path) -> TestClient:
+    """A client backed by a throwaway store.
+
+    Never let API tests fall through to the real data/db/sepa.duckdb: it is a
+    single-writer file, so a running `sepa ui` holds its lock and the tests
+    fail for reasons unrelated to the code under test — and a test that did
+    acquire it would be writing to production history.
+    """
+    from sepa_scanner.api.routes import lab as lab_routes
+
+    store = LabStore(tmp_path / "api.duckdb")
+    store.initialize()
+    app = create_app()
+    app.dependency_overrides[lab_routes.get_store] = lambda: store
+    return TestClient(app)
 
 
 def test_strategies_endpoint_exposes_param_specs(client):
@@ -354,3 +367,40 @@ def test_run_completes_end_to_end_through_the_api(tmp_path):
     assert client.get(f"/api/lab/runs/{run_id}").status_code == 404
 
     runner.shutdown()
+
+
+def test_locked_database_raises_a_readable_error(tmp_path, monkeypatch):
+    """A held write lock must explain itself, not surface a raw IO error.
+
+    DuckDB only conflicts across processes — connections inside one process
+    share the lock — so the mapping is exercised directly rather than by
+    spawning a holder.
+    """
+    import duckdb
+
+    from sepa_scanner.lab.store import LabStoreLocked
+
+    def raise_lock(*a, **k):
+        raise duckdb.IOException(
+            'IO Error: Could not set lock on file "x.duckdb": Conflicting lock '
+            "is held in another python process"
+        )
+
+    monkeypatch.setattr(duckdb, "connect", raise_lock)
+    with pytest.raises(LabStoreLocked, match="single-writer"):
+        LabStore(tmp_path / "locked.duckdb").initialize()
+
+
+def test_non_lock_io_errors_are_not_reinterpreted(tmp_path, monkeypatch):
+    """Only lock failures get the friendly message; other IO errors pass through."""
+    import duckdb
+
+    from sepa_scanner.lab.store import LabStoreLocked
+
+    def raise_other(*a, **k):
+        raise duckdb.IOException("IO Error: disk is on fire")
+
+    monkeypatch.setattr(duckdb, "connect", raise_other)
+    with pytest.raises(duckdb.IOException) as excinfo:
+        LabStore(tmp_path / "x.duckdb").initialize()
+    assert not isinstance(excinfo.value, LabStoreLocked)

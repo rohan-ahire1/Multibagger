@@ -18,6 +18,11 @@ from sepa_scanner.lab.contracts import (
     StrategyContext,
     StrategyKind,
 )
+from sepa_scanner.lab.engines.rebalance_engine import (
+    orders_to_trade_records,
+    run_rebalance_engine,
+    turnover_pct,
+)
 from sepa_scanner.lab.engines.signal_engine import (
     count_entries_in_window,
     run_signal_engine,
@@ -116,27 +121,44 @@ def run_backtest(
     intent = strategy.generate(ctx, resolved)
     validate_intent(intent, strategy.kind, strategy_id)
 
-    if strategy.kind is not StrategyKind.SIGNAL:
-        raise NotImplementedError(
-            "the rebalance engine is not wired yet; only SIGNAL strategies run today"
-        )
-
     config = strategy.engine_config(ctx, resolved)
-    raw = run_signal_engine(
-        intent,
-        bundle.ohlcv,
-        config["params"],
-        config["portfolio"],
-        bundle.sector_map,
-        exit_config=config.get("exit_config"),
-        exit_kwargs=config["exit_kwargs"],
-        entry_gate=config.get("entry_gate"),
-        entry_size_mult=config.get("entry_size_mult"),
-    )
 
-    trades_df = raw["trades"]
-    records = to_trade_records(trades_df)
-    daily_equity = raw["daily_equity"]
+    exposure_pct: float | None = None
+    turnover: float | None = None
+
+    if strategy.kind is StrategyKind.SIGNAL:
+        raw = run_signal_engine(
+            intent,
+            bundle.ohlcv,
+            config["params"],
+            config["portfolio"],
+            bundle.sector_map,
+            exit_config=config.get("exit_config"),
+            exit_kwargs=config["exit_kwargs"],
+            entry_gate=config.get("entry_gate"),
+            entry_size_mult=config.get("entry_size_mult"),
+        )
+        trades_df = raw["trades"]
+        records = to_trade_records(trades_df)
+        daily_equity = raw["daily_equity"]
+        trade_count = count_entries_in_window(trades_df, start_date, end_date)
+        include_trade_stats = True
+    else:
+        # Target weights are executed at the next open after each rebalance
+        # date; there are orders rather than positions with stops, so no
+        # R-multiple statistics apply.
+        raw = run_rebalance_engine(
+            intent,
+            bundle.ohlcv,
+            config["config"],
+            name=config.get("name", strategy_id),
+        )
+        orders = raw["orders"]
+        records = orders_to_trade_records(orders)
+        daily_equity = raw["daily_equity"]
+        trade_count = orders.height if orders is not None else 0
+        turnover = turnover_pct(orders, config["initial_capital"])
+        include_trade_stats = False
 
     # Refuse to publish benchmark-relative metrics from a series with an
     # unadjusted corporate action: a broken benchmark turns into fabricated
@@ -150,10 +172,14 @@ def run_backtest(
         start_date,
         end_date,
         benchmark=benchmark_for_metrics,
+        exposure_pct=exposure_pct,
+        include_trade_stats=include_trade_stats,
     )
-    # The simulator manages open positions past `end_date`, so the headline
-    # trade count must be entries inside the window, matching the harness.
-    metrics.trades = count_entries_in_window(trades_df, start_date, end_date)
+    # The signal simulator manages open positions past `end_date`, so the
+    # headline count must be entries inside the window, matching the harness.
+    metrics.trades = trade_count
+    if turnover is not None:
+        metrics.turnover_pct = turnover
 
     warnings: list[str] = []
     if breaks:
@@ -183,8 +209,8 @@ def run_backtest(
         ),
         trades=records,
         extras={
-            "signals_after_filter": intent.height,
-            "open_positions": len(raw.get("open_positions", [])),
+            "intent_rows": intent.height,
+            "open_positions": len(raw.get("open_positions", []) or []),
         },
         warnings=warnings,
         created_at=datetime.now(UTC),

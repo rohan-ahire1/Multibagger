@@ -37,6 +37,9 @@ class RunMetrics:
     expectancy_r: float | None = None
     payoff_ratio: float | None = None
     avg_hold_days: float | None = None
+    # Traded value as a percentage of starting capital. Meaningful for both
+    # kinds, and the main cost signal for a rebalance strategy.
+    turnover_pct: float | None = None
 
 
 @dataclass(slots=True)
