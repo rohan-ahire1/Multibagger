@@ -50,6 +50,15 @@ def event_price_multiplier(row: dict) -> float | None:
 
     Combined bonus+split subjects multiply both legs so no residual cliff remains.
     """
+    # An explicitly stated multiplier wins over anything derived. Inferred
+    # overrides know the observed price ratio but not the face values behind
+    # it, and a row whose factor cannot be derived is skipped silently --
+    # leaving the discontinuity in the panel while the CA file claims it was
+    # handled.
+    explicit = row.get("adjustment_factor")
+    if explicit is not None and float(explicit) > 0:
+        return float(explicit)
+
     action = (row.get("action_type") or "").lower()
     if action in {"split", "face_value"}:
         m = _fv_multiplier(row)

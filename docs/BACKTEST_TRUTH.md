@@ -62,7 +62,7 @@ curve from `simulate_portfolio_python` (friction on: slippage + STT/charges + DP
 | Config | CAGR | Max DD | Calmar | Trades |
 |---|---|---|---|---|
 | **Committed strategy-only** (`cash_yield_apy: 0`) — NSE panel | **12.48%** | **24.28%** | **0.51** | 281 |
-| Total portfolio: + 6% idle-cash yield sleeve | 17.20% | 15.08% | 1.14 | 278 |
+| Total portfolio: + 6% idle-cash yield sleeve | 16.60% | 16.56% | 1.00 | 281 |
 | Legacy yfinance panel (pre-cutover, survivor-biased) | 14.03% | 15.01% | 0.93 | 287 |
 
 **Survivorship is the whole difference between the last two rows.** Like-for-like (same
@@ -163,7 +163,7 @@ different-but-defensible definition silently moves the committed baseline.
 ```bash
 uv run python optimize_joint_wf.py --parity
 # expect (NSE panel, signals through 2026-03-17): CAGR=12.48%  MaxDD=24.28%  Calmar=0.51  trades=281
-# total portfolio (6% idle-cash sleeve):          CAGR=17.20%  MaxDD=15.08%  Calmar=1.14  trades=278
+# total portfolio (6% idle-cash sleeve):          CAGR=16.60%  MaxDD=16.56%  Calmar=1.00  trades=281
 # legacy yfinance panel for comparison:           CAGR=14.03%  MaxDD=15.01%  Calmar=0.93  trades=287
 ```
 
@@ -412,3 +412,76 @@ initial risk, first stop/1R/2R/3R/5R timing, multi-horizon MFE/MAE, price/volume
 features, canonical outcomes, and the strategy-only equity curve. Treat cohort results as
 hypothesis generation; configuration changes still require fold, neighborhood, and holdout
 validation in the canonical harness.
+
+---
+
+## Corporate-action rebuild — 2026-07-26
+
+The panel was rebuilt after resolving the adjustment quarantine. **The committed
+SEPA baseline did not move: 12.48% / 24.28% / 0.51 / 281 fills, byte-identical
+before and after.** The signal funnel is unchanged too (354 after quality
+filters). Only the 6% idle-cash reference sleeve shifted, from
+17.20% / 15.08% / 1.14 / 278 to 16.60% / 16.56% / 1.00 / 281.
+
+That the strategy-only figure held is the useful result: the 390 corrections were
+overwhelmingly small caps and ETFs, which SEPA's liquidity and quality filters
+already exclude. **Strategies that rank the whole cross-section — `daily_factors`,
+`stocks_on_the_move` — are far more exposed and must be re-run.**
+
+### What changed
+
+Quarantined discontinuities fell from **538 to 150**, of which 148 are the
+genuine manual-review queue in `reports/data_audit/ca_manual_queue.csv`.
+
+| Bucket | Rows | Evidence required |
+|---|---:|---|
+| `purpose_parsed` | 247 | Feed purpose text parses to a factor **and** the observed price move agrees within 10% |
+| `isin_corroborated` | 142 | ISIN reissued within 3 days; NSE reissues on face-value change, a crash never does |
+| `etf_inferred` | 1 | Fund (ISIN prefix `INF`) with a single unambiguous round split ratio |
+| `manual` | 148 | Left untouched |
+
+Two mechanisms did the work. Most of the CA feed is stored as
+`action_type="unparsed"` with only free text (`Fv Spl-Rs10tors2/Bon-12:1`), so the
+event was known but carried no usable factor — `src/sepa_scanner/data_sources/ca_purpose.py`
+parses those. And an ISIN change is independent physical evidence of a capital
+action, which is what `scripts/build_security_master.py` exposes.
+
+### Pipeline bugs fixed along the way
+
+Each of these reported success while doing nothing:
+
+1. `event_price_multiplier` ignored the `adjustment_factor` column entirely,
+   deriving factors only from face values or `ratio_num/ratio_den`. Any override
+   without those was skipped silently.
+2. `_load_ca_overrides` applied only `source == "manual"`. Rows with any other
+   source were written to the CSV and never used. Now an explicit allowlist
+   (`APPLIED_CA_SOURCES`) with a hard error on unrecognised sources.
+3. The de-dup anti-join keyed on `(symbol, ex_date, action_type)`, so an override
+   whose action type differed from the feed's stacked on top instead of
+   replacing it — adjusting the symbol twice. Now keyed on `(symbol, ex_date)`.
+
+### Order of operations matters
+
+`reconcile_corporate_actions.py` classifies whatever panel is on disk, so running
+it against a panel built from unverified overrides feeds errors back in. The
+sequence is fixed:
+
+```
+reset config/corporate_actions.csv to trusted rows
+uv run python scripts/nse_build_adjusted_panel.py --dividends   # must report 538
+uv run python scripts/reconcile_corporate_actions.py --write
+uv run python scripts/nse_build_adjusted_panel.py --dividends   # reports 150
+uv run python scripts/reconcile_corporate_actions.py            # verify
+```
+
+**Always pass `--dividends`.** Omitting it silently rebuilds a price-return panel
+in place of the total-return one, changing 4.1M rows across 1,622 symbols.
+
+### Seed rows
+
+Four of the six legacy `source=seed` rows are wrong and remain inert: IRCTC
+(dated 2022-10-28, actual 2021-10-28), DMART, TCS and BAJFINANCE show no price
+move on their stated ex-dates. RELIANCE and HDFCBANK check out. Validate seed
+rows against **raw** prices and against each row's own stated factor — a
+correctly applied action leaves no trace in the adjusted panel, and a 1:2 split
+sits inside any large-jump threshold.

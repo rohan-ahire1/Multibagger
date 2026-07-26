@@ -30,6 +30,11 @@ RAW_PANEL_ROOT = Path("data/nse_raw")
 OUT_ROOT = Path("data/nse_adjusted")
 CA_PATH = Path("data/reference/nse_corporate_actions.parquet")
 CA_OVERRIDES_PATH = Path("config/corporate_actions.csv")
+
+# Override rows are applied only if their source is listed here. `seed` is
+# deliberately excluded: those rows predate the CA feed and four of the six
+# disagree with the raw prices on their own stated ex-date.
+APPLIED_CA_SOURCES = ("manual", "purpose_parsed", "isin_corroborated", "etf_inferred")
 QUARANTINE = Path("reports/data_audit/adjustment_quarantine.csv")
 
 # Columns the adjustment engine reads. Overrides are normalised to this shape.
@@ -43,6 +48,9 @@ _CA_COLUMNS = (
     "old_face_value",
     "new_face_value",
     "dividend_amount",
+    # Carried so an override can state its multiplier outright. Inferred rows
+    # know the observed price ratio but not the face values behind it.
+    "adjustment_factor",
     "raw_purpose",
     "source",
 )
@@ -73,9 +81,20 @@ def _load_ca_overrides() -> pl.DataFrame | None:
     # symbol twice. They stay inert until someone verifies them.
     if "source" not in raw.columns:
         return None
-    frame = raw.filter(pl.col("source") == "manual")
+    frame = raw.filter(pl.col("source").is_in(APPLIED_CA_SOURCES))
     if frame.is_empty():
         return None
+
+    unknown = sorted(
+        set(raw["source"].drop_nulls().to_list()) - set(APPLIED_CA_SOURCES) - {"seed"}
+    )
+    if unknown:
+        # An override row that is written but never applied is invisible: the
+        # jump stays in the panel and the file claims it was handled.
+        raise ValueError(
+            f"{CA_OVERRIDES_PATH} has rows with unrecognised source(s) {unknown}; "
+            f"add them to APPLIED_CA_SOURCES or they will be silently ignored"
+        )
 
     frame = frame.with_columns(pl.col("ex_date").cast(pl.Date))
     if "raw_purpose" not in frame.columns:
@@ -107,8 +126,13 @@ def _load_ca(dividends: bool, raw: pl.DataFrame | None = None) -> pl.DataFrame:
     if overrides is not None:
         # Drop fetched events that an override replaces, so a correction wins
         # rather than double-applying alongside the feed.
-        keys = overrides.select("symbol", "ex_date", "action_type").unique()
-        ca = ca.join(keys, on=["symbol", "ex_date", "action_type"], how="anti")
+        # Match on (symbol, ex_date) only, not action_type. An override states
+        # the total multiplier observed for that symbol-date, so it must replace
+        # every feed event there. Keying on action_type as well would let a
+        # feed `bonus` survive alongside an override `split` for the same event
+        # and adjust the symbol twice.
+        keys = overrides.select("symbol", "ex_date").unique()
+        ca = ca.join(keys, on=["symbol", "ex_date"], how="anti")
         # Adopt the feed's dtypes so the concat cannot fail on, say, ratio_num
         # being Int64 upstream and Float64 in the CSV.
         overrides = overrides.with_columns(
