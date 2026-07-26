@@ -11,6 +11,7 @@ from typing import Any
 import polars as pl
 
 from sepa_scanner.lab.contracts import (
+    DECISION_REQUIRED_COLUMNS,
     SIGNAL_REQUIRED_COLUMNS,
     DataRequirement,
     WEIGHT_REQUIRED_COLUMNS,
@@ -18,6 +19,7 @@ from sepa_scanner.lab.contracts import (
     StrategyContext,
     StrategyKind,
 )
+from sepa_scanner.lab.engines.portfolio_order_engine import run_portfolio_order_engine
 from sepa_scanner.lab.engines.reversion_engine import (
     reversion_daily_equity,
     reversion_trade_records,
@@ -39,6 +41,7 @@ from sepa_scanner.lab.panel import (
     detect_price_discontinuities,
     load_bundle,
     load_panel_bundle,
+    nifty500_tri,
 )
 from sepa_scanner.lab.registry import get_strategy, resolve_params
 from sepa_scanner.lab.result import BacktestRunResult
@@ -56,7 +59,8 @@ def params_hash(strategy_id: str, params: dict[str, Any], data_source: str) -> s
 def validate_intent(frame: pl.DataFrame, kind: StrategyKind, strategy_id: str) -> None:
     """Fail with a clear authoring error rather than deep inside the simulator."""
     signal_like = kind in (StrategyKind.SIGNAL, StrategyKind.REVERSION)
-    required = SIGNAL_REQUIRED_COLUMNS if signal_like else WEIGHT_REQUIRED_COLUMNS
+    portfolio_like = kind is StrategyKind.PORTFOLIO
+    required = SIGNAL_REQUIRED_COLUMNS if signal_like else DECISION_REQUIRED_COLUMNS if portfolio_like else WEIGHT_REQUIRED_COLUMNS
     missing = [c for c in required if c not in frame.columns]
     if missing:
         raise ValueError(
@@ -74,6 +78,16 @@ def validate_intent(frame: pl.DataFrame, kind: StrategyKind, strategy_id: str) -
                 f"strategy {strategy_id!r} produced {duplicates.height} duplicate "
                 "(symbol, signal_date) rows"
             )
+    elif portfolio_like:
+        invalid = frame.filter(
+            (pl.col("rank_pct") <= 0) | (pl.col("rank_pct") > 1) | (pl.col("atr20") <= 0)
+        )
+        if not invalid.is_empty():
+            raise ValueError(f"strategy {strategy_id!r} produced invalid portfolio rank_pct or atr20 values")
+        for _, decision in frame.group_by("decision_date", maintain_order=True):
+            ranks = sorted(int(rank) for rank in decision["rank"].to_list())
+            if ranks != list(range(1, len(ranks) + 1)):
+                raise ValueError(f"strategy {strategy_id!r} ranks must be dense unique 1-based per decision_date")
     else:
         per_date = frame.group_by("rebalance_date").agg(pl.col("weight").sum().alias("total"))
         overweight = per_date.filter(pl.col("total") > 1.0 + 1e-6)
@@ -129,6 +143,7 @@ def run_backtest(
 
     exposure_pct: float | None = None
     turnover: float | None = None
+    portfolio_metrics: dict[str, float | None] = {}
 
     if strategy.kind is StrategyKind.SIGNAL:
         raw = run_signal_engine(
@@ -153,6 +168,26 @@ def run_backtest(
         daily_equity = reversion_daily_equity(raw)
         trade_count = len([r for r in records if r.entry_date is not None])
         include_trade_stats = True
+    elif strategy.kind is StrategyKind.PORTFOLIO:
+        raw = run_portfolio_order_engine(intent, bundle.ohlcv, config["config"])
+        records = raw["trade_records"]
+        daily_equity = raw["daily_equity"]
+        trade_count = len(records)
+        include_trade_stats = True
+        orders = raw["orders"]
+        initial = config["config"].initial_capital
+        turnover = float(orders["notional"].sum()) / initial * 100.0 if orders.height else 0.0
+        holdings = daily_equity["holdings_value"] / daily_equity["equity"]
+        cash_pct = daily_equity["cash"] / daily_equity["equity"]
+        position_counts = raw["positions"].group_by("date").len().rename({"len": "holdings"})
+        portfolio_metrics = {
+            "exposure_pct": float(holdings.mean()) * 100.0 if holdings.len() else None,
+            "cash_pct": float(cash_pct.mean()) * 100.0 if cash_pct.len() else None,
+            "avg_holdings": float(position_counts["holdings"].mean()) if position_counts.height else 0.0,
+            "avg_holding_days": (sum(t.hold_days for t in records if t.hold_days is not None) / len(records)) if records else None,
+            "cost_drag_pct": raw["cost_drag"] / initial * 100.0,
+            "slippage_drag_pct": raw["slippage_drag"] / initial * 100.0,
+        }
     else:
         # Target weights are executed at the next open after each rebalance
         # date; there are orders rather than positions with stops, so no
@@ -173,8 +208,16 @@ def run_backtest(
     # Refuse to publish benchmark-relative metrics from a series with an
     # unadjusted corporate action: a broken benchmark turns into fabricated
     # alpha, which is worse than reporting no alpha at all.
-    breaks = detect_price_discontinuities(bundle.benchmark, "tri")
-    benchmark_for_metrics = None if breaks else bundle.benchmark
+    benchmark_source = bundle.benchmark
+    breaks = detect_price_discontinuities(benchmark_source, "tri")
+    if strategy.kind is StrategyKind.PORTFOLIO:
+        # The benchmark series is the Nifty 500 TRI; the price index matters only
+        # for the regime filter. Gate them independently.
+        tri = nifty500_tri(bundle.settings.runtime.data_dir, start_date, end_date)
+        tri_complete = not tri.is_empty() and tri["date"].min() <= start_date and tri["date"].max() >= end_date
+        benchmark_source = tri if tri_complete else pl.DataFrame()
+        breaks = detect_price_discontinuities(benchmark_source, "tri")
+    benchmark_for_metrics = None if breaks or benchmark_source.is_empty() else benchmark_source
 
     metrics = summarize(
         daily_equity,
@@ -182,7 +225,7 @@ def run_backtest(
         start_date,
         end_date,
         benchmark=benchmark_for_metrics,
-        exposure_pct=exposure_pct,
+        exposure_pct=portfolio_metrics.get("exposure_pct", exposure_pct),
         include_trade_stats=include_trade_stats,
     )
     # The signal simulator manages open positions past `end_date`, so the
@@ -190,6 +233,8 @@ def run_backtest(
     metrics.trades = trade_count
     if turnover is not None:
         metrics.turnover_pct = turnover
+    for name, value in portfolio_metrics.items():
+        setattr(metrics, name, value)
 
     warnings: list[str] = []
     if breaks:
@@ -197,6 +242,14 @@ def run_backtest(
             f"benchmark {bundle.settings.market.benchmark_symbol} has "
             f"{len(breaks)} unadjusted price discontinuit(ies) "
             f"(first: {breaks[0]}); benchmark-relative metrics suppressed"
+        )
+    elif strategy.kind is StrategyKind.PORTFOLIO and benchmark_for_metrics is None:
+        warnings.append("Nifty 500 TRI does not cover the run window; benchmark-relative metrics suppressed")
+    if config.get("regime_source") == "nifty500_tri":
+        warnings.append(
+            "regime filter uses the Nifty 500 TRI, not the price index the spec "
+            "requires; TRI drifts above price by reinvested dividends, so the "
+            "SMA200 filter turns bullish marginally earlier"
         )
     if resolved.get("cash_yield_apy"):
         warnings.append(
@@ -221,6 +274,9 @@ def run_backtest(
         extras={
             "intent_rows": intent.height,
             "open_positions": len(raw.get("open_positions", []) or []),
+            "rejections": raw.get("rejections", pl.DataFrame()).to_dicts() if strategy.kind is StrategyKind.PORTFOLIO else [],
+            "delisted_assumed_terminal_count": len([r for r in raw.get("rejections", pl.DataFrame()).to_dicts() if r.get("reason") == "delisted_assumed_terminal"]) if strategy.kind is StrategyKind.PORTFOLIO else 0,
+            "delisted_assumed_terminal_pnl_impact": raw.get("delisted_pnl_impact") if strategy.kind is StrategyKind.PORTFOLIO else None,
         },
         warnings=warnings,
         created_at=datetime.now(UTC),

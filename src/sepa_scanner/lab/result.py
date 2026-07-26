@@ -40,6 +40,11 @@ class RunMetrics:
     # Traded value as a percentage of starting capital. Meaningful for both
     # kinds, and the main cost signal for a rebalance strategy.
     turnover_pct: float | None = None
+    cash_pct: float | None = None
+    avg_holdings: float | None = None
+    avg_holding_days: float | None = None
+    cost_drag_pct: float | None = None
+    slippage_drag_pct: float | None = None
 
 
 @dataclass(slots=True)

@@ -93,7 +93,7 @@ def _risk_ratios(equity: np.ndarray) -> tuple[float | None, float | None, float]
 
 
 def _trade_stats(trades: list[TradeRecord]) -> dict[str, float | int | None]:
-    closed = [t for t in trades if t.status == "closed" and t.r_multiple is not None]
+    closed = [t for t in trades if t.status == "closed"]
     if not closed:
         return {
             "trades": len(trades) or None,
@@ -104,9 +104,13 @@ def _trade_stats(trades: list[TradeRecord]) -> dict[str, float | int | None]:
             "avg_hold_days": None,
         }
 
-    r_values = [float(t.r_multiple) for t in closed]
-    wins = [r for r in r_values if r > 0]
-    losses = [r for r in r_values if r <= 0]
+    r_values = [float(t.r_multiple) for t in closed if t.r_multiple is not None]
+    pnl_values = [float(t.pnl) for t in closed if t.pnl is not None]
+    # Win rate must be counted over the same population it is divided by; R is
+    # preferred where it exists, and PnL carries strategies that have no stop.
+    basis = r_values or pnl_values
+    wins = [value for value in basis if value > 0]
+    losses = [value for value in basis if value <= 0]
     holds = [t.hold_days for t in closed if t.hold_days is not None]
 
     avg_win = sum(wins) / len(wins) if wins else 0.0
@@ -114,9 +118,9 @@ def _trade_stats(trades: list[TradeRecord]) -> dict[str, float | int | None]:
 
     return {
         "trades": len(closed),
-        "win_rate": len(wins) / len(r_values) * 100.0,
-        "avg_r": sum(r_values) / len(r_values),
-        "expectancy_r": sum(r_values) / len(r_values),
+        "win_rate": len(wins) / len(basis) * 100.0 if basis else None,
+        "avg_r": sum(r_values) / len(r_values) if r_values else None,
+        "expectancy_r": sum(r_values) / len(r_values) if r_values else None,
         "payoff_ratio": (avg_win / avg_loss) if avg_loss > 0 else None,
         "avg_hold_days": (sum(holds) / len(holds)) if holds else None,
     }

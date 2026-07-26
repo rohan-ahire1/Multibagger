@@ -85,6 +85,37 @@ def benchmark_curve(
     )
 
 
+def _reference_index(data_dir: Path, prefix: str, value_column: str) -> pl.DataFrame:
+    """Load a versioned Nifty reference file without manufacturing missing data."""
+    files = sorted((data_dir / "reference").glob(f"{prefix}_*.csv"))
+    if not files:
+        return pl.DataFrame(schema={"date": pl.Date, value_column: pl.Float64})
+    frames: list[pl.DataFrame] = []
+    for path in files:
+        frame = pl.read_csv(path, try_parse_dates=True)
+        source_value = value_column if value_column in frame.columns else "close" if "close" in frame.columns else "tri" if "tri" in frame.columns else "price"
+        if "date" not in frame.columns or source_value not in frame.columns:
+            continue
+        frames.append(frame.select(pl.col("date").cast(pl.Date), pl.col(source_value).cast(pl.Float64).alias(value_column)))
+    if not frames:
+        return pl.DataFrame(schema={"date": pl.Date, value_column: pl.Float64})
+    return pl.concat(frames).unique(subset=["date"], keep="last").sort("date")
+
+
+def nifty500_price_index(data_dir: Path, start: date, end: date) -> pl.DataFrame:
+    """Nifty 500 price series, if a separately fetched file is locally available."""
+    return _reference_index(data_dir, "nifty500_price", "price").filter(
+        (pl.col("date") >= start) & (pl.col("date") <= end)
+    )
+
+
+def nifty500_tri(data_dir: Path, start: date, end: date) -> pl.DataFrame:
+    """Nifty 500 TRI, deliberately empty when its local history does not cover a run."""
+    return _reference_index(data_dir, "nifty500_tri", "tri").filter(
+        (pl.col("date") >= start) & (pl.col("date") <= end)
+    )
+
+
 def load_bundle(start_date: date, end_date: date) -> DataBundle:
     """Load signals, prices, diagnostics, sector map, and benchmark for a window."""
     bundle, signals, ohlcv = load_inputs(start_date, end_date)

@@ -3,7 +3,7 @@
 
 export type ParamType = 'int' | 'float' | 'bool' | 'enum' | 'date' | 'str'
 
-export type StrategyKind = 'signal' | 'rebalance' | 'reversion'
+export type StrategyKind = 'signal' | 'rebalance' | 'reversion' | 'portfolio'
 
 export type RunStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
 
@@ -50,6 +50,12 @@ export interface RunMetrics {
   expectancyR: number | null
   payoffRatio: number | null
   avgHoldDays: number | null
+  turnoverPct: number | null
+  cashPct: number | null
+  avgHoldings: number | null
+  avgHoldingDays: number | null
+  costDragPct: number | null
+  slippageDragPct: number | null
 }
 
 export interface LabRun {

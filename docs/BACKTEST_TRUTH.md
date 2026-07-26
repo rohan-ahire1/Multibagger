@@ -118,13 +118,22 @@ Runs persist to `lab_runs` / `lab_equity` / `lab_trades` in the same DuckDB file
 CLI, the API, and the `/lab` page in the terminal all read one history. That store is
 single-writer: a running `sepa ui` holds the lock, so stop it before a CLI run.
 
-Three engine kinds, all summarised by the same equity-curve metrics:
+Four engine kinds, all summarised by the same equity-curve metrics:
 
 | kind | exits on | strategies |
 |---|---|---|
 | `signal` | trailing EMA / hard stop / holding limit | `sepa_breakout`, `episodic_pivots`, `research_momentum` |
 | `reversion` | the reversion completing (close above the 5-day mean, RSI-2 back above 70) | `mean_reversion` |
 | `rebalance` | nothing — periodic target weights, no per-trade stop | `daily_factors` |
+| `portfolio` | ranked weekly decisions, integer-share sells-before-buys | `stocks_on_the_move` |
+
+`stocks_on_the_move` uses a strictly backward-looking liquidity-proxy universe,
+not historical Nifty 500 membership, so it is not a book replication. Its Nifty
+500 price index is not presently stored locally; until it is fetched, the market
+regime cannot be reconstructed and all benchmark-relative metrics are suppressed.
+The survivor-complete panel also lacks delisting reasons and terminal values: a
+retired holding is closed at its last close (or marked to zero after a zero-volume
+final bar) and each such assumed terminal value is reported separately.
 
 `reversion` exists because the shared simulator has no reversion exit, and adding one
 would mean changing the code the parity check depends on. R-multiple statistics are

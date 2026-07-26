@@ -1,0 +1,94 @@
+# Stocks on the Move — canonical configuration
+# Fields marked AMBIGUOUS require a documented variant run.
+
+strategy:
+  name: stocks_on_the_move_canonical
+  side: long_only
+  data_frequency: daily
+
+universe:
+  type: historical_index_membership
+  index: NIFTY_500
+  require_point_in_time_membership: true
+  include_delisted: true
+  stable_identifier: ISIN
+  min_history_sessions: 200
+
+schedule:
+  signal_weekday: WED
+  weekly_portfolio_rebalance: true
+  position_rebalance_every_n_weeks: 2
+  holiday_policy: next_available_session
+  signal_timestamp: session_close
+  execution_timestamp: next_session_open
+
+momentum:
+  window_sessions: 90
+  price_field: adjusted_close
+  transform: natural_log
+  regression: ordinary_least_squares
+  annualisation_sessions: 250
+  score: annualised_exponential_slope_times_r_squared
+
+filters:
+  stock_sma_sessions: 100
+  stock_requires_close_above_sma: true
+  market_index: NIFTY_500_PRICE
+  market_sma_sessions: 200
+  market_filter_blocks_new_buys_only: true
+  gap_window_sessions: 90
+  gap_threshold: 0.15
+  gap_definition: close_to_close_absolute_return  # AMBIGUOUS
+  required_rank_percentile: 0.20
+
+risk:
+  atr_sessions: 20
+  atr_smoothing: simple_mean  # AMBIGUOUS; test Wilder variant
+  risk_factor: 0.001
+  integer_shares: true
+  leverage_allowed: false
+  shorting_allowed: false
+
+position_rebalance:
+  enabled: true
+  tolerance: 0.05  # Later book suggestion; run zero-tolerance baseline too
+  tolerance_basis: target_market_value
+
+orders:
+  process_sells_before_buys: true
+  require_full_target_position: true  # AMBIGUOUS
+  allow_partial_final_position_variant: true
+  no_fill_on_zero_volume: true
+  enforce_tradability: true
+  enforce_price_bands: true
+  pending_order_expiry_sessions: 1
+
+exits:
+  leave_universe: true
+  rank_worse_than_percentile: 0.20
+  close_below_sma100: true
+  gap_above_threshold: true
+  stop_loss: null
+  take_profit: null
+  max_holding_period: null
+
+execution:
+  baseline_fill: next_open
+  slippage_bps: 0  # Set by experiment
+  participation_limit_adv: 0.02
+  cost_model: indian_equity_delivery_configured_externally
+
+benchmark:
+  regime_series: NIFTY_500_PRICE
+  performance_series: NIFTY_500_TRI
+
+validation:
+  run_gap_variants: true
+  run_atr_variants: true
+  run_partial_position_variant: true
+  cost_stress_multipliers: [1.0, 1.5, 2.0]
+  momentum_windows: [60, 90, 120, 180, 240]
+  stock_sma_windows: [80, 100, 120]
+  market_sma_windows: [150, 200, 250]
+  rank_percentiles: [0.10, 0.15, 0.20, 0.25, 0.30]
+  risk_factors: [0.0005, 0.0008, 0.0010, 0.0012, 0.0015]

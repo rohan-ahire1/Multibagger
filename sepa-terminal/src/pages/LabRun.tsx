@@ -44,6 +44,8 @@ export function LabRun() {
   // Only rebalance runs lack per-trade R. Reversion runs have stops and
   // R-multiples like signal runs; only their exit rule differs.
   const isRebalance = run.kind === 'rebalance'
+  const isPortfolio = run.kind === 'portfolio'
+  const hidesR = isRebalance || isPortfolio
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 px-6 py-5">
@@ -59,6 +61,12 @@ export function LabRun() {
         title={run.label || `Run ${run.runId.slice(0, 8)}`}
         description={`${fmtDateShort(run.startDate)} – ${fmtDateShort(run.endDate)} · ${run.dataSource}`}
       />
+
+      {run.strategyId === 'stocks_on_the_move' && (
+        <Card className="border-warning/30 bg-warning/5 px-4 py-3 text-xs text-warning">
+          Liquidity-proxy universe, not Nifty 500 membership — not a book replication.
+        </Card>
+      )}
 
       {run.status === 'failed' && (
         <Card className="border-danger/30 bg-danger/5 p-4">
@@ -103,7 +111,7 @@ export function LabRun() {
             value={m.excessCagrPct === null ? '—' : `${m.excessCagrPct.toFixed(2)} pts`}
           />
           {/* Trade statistics are meaningless for a target-weight strategy. */}
-          {!isRebalance && (
+          {!hidesR && (
             <>
               <StatCell label="Trades" value={m.trades ?? '—'} />
               <StatCell
@@ -112,6 +120,14 @@ export function LabRun() {
               />
               <StatCell label="Avg R" value={m.avgR?.toFixed(2) ?? '—'} />
               <StatCell label="Payoff" value={m.payoffRatio?.toFixed(2) ?? '—'} />
+            </>
+          )}
+          {isPortfolio && (
+            <>
+              <StatCell label="Exposure" value={m.exposurePct === null ? '—' : `${m.exposurePct.toFixed(1)}%`} />
+              <StatCell label="Cash" value={m.cashPct === null ? '—' : `${m.cashPct.toFixed(1)}%`} />
+              <StatCell label="Turnover" value={m.turnoverPct === null ? '—' : `${m.turnoverPct.toFixed(1)}%`} />
+              <StatCell label="Average holdings" value={m.avgHoldings?.toFixed(1) ?? '—'} />
             </>
           )}
         </div>
@@ -151,7 +167,7 @@ export function LabRun() {
         </Card>
       )}
 
-      {trades.length > 0 && <TradesTable trades={trades} isRebalance={isRebalance} />}
+      {trades.length > 0 && <TradesTable trades={trades} hidesR={hidesR} isRebalance={isRebalance} />}
 
       {run.params && (
         <Card className="p-4">
@@ -170,7 +186,7 @@ export function LabRun() {
   )
 }
 
-function TradesTable({ trades, isRebalance }: { trades: LabTrade[]; isRebalance: boolean }) {
+function TradesTable({ trades, isRebalance, hidesR }: { trades: LabTrade[]; isRebalance: boolean; hidesR: boolean }) {
   return (
     <Card className="overflow-hidden">
       <div className="border-b border-border bg-surface-2/50 px-3 py-2 text-[11px] font-semibold text-ink">
@@ -184,7 +200,7 @@ function TradesTable({ trades, isRebalance }: { trades: LabTrade[]; isRebalance:
               <th className="px-2 py-1.5 text-left font-medium">Entry</th>
               <th className="px-2 py-1.5 text-left font-medium">Exit</th>
               <th className="px-2 py-1.5 text-right font-medium">Shares</th>
-              {!isRebalance && <th className="px-2 py-1.5 text-right font-medium">R</th>}
+              {!hidesR && <th className="px-2 py-1.5 text-right font-medium">R</th>}
               <th className="px-2 py-1.5 text-right font-medium">P&amp;L %</th>
               <th className="px-2 py-1.5 text-left font-medium">Reason</th>
               <th className="px-2 py-1.5 text-left font-medium">Status</th>
@@ -201,7 +217,7 @@ function TradesTable({ trades, isRebalance }: { trades: LabTrade[]; isRebalance:
                   {t.exitDate ? fmtDateShort(t.exitDate) : '—'}
                 </td>
                 <td className="tnum px-2 py-1.5 text-right">{t.shares?.toFixed(0) ?? '—'}</td>
-                {!isRebalance && (
+                {!hidesR && (
                   <td
                     className={`tnum px-2 py-1.5 text-right ${
                       (t.rMultiple ?? 0) > 0 ? 'text-success' : 'text-danger'

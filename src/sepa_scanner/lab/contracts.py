@@ -41,6 +41,9 @@ class StrategyKind(str, Enum):
     trend break. Uses the same signal frame as SIGNAL; only the executor differs,
     because the shared portfolio simulator has no reversion exit."""
 
+    PORTFOLIO = "portfolio"
+    """Ranked decision frames executed as integer-share orders against cash."""
+
 
 ParamType = Literal["int", "float", "bool", "enum", "date", "str"]
 
@@ -139,6 +142,10 @@ class StrategyContext:
 # error instead of an opaque IndexError 800 lines into the simulator.
 SIGNAL_REQUIRED_COLUMNS: tuple[str, ...] = ("symbol", "signal_date", "entry_ref", "stop")
 WEIGHT_REQUIRED_COLUMNS: tuple[str, ...] = ("rebalance_date", "symbol", "weight")
+DECISION_REQUIRED_COLUMNS: tuple[str, ...] = (
+    "decision_date", "symbol", "score", "rank", "rank_pct", "atr20",
+    "trend_ok", "gap_ok", "is_member",
+)
 
 
 @runtime_checkable

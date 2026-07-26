@@ -22,7 +22,6 @@ class LabStoreLocked(RuntimeError):
     """The lab database is held by another process (usually a running API)."""
 
 
-
 class LabStore:
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
@@ -100,9 +99,15 @@ class LabStore:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', 0, 'queued', ?)
                 """,
                 [
-                    run_id, strategy_id, label,
-                    json.dumps(params, default=str), params_hash,
-                    start_date, end_date, kind, data_source,
+                    run_id,
+                    strategy_id,
+                    label,
+                    json.dumps(params, default=str),
+                    params_hash,
+                    start_date,
+                    end_date,
+                    kind,
+                    data_source,
                     datetime.now(UTC),
                 ],
             )
@@ -128,63 +133,101 @@ class LabStore:
     def save_result(self, result: BacktestRunResult) -> None:
         payload = result.to_dict()
         with self._connect() as conn:
-            conn.execute(
-                """
-                UPDATE lab_runs
-                   SET status='done', stage='done', progress_pct=100,
-                       metrics_json=?, extras_json=?, warnings_json=?,
-                       params_json=?, params_hash=?, data_source=?, finished_at=?
-                 WHERE run_id=?
-                """,
-                [
-                    json.dumps(payload["metrics"]),
-                    json.dumps(payload["extras"]),
-                    json.dumps(payload["warnings"]),
-                    json.dumps(payload["params"], default=str),
-                    result.params_hash,
-                    result.data_source,
-                    datetime.now(UTC),
-                    result.run_id,
-                ],
-            )
-            conn.execute("DELETE FROM lab_equity WHERE run_id=?", [result.run_id])
-            conn.execute("DELETE FROM lab_trades WHERE run_id=?", [result.run_id])
+            # Publish the completed run atomically with its child rows. Without
+            # an explicit transaction, a poller can observe status='done'
+            # after the run update but before equity/trades have been inserted.
+            conn.execute("BEGIN TRANSACTION")
+            try:
+                conn.execute("DELETE FROM lab_equity WHERE run_id=?", [result.run_id])
+                conn.execute("DELETE FROM lab_trades WHERE run_id=?", [result.run_id])
 
-            if result.equity_curve:
-                conn.executemany(
-                    "INSERT INTO lab_equity VALUES (?, ?, ?, ?, ?)",
-                    [
-                        [result.run_id, p.date, p.equity, p.drawdown_pct, p.benchmark_equity]
-                        for p in result.equity_curve
-                    ],
-                )
-            if result.trades:
-                conn.executemany(
-                    "INSERT INTO lab_trades VALUES " + "(" + ",".join(["?"] * 20) + ")",
-                    [
+                if result.equity_curve:
+                    conn.executemany(
+                        "INSERT INTO lab_equity VALUES (?, ?, ?, ?, ?)",
                         [
-                            result.run_id, t.symbol, t.direction, t.signal_date,
-                            t.entry_date, t.exit_date, t.entry_price, t.exit_price,
-                            t.shares, t.stop, t.r_multiple, t.pnl, t.pnl_pct,
-                            t.mfe_r, t.mae_r, t.hold_days, t.exit_reason, t.status,
-                            t.sector, json.dumps(t.meta, default=str),
-                        ]
-                        for t in result.trades
+                            [
+                                result.run_id,
+                                p.date,
+                                p.equity,
+                                p.drawdown_pct,
+                                p.benchmark_equity,
+                            ]
+                            for p in result.equity_curve
+                        ],
+                    )
+                if result.trades:
+                    conn.executemany(
+                        "INSERT INTO lab_trades VALUES "
+                        + "("
+                        + ",".join(["?"] * 20)
+                        + ")",
+                        [
+                            [
+                                result.run_id,
+                                t.symbol,
+                                t.direction,
+                                t.signal_date,
+                                t.entry_date,
+                                t.exit_date,
+                                t.entry_price,
+                                t.exit_price,
+                                t.shares,
+                                t.stop,
+                                t.r_multiple,
+                                t.pnl,
+                                t.pnl_pct,
+                                t.mfe_r,
+                                t.mae_r,
+                                t.hold_days,
+                                t.exit_reason,
+                                t.status,
+                                t.sector,
+                                json.dumps(t.meta, default=str),
+                            ]
+                            for t in result.trades
+                        ],
+                    )
+
+                # Status is the publication flag: it changes only after every
+                # row needed by the completed-run API response is in place.
+                conn.execute(
+                    """
+                    UPDATE lab_runs
+                       SET status='done', stage='done', progress_pct=100,
+                           metrics_json=?, extras_json=?, warnings_json=?,
+                           params_json=?, params_hash=?, data_source=?, finished_at=?
+                     WHERE run_id=?
+                    """,
+                    [
+                        json.dumps(payload["metrics"]),
+                        json.dumps(payload["extras"]),
+                        json.dumps(payload["warnings"]),
+                        json.dumps(payload["params"], default=str),
+                        result.params_hash,
+                        result.data_source,
+                        datetime.now(UTC),
+                        result.run_id,
                     ],
                 )
+                conn.execute("COMMIT")
+            except Exception:
+                conn.execute("ROLLBACK")
+                raise
 
     def get_run(self, run_id: str) -> dict[str, Any] | None:
         with self._connect() as conn:
-            row = conn.execute(
-                "SELECT * FROM lab_runs WHERE run_id=?", [run_id]
-            ).pl()
+            row = conn.execute("SELECT * FROM lab_runs WHERE run_id=?", [run_id]).pl()
         if row.is_empty():
             return None
         record = row.to_dicts()[0]
         return _decode(record)
 
     def list_runs(
-        self, *, strategy_id: str | None = None, status: str | None = None, limit: int = 200
+        self,
+        *,
+        strategy_id: str | None = None,
+        status: str | None = None,
+        limit: int = 200,
     ) -> list[dict[str, Any]]:
         query = "SELECT * FROM lab_runs WHERE 1=1"
         params: list[Any] = []

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import threading
 from datetime import UTC, date, datetime
 
 import pytest
@@ -29,15 +30,25 @@ def store(tmp_path) -> LabStore:
 
 def _metrics(**over) -> RunMetrics:
     base = dict(
-        cagr_pct=12.0, total_return_pct=100.0, terminal_equity=2_000_000.0,
-        max_drawdown_pct=20.0, max_drawdown_days=200, calmar=0.6, sharpe=0.9,
-        sortino=1.1, volatility_pct=13.0, trades=10, win_rate=40.0,
+        cagr_pct=12.0,
+        total_return_pct=100.0,
+        terminal_equity=2_000_000.0,
+        max_drawdown_pct=20.0,
+        max_drawdown_days=200,
+        calmar=0.6,
+        sharpe=0.9,
+        sortino=1.1,
+        volatility_pct=13.0,
+        trades=10,
+        win_rate=40.0,
     )
     base.update(over)
     return RunMetrics(**base)
 
 
-def _result(run_id: str, strategy_id: str = "sepa_breakout", **over) -> BacktestRunResult:
+def _result(
+    run_id: str, strategy_id: str = "sepa_breakout", **over
+) -> BacktestRunResult:
     return BacktestRunResult(
         run_id=run_id,
         strategy_id=strategy_id,
@@ -48,15 +59,24 @@ def _result(run_id: str, strategy_id: str = "sepa_breakout", **over) -> Backtest
         end_date=date(2020, 12, 31),
         data_source=over.pop("data_source", "nse_bhavcopy"),
         metrics=over.pop("metrics", _metrics()),
-        equity_curve=over.pop("equity_curve", [
-            EquityPoint(date(2020, 1, 1), 1_000_000.0, 0.0, 1_000_000.0),
-            EquityPoint(date(2020, 6, 1), 1_500_000.0, -2.0, 1_100_000.0),
-            EquityPoint(date(2020, 12, 31), 2_000_000.0, 0.0, 1_200_000.0),
-        ]),
+        equity_curve=over.pop(
+            "equity_curve",
+            [
+                EquityPoint(date(2020, 1, 1), 1_000_000.0, 0.0, 1_000_000.0),
+                EquityPoint(date(2020, 6, 1), 1_500_000.0, -2.0, 1_100_000.0),
+                EquityPoint(date(2020, 12, 31), 2_000_000.0, 0.0, 1_200_000.0),
+            ],
+        ),
         trades=[
-            TradeRecord(symbol="RELIANCE", signal_date=date(2020, 2, 1),
-                        entry_date=date(2020, 2, 2), exit_date=date(2020, 3, 1),
-                        r_multiple=2.5, status="closed", meta={"rs_rank": 91.0}),
+            TradeRecord(
+                symbol="RELIANCE",
+                signal_date=date(2020, 2, 1),
+                entry_date=date(2020, 2, 2),
+                exit_date=date(2020, 3, 1),
+                r_multiple=2.5,
+                status="closed",
+                meta={"rs_rank": 91.0},
+            ),
         ],
         warnings=["careful"],
         created_at=datetime.now(UTC),
@@ -68,9 +88,15 @@ def _result(run_id: str, strategy_id: str = "sepa_breakout", **over) -> Backtest
 
 def test_run_roundtrip(store):
     store.create_run(
-        run_id="r1", strategy_id="sepa_breakout", kind="signal", params={},
-        params_hash="", start_date=date(2020, 1, 1), end_date=date(2020, 12, 31),
-        data_source="pending", label="first",
+        run_id="r1",
+        strategy_id="sepa_breakout",
+        kind="signal",
+        params={},
+        params_hash="",
+        start_date=date(2020, 1, 1),
+        end_date=date(2020, 12, 31),
+        data_source="pending",
+        label="first",
     )
     queued = store.get_run("r1")
     assert queued["status"] == "queued"
@@ -91,8 +117,14 @@ def test_run_roundtrip(store):
 
 def test_saving_twice_does_not_duplicate_rows(store):
     store.create_run(
-        run_id="r1", strategy_id="s", kind="signal", params={}, params_hash="",
-        start_date=date(2020, 1, 1), end_date=date(2020, 12, 31), data_source="x",
+        run_id="r1",
+        strategy_id="s",
+        kind="signal",
+        params={},
+        params_hash="",
+        start_date=date(2020, 1, 1),
+        end_date=date(2020, 12, 31),
+        data_source="x",
     )
     store.save_result(_result("r1"))
     store.save_result(_result("r1"))
@@ -100,10 +132,89 @@ def test_saving_twice_does_not_duplicate_rows(store):
     assert len(store.get_trades("r1")) == 1
 
 
+def test_completed_run_is_not_visible_before_children_are_persisted(store, monkeypatch):
+    """The done status publishes equity and trades as one atomic result."""
+    store.create_run(
+        run_id="r1",
+        strategy_id="s",
+        kind="signal",
+        params={},
+        params_hash="",
+        start_date=date(2020, 1, 1),
+        end_date=date(2020, 12, 31),
+        data_source="x",
+    )
+    store.update_progress("r1", stage="persisting", progress_pct=95.0)
+
+    insert_started = threading.Event()
+    release_insert = threading.Event()
+    errors: list[BaseException] = []
+    original_connect = store._connect
+
+    class PausingConnection:
+        def __init__(self, conn):
+            self._conn = conn
+
+        def __enter__(self):
+            self._conn.__enter__()
+            return self
+
+        def __exit__(self, *args):
+            return self._conn.__exit__(*args)
+
+        def execute(self, *args, **kwargs):
+            return self._conn.execute(*args, **kwargs)
+
+        def executemany(self, query, params):
+            if "INSERT INTO lab_trades" in query:
+                insert_started.set()
+                if not release_insert.wait(timeout=5):
+                    raise TimeoutError("test did not release the trade insert")
+            return self._conn.executemany(query, params)
+
+    def connect():
+        conn = original_connect()
+        if threading.current_thread().name == "lab-store-writer-test":
+            return PausingConnection(conn)
+        return conn
+
+    monkeypatch.setattr(store, "_connect", connect)
+
+    def save():
+        try:
+            store.save_result(_result("r1"))
+        except BaseException as exc:  # pragma: no cover - asserted below
+            errors.append(exc)
+
+    writer = threading.Thread(target=save, name="lab-store-writer-test")
+    writer.start()
+    assert insert_started.wait(timeout=5)
+    try:
+        during = store.get_run("r1")
+        assert during["status"] == "running"
+        assert store.get_equity("r1") == []
+        assert store.get_trades("r1") == []
+    finally:
+        release_insert.set()
+
+    writer.join(timeout=5)
+    assert not writer.is_alive()
+    assert errors == []
+    assert store.get_run("r1")["status"] == "done"
+    assert len(store.get_equity("r1")) == 3
+    assert len(store.get_trades("r1")) == 1
+
+
 def test_delete_removes_children(store):
     store.create_run(
-        run_id="r1", strategy_id="s", kind="signal", params={}, params_hash="",
-        start_date=date(2020, 1, 1), end_date=date(2020, 12, 31), data_source="x",
+        run_id="r1",
+        strategy_id="s",
+        kind="signal",
+        params={},
+        params_hash="",
+        start_date=date(2020, 1, 1),
+        end_date=date(2020, 12, 31),
+        data_source="x",
     )
     store.save_result(_result("r1"))
     assert store.delete_run("r1") is True
@@ -115,8 +226,14 @@ def test_delete_removes_children(store):
 
 def test_orphaned_runs_are_failed_on_startup(store):
     store.create_run(
-        run_id="r1", strategy_id="s", kind="signal", params={}, params_hash="",
-        start_date=date(2020, 1, 1), end_date=date(2020, 12, 31), data_source="x",
+        run_id="r1",
+        strategy_id="s",
+        kind="signal",
+        params={},
+        params_hash="",
+        start_date=date(2020, 1, 1),
+        end_date=date(2020, 12, 31),
+        data_source="x",
     )
     assert store.fail_orphaned_runs() == 1
     run = store.get_run("r1")
@@ -128,8 +245,14 @@ def test_orphaned_runs_are_failed_on_startup(store):
 
 def test_mark_failed_records_the_error(store):
     store.create_run(
-        run_id="r1", strategy_id="s", kind="signal", params={}, params_hash="",
-        start_date=date(2020, 1, 1), end_date=date(2020, 12, 31), data_source="x",
+        run_id="r1",
+        strategy_id="s",
+        kind="signal",
+        params={},
+        params_hash="",
+        start_date=date(2020, 1, 1),
+        end_date=date(2020, 12, 31),
+        data_source="x",
     )
     store.mark_failed("r1", "ValueError: boom")
     run = store.get_run("r1")
@@ -140,8 +263,14 @@ def test_mark_failed_records_the_error(store):
 def test_list_runs_filters(store):
     for i, sid in enumerate(["sepa_breakout", "episodic_pivots"]):
         store.create_run(
-            run_id=f"r{i}", strategy_id=sid, kind="signal", params={}, params_hash="",
-            start_date=date(2020, 1, 1), end_date=date(2020, 12, 31), data_source="x",
+            run_id=f"r{i}",
+            strategy_id=sid,
+            kind="signal",
+            params={},
+            params_hash="",
+            start_date=date(2020, 1, 1),
+            end_date=date(2020, 12, 31),
+            data_source="x",
         )
     assert len(store.list_runs()) == 2
     assert len(store.list_runs(strategy_id="sepa_breakout")) == 1
@@ -236,9 +365,12 @@ def test_compare_requires_two_runs(client):
 
 
 def test_compare_404s_on_unknown_run(client):
-    assert client.post(
-        "/api/lab/compare", json={"run_ids": ["nope1", "nope2"]}
-    ).status_code == 404
+    assert (
+        client.post(
+            "/api/lab/compare", json={"run_ids": ["nope1", "nope2"]}
+        ).status_code
+        == 404
+    )
 
 
 def test_unknown_run_endpoints_404(client):
@@ -256,23 +388,35 @@ def test_compare_aligns_rebases_and_flags_mismatches(tmp_path):
 
     def make(run_id, points, source="nse_bhavcopy"):
         store.create_run(
-            run_id=run_id, strategy_id="sepa_breakout", kind="signal", params={},
-            params_hash="", start_date=points[0][0], end_date=points[-1][0],
+            run_id=run_id,
+            strategy_id="sepa_breakout",
+            kind="signal",
+            params={},
+            params_hash="",
+            start_date=points[0][0],
+            end_date=points[-1][0],
             data_source=source,
         )
-        store.save_result(_result(
-            run_id,
-            data_source=source,
-            equity_curve=[EquityPoint(d, e, 0.0, None) for d, e in points],
-        ))
+        store.save_result(
+            _result(
+                run_id,
+                data_source=source,
+                equity_curve=[EquityPoint(d, e, 0.0, None) for d, e in points],
+            )
+        )
 
     # Overlapping on 2020-06-01 and 2020-12-31.
-    make("a", [(date(2020, 1, 1), 1_000_000.0), (date(2020, 6, 1), 1_200_000.0),
-               (date(2020, 12, 31), 1_500_000.0)])
+    make(
+        "a",
+        [
+            (date(2020, 1, 1), 1_000_000.0),
+            (date(2020, 6, 1), 1_200_000.0),
+            (date(2020, 12, 31), 1_500_000.0),
+        ],
+    )
     make("b", [(date(2020, 6, 1), 500_000.0), (date(2020, 12, 31), 750_000.0)])
     # Shares no dates with the others, and a different panel.
-    make("c", [(date(2019, 1, 1), 100.0), (date(2019, 6, 1), 120.0)],
-         source="yfinance")
+    make("c", [(date(2019, 1, 1), 100.0), (date(2019, 6, 1), 120.0)], source="yfinance")
 
     app = create_app()
     app.dependency_overrides[lab_routes.get_store] = lambda: store
@@ -303,8 +447,14 @@ def test_compare_rejects_unfinished_runs(tmp_path):
     store.initialize()
     for run_id in ("a", "b"):
         store.create_run(
-            run_id=run_id, strategy_id="s", kind="signal", params={}, params_hash="",
-            start_date=date(2020, 1, 1), end_date=date(2020, 12, 31), data_source="x",
+            run_id=run_id,
+            strategy_id="s",
+            kind="signal",
+            params={},
+            params_hash="",
+            start_date=date(2020, 1, 1),
+            end_date=date(2020, 12, 31),
+            data_source="x",
         )
 
     app = create_app()
