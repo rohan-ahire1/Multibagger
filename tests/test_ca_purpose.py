@@ -16,7 +16,9 @@ from sepa_scanner.data_sources.ca_purpose import parse_purpose
         ("Fv Split Rs.10/- To Re.1/", 0.1, "split"),
         ("Face Value Split (Sub-Division) - From Rs 10/- Per Share To Re 1/- Per Share", 0.1, "split"),
         ("Fv Spl-Rs10tors2", 0.2, "split"),
+        ("Fv Spl-Rs10to2/Div-Rs2.50", 0.2, "split"),
         ("Fv Split Rs.10/- To Rs.5/-", 0.5, "split"),
+        ("Face Value Split From 10/- To Face Value 2/-", 0.2, "split"),
         # Bonus: `new` extra shares per `held` held.
         ("Bonus 1:1", 0.5, "bonus"),
         ("Bonus Issue 3:2", 0.4, "bonus"),

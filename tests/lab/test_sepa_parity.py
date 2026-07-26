@@ -98,10 +98,9 @@ def test_cash_yield_sleeve_matches_reference_and_is_flagged(full_bundle) -> None
         bundle=full_bundle,
     )
 
-    # Re-baselined 2026-07-26 after the corporate-action rebuild (was
-    # 17.20 / 15.08). The strategy-only figures are unchanged; only the idle-cash
-    # sleeve moved, because corrected small-cap and ETF prices shift how much
-    # capital sits idle and when.
-    assert result.metrics.cagr_pct == pytest.approx(16.60, abs=RATE_TOLERANCE)
+    # Re-measured 2026-07-26 after the final manual CA corrections. The
+    # strategy-only figures are unchanged; only this explicitly non-alpha
+    # idle-cash reference moves with capital availability and fill timing.
+    assert result.metrics.cagr_pct == pytest.approx(16.41, abs=RATE_TOLERANCE)
     assert result.metrics.max_drawdown_pct == pytest.approx(16.56, abs=RATE_TOLERANCE)
     assert any("not strategy alpha" in w for w in result.warnings)

@@ -25,6 +25,18 @@ Buckets, in priority order:
     feed does not carry ETF splits, and a fund tracking gold or an index cannot
     genuinely fall 99% in a session.
 
+``long_hiatus``
+    The two adjacent observations are separated by more than
+    ``--max-gap-days`` calendar days. This is a listing/resumption boundary,
+    not evidence of a one-session corporate action, so it is recorded but
+    never inferred.
+
+``complex_action``
+    NSE identifies a demerger, rights issue, or scheme of arrangement. A
+    single-symbol price multiplier cannot reproduce the value and subsequent
+    returns of the distributed security, so the event is recorded as reviewed
+    and deliberately left unadjusted.
+
 ``manual``
     Everything else. Written to a review queue and left untouched.
 
@@ -41,6 +53,7 @@ from pathlib import Path
 
 import polars as pl
 
+from sepa_scanner.data_sources.adjustment import event_price_multiplier
 from sepa_scanner.data_sources.ca_purpose import parse_purpose
 
 LOGGER = logging.getLogger("reconcile_ca")
@@ -89,7 +102,10 @@ def all_ratios(panel: pl.DataFrame) -> pl.DataFrame:
 def price_discontinuities(panel: pl.DataFrame, max_jump: float) -> pl.DataFrame:
     """Single-day ratios outside ``[1/max_jump, max_jump]``, plus bad prices."""
     d = panel.sort(["symbol", "date"]).with_columns(
-        (pl.col("close") / pl.col("close").shift(1).over("symbol")).alias("ratio")
+        (pl.col("close") / pl.col("close").shift(1).over("symbol")).alias("ratio"),
+        pl.col("date").shift(1).over("symbol").alias("prev_date"),
+    ).with_columns(
+        (pl.col("date") - pl.col("prev_date")).dt.total_days().alias("gap_days")
     )
     return d.filter(
         (
@@ -97,7 +113,7 @@ def price_discontinuities(panel: pl.DataFrame, max_jump: float) -> pl.DataFrame:
             & ((pl.col("ratio") > max_jump) | (pl.col("ratio") < 1.0 / max_jump))
         )
         | (pl.col("close") <= 0)
-    ).select("symbol", "date", "close", "ratio")
+    ).select("symbol", "prev_date", "date", "gap_days", "close", "ratio")
 
 
 def isin_change_events(raw: pl.DataFrame) -> pl.DataFrame:
@@ -126,6 +142,83 @@ def _nearest_within(
     return jumps.join(joined, on=["symbol", "date"], how="left")
 
 
+def purpose_events(ca: pl.DataFrame) -> pl.DataFrame:
+    """One parsed, full-event factor per symbol/date.
+
+    NSE can publish separate bonus and face-value rows on the same ex-date.
+    The adjusted panel may already contain the recognised leg, so
+    ``parsed_residual`` is the factor still expected in that panel while
+    ``parsed_mult`` is the full replacement factor written to the override.
+    """
+    rows: list[dict] = []
+    for (symbol, ex_date), group in ca.group_by(["symbol", "ex_date"], maintain_order=True):
+        parsed_actions = []
+        purposes_in_order: list[str] = []
+        seen_purposes: set[str] = set()
+        for purpose in group["raw_purpose"].to_list():
+            if not purpose or purpose in seen_purposes:
+                continue
+            seen_purposes.add(purpose)
+            purposes_in_order.append(purpose)
+            parsed = parse_purpose(purpose)
+            if parsed is not None:
+                parsed_actions.append(parsed)
+
+        parsed_mult = None
+        parsed_residual = None
+        parsed_detail = None
+        parsed_kind = None
+        if parsed_actions:
+            parsed_mult = 1.0
+            for parsed in parsed_actions:
+                parsed_mult *= parsed.multiplier
+
+            applied_mult = 1.0
+            for event in group.iter_rows(named=True):
+                multiplier = event_price_multiplier(event)
+                if multiplier is not None:
+                    applied_mult *= multiplier
+            parsed_residual = parsed_mult / applied_mult
+
+            details = list(dict.fromkeys(parsed.detail for parsed in parsed_actions))
+            kinds = {parsed.kind for parsed in parsed_actions}
+            parsed_detail = " + ".join(details)
+            parsed_kind = (
+                "bonus_split"
+                if "bonus_split" in kinds or (("bonus" in kinds) and ("split" in kinds))
+                else next(iter(kinds))
+            )
+
+        rows.append(
+            {
+                "symbol": symbol,
+                "ca_date": ex_date,
+                "ca_action_type": " + ".join(
+                    dict.fromkeys(group["action_type"].drop_nulls().to_list())
+                ),
+                "raw_purpose": " | ".join(purposes_in_order),
+                "parsed_mult": parsed_mult,
+                "parsed_residual": parsed_residual,
+                "parsed_detail": parsed_detail,
+                "parsed_kind": parsed_kind,
+            }
+        )
+
+    return pl.DataFrame(
+        rows,
+        schema={
+            "symbol": pl.String,
+            "ca_date": pl.Date,
+            "ca_action_type": pl.String,
+            "raw_purpose": pl.String,
+            "parsed_mult": pl.Float64,
+            "parsed_residual": pl.Float64,
+            "parsed_detail": pl.String,
+            "parsed_kind": pl.String,
+        },
+    )
+
+
 def classify(
     panel: pl.DataFrame,
     raw: pl.DataFrame,
@@ -134,6 +227,8 @@ def classify(
     *,
     window: int,
     tolerance: float,
+    purpose_tolerance: float,
+    max_gap_days: int,
     max_jump: float,
 ) -> pl.DataFrame:
     jumps = price_discontinuities(panel, max_jump)
@@ -155,19 +250,8 @@ def classify(
     # Attach the nearby CA's free text. A large share of the feed is stored as
     # action_type="unparsed" with only a purpose string, so the event is known
     # but carries no usable factor -- the adjustment silently does nothing.
-    purposes = (
-        ca.select("symbol", pl.col("ex_date").alias("ca_date"), "action_type", "raw_purpose")
-        .unique(subset=["symbol", "ca_date"], keep="first")
-        .rename({"action_type": "ca_action_type"})
-    )
+    purposes = purpose_events(ca)
     jumps = jumps.join(purposes, on=["symbol", "ca_date"], how="left")
-
-    parsed = [parse_purpose(p) for p in jumps["raw_purpose"].to_list()]
-    jumps = jumps.with_columns(
-        pl.Series("parsed_mult", [p.multiplier if p else None for p in parsed], dtype=pl.Float64),
-        pl.Series("parsed_detail", [p.detail if p else None for p in parsed], dtype=pl.String),
-        pl.Series("parsed_kind", [p.kind if p else None for p in parsed], dtype=pl.String),
-    )
 
     matched = [round_ratio_match(r, tolerance) for r in jumps["ratio"].to_list()]
     jumps = jumps.with_columns(
@@ -178,12 +262,20 @@ def classify(
     # The parsed multiplier is only trusted when the observed price move agrees
     # with it. Text alone could be a stale or misdated filing; price alone
     # could be a real collapse. Together they corroborate each other.
-    agrees = pl.col("parsed_mult").is_not_null() & (
-        (pl.col("parsed_mult") - pl.col("ratio")).abs() <= 0.10 * pl.col("ratio").abs()
+    agrees = pl.col("parsed_residual").is_not_null() & (
+        (pl.col("parsed_residual") - pl.col("ratio")).abs()
+        <= purpose_tolerance * pl.col("parsed_residual").abs()
+    )
+    complex_action = pl.col("raw_purpose").str.to_lowercase().str.contains(
+        r"demerger|scheme\s+of\s+arrangement|rights"
     )
 
     return jumps.with_columns(
-        pl.when(agrees)
+        pl.when(pl.col("gap_days") > max_gap_days)
+        .then(pl.lit("long_hiatus"))
+        .when(complex_action)
+        .then(pl.lit("complex_action"))
+        .when(agrees)
         .then(pl.lit("purpose_parsed"))
         .when(pl.col("isin_change_date").is_not_null())
         .then(pl.lit("isin_corroborated"))
@@ -224,6 +316,37 @@ def inferred_ca_rows(classified: pl.DataFrame) -> pl.DataFrame:
             pl.col("ratio").round(6).cast(pl.String),
         ).alias("description"),
         pl.col("bucket").alias("source"),
+    )
+
+
+def merge_inferred_overrides(
+    overrides: pl.DataFrame, inferred: pl.DataFrame
+) -> pl.DataFrame:
+    """Upsert newly inferred events without deleting unrelated old evidence."""
+    replace_keys = inferred.select("symbol", "ex_date").unique()
+    keep = overrides.join(replace_keys, on=["symbol", "ex_date"], how="anti")
+
+    # The CSV infers Int64 for all-null numeric columns; align both sides so
+    # concat cannot fail on a column that is empty in one of them.
+    for column, dtype in (
+        ("ratio_num", pl.Float64),
+        ("ratio_den", pl.Float64),
+        ("old_face_value", pl.Float64),
+        ("new_face_value", pl.Float64),
+        ("adjustment_factor", pl.Float64),
+        ("isin", pl.String),
+        ("description", pl.String),
+        ("source", pl.String),
+    ):
+        if column in keep.columns:
+            keep = keep.with_columns(pl.col(column).cast(dtype))
+        if column in inferred.columns:
+            inferred = inferred.with_columns(pl.col(column).cast(dtype))
+
+    return (
+        pl.concat([keep, inferred], how="diagonal")
+        .unique(subset=["symbol", "ex_date"], keep="last")
+        .sort(["symbol", "ex_date"])
     )
 
 
@@ -268,6 +391,18 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--window", type=int, default=3, help="days to associate an event")
     ap.add_argument("--tolerance", type=float, default=0.03, help="round-ratio tolerance")
+    ap.add_argument(
+        "--purpose-tolerance",
+        type=float,
+        default=0.25,
+        help="relative price agreement required for a factor parsed from NSE purpose text",
+    )
+    ap.add_argument(
+        "--max-gap-days",
+        type=int,
+        default=10,
+        help="adjacent observations farther apart are listing/resumption boundaries",
+    )
     ap.add_argument("--max-jump", type=float, default=4.0)
     ap.add_argument("--write", action="store_true", help="append inferred rows to the overrides CSV")
     args = ap.parse_args()
@@ -279,7 +414,11 @@ def main() -> None:
 
     classified = classify(
         panel, raw, ca, master,
-        window=args.window, tolerance=args.tolerance, max_jump=args.max_jump,
+        window=args.window,
+        tolerance=args.tolerance,
+        purpose_tolerance=args.purpose_tolerance,
+        max_gap_days=args.max_gap_days,
+        max_jump=args.max_jump,
     )
 
     CLASSIFIED.parent.mkdir(parents=True, exist_ok=True)
@@ -311,22 +450,7 @@ def main() -> None:
     LOGGER.info("inferable rows: %d", inferred.height)
 
     if args.write:
-        keep = overrides.filter(~pl.col("source").is_in(["purpose_parsed", "isin_corroborated", "etf_inferred"]))
-        # The CSV infers Int64 for all-null numeric columns; align both sides
-        # so the concat cannot fail on a column that is empty in one of them.
-        for column, dtype in (
-            ("ratio_num", pl.Float64), ("ratio_den", pl.Float64),
-            ("old_face_value", pl.Float64), ("new_face_value", pl.Float64),
-            ("adjustment_factor", pl.Float64), ("isin", pl.String),
-            ("description", pl.String), ("source", pl.String),
-        ):
-            if column in keep.columns:
-                keep = keep.with_columns(pl.col(column).cast(dtype))
-            if column in inferred.columns:
-                inferred = inferred.with_columns(pl.col(column).cast(dtype))
-        merged = pl.concat([keep, inferred], how="diagonal").unique(
-            subset=["symbol", "ex_date", "action_type"], keep="last"
-        ).sort(["symbol", "ex_date"])
+        merged = merge_inferred_overrides(overrides, inferred)
         merged.write_csv(CA_OVERRIDES)
         LOGGER.info("wrote %d override rows -> %s", merged.height, CA_OVERRIDES)
     else:

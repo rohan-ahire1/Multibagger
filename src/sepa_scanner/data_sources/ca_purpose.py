@@ -25,13 +25,21 @@ from dataclasses import dataclass
 
 # "Rs10tors2", "Rs.10/- To Re.1/", "From Rs 10/- Per Share To Re 1/- Per Share"
 _FV_PATTERN = re.compile(
-    r"(?:rs|re)\.?\s*(\d+(?:\.\d+)?)\s*(?:/-)?\s*(?:per\s+share\s*)?to\s*(?:rs|re)\.?\s*(\d+(?:\.\d+)?)",
+    r"(?:rs|re)\.?\s*(\d+(?:\.\d+)?)\s*(?:/-)?\s*(?:per\s+share\s*)?"
+    r"to\s*(?:(?:rs|re)\.?\s*)?(\d+(?:\.\d+)?)",
+    re.IGNORECASE,
+)
+# Older notices sometimes omit the currency marker entirely:
+# "Face Value Split From 10/- To Face Value 2/-".
+_FV_NAKED_PATTERN = re.compile(
+    r"face\s+value\s+split.*?from\s*(\d+(?:\.\d+)?)\s*(?:/-)?\s*"
+    r"to\s*(?:face\s+value\s*)?(\d+(?:\.\d+)?)",
     re.IGNORECASE,
 )
 # "Bon-12:1", "Bonus 1:1", "Bonus Issue 3:2"
 _BONUS_PATTERN = re.compile(r"bon(?:us)?(?:\s*issue)?[\s\-:]*(\d+)\s*:\s*(\d+)", re.IGNORECASE)
 
-_SPLIT_HINTS = ("split", "splt", "sub-divi", "subdivi", "face value", "fv ", "consolidat")
+_SPLIT_HINTS = ("split", "spl", "sub-divi", "subdivi", "face value", "fv ", "consolidat")
 
 
 @dataclass(frozen=True)
@@ -47,7 +55,7 @@ class ParsedAction:
 
 
 def _face_value_multiplier(text: str) -> tuple[float, str] | None:
-    match = _FV_PATTERN.search(text)
+    match = _FV_PATTERN.search(text) or _FV_NAKED_PATTERN.search(text)
     if match is None:
         return None
     old, new = float(match.group(1)), float(match.group(2))
