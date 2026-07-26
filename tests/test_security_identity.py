@@ -12,6 +12,7 @@ from sepa_scanner.data_sources.security_identity import (
     apply_canonical_symbols,
     build_rename_map,
     overlapping_renames,
+    remap_corporate_actions,
     reused_tickers,
 )
 
@@ -80,3 +81,68 @@ def test_reused_tickers_report_the_gap_between_eras():
     report = reused_tickers(master)
     assert report.height == 1
     assert report.row(0, named=True)["gap_days"] == (date(2015, 1, 1) - date(2008, 1, 1)).days
+
+
+def test_canonical_action_override_replaces_feed_event_under_new_ticker():
+    actions = pl.DataFrame(
+        [
+            {
+                "symbol": "NEWNAME",
+                "ex_date": date(2020, 1, 2),
+                "action_type": "split",
+                "adjustment_factor": 0.2,
+                "source": "nse",
+            },
+            {
+                "symbol": "OLDNAME",
+                "ex_date": date(2020, 1, 2),
+                "action_type": "split",
+                "adjustment_factor": 0.21,
+                "source": "isin_corroborated",
+            },
+        ]
+    )
+
+    out = remap_corporate_actions(
+        actions,
+        {"OLDNAME": "NEWNAME"},
+        override_sources=("isin_corroborated",),
+    )
+
+    assert out.to_dicts() == [
+        {
+            "symbol": "NEWNAME",
+            "ex_date": date(2020, 1, 2),
+            "action_type": "split",
+            "adjustment_factor": 0.21,
+            "source": "isin_corroborated",
+        }
+    ]
+
+
+def test_canonical_action_remap_preserves_legitimate_stacked_feed_events():
+    actions = pl.DataFrame(
+        [
+            {
+                "symbol": "NEWNAME",
+                "ex_date": date(2020, 1, 2),
+                "action_type": "split",
+                "source": "nse",
+            },
+            {
+                "symbol": "NEWNAME",
+                "ex_date": date(2020, 1, 2),
+                "action_type": "bonus",
+                "source": "nse",
+            },
+        ]
+    )
+
+    out = remap_corporate_actions(
+        actions,
+        {"OLDNAME": "NEWNAME"},
+        override_sources=("isin_corroborated",),
+    )
+
+    assert out.height == 2
+    assert set(out["action_type"]) == {"split", "bonus"}

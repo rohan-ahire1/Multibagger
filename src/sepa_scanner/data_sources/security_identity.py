@@ -106,3 +106,52 @@ def apply_canonical_symbols(frame: pl.DataFrame, mapping: dict[str, str]) -> pl.
     return frame.with_columns(
         pl.col("symbol").replace(mapping).alias("symbol")
     )
+
+
+def remap_corporate_actions(
+    frame: pl.DataFrame,
+    mapping: dict[str, str],
+    *,
+    override_sources: tuple[str, ...],
+) -> pl.DataFrame:
+    """Remap action tickers and re-apply override precedence after the merge.
+
+    The NSE feed can record an action under the company's new ticker while an
+    inferred override is keyed by the old ticker that was present in the raw
+    panel. Those keys are distinct before canonicalisation, so the normal
+    ``(symbol, ex_date)`` anti-join cannot see that they describe one event.
+    Once both tickers collapse onto the same symbol, applying both factors
+    double-adjusts the entire earlier history.
+
+    An override states the total observed multiplier for its symbol-date, so it
+    replaces every feed event on that canonical key. Multiple overrides for one
+    canonical key are ambiguous and fail loudly instead of compounding.
+    """
+    mapped = apply_canonical_symbols(frame, mapping)
+    if not mapping or "source" not in mapped.columns:
+        return mapped
+
+    overrides = mapped.filter(pl.col("source").is_in(override_sources))
+    if overrides.is_empty():
+        return mapped
+
+    duplicate_overrides = (
+        overrides.group_by(["symbol", "ex_date"])
+        .len()
+        .filter(pl.col("len") > 1)
+    )
+    if not duplicate_overrides.is_empty():
+        keys = duplicate_overrides.select(
+            pl.format("{}@{}", pl.col("symbol"), pl.col("ex_date")).alias("key")
+        )["key"].to_list()
+        raise ValueError(
+            "multiple corporate-action overrides collapse onto canonical key(s) "
+            f"{keys}; each override must state the total multiplier"
+        )
+
+    keys = overrides.select("symbol", "ex_date")
+    feed = (
+        mapped.filter(~pl.col("source").is_in(override_sources))
+        .join(keys, on=["symbol", "ex_date"], how="anti")
+    )
+    return pl.concat([feed, overrides], how="diagonal")

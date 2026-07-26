@@ -23,6 +23,7 @@ from sepa_scanner.data_sources.adjustment import apply_adjustment
 from sepa_scanner.data_sources.security_identity import (
     apply_canonical_symbols,
     build_rename_map,
+    remap_corporate_actions,
 )
 from sepa_scanner.storage.bhav_raw_store import BhavRawStore
 from sepa_scanner.utils.io import ensure_directory
@@ -236,7 +237,14 @@ def main() -> None:
     if args.canonical_symbols:
         # The CA feed records the ticker in force at the time, so it has to be
         # remapped too or a renamed security loses its own corporate actions.
-        ca = apply_canonical_symbols(ca, mapping)
+        # Re-apply override precedence after remapping: an inferred action under
+        # the old ticker and a feed action under the new ticker become the same
+        # canonical event and must not be compounded.
+        ca = remap_corporate_actions(
+            ca,
+            mapping,
+            override_sources=APPLIED_CA_SOURCES,
+        )
     adjusted = apply_adjustment(raw, ca)
     _quarantine_bad_jumps(adjusted)
 
