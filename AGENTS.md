@@ -29,9 +29,9 @@ Before running, tuning, or "improving" any backtest, read **`docs/BACKTEST_TRUTH
 ## Learned Workspace Facts
 
 - Project is an NSE (Indian stock market) SEPA/VCP-style scanner, backtester, and terminal
-- Data pipeline: yfinance API -> `data/yf_adjusted/ohlcv_all.parquet` -> `ParquetOhlcvStore` -> Signal Engine -> DuckDB (signals, runs) -> FastAPI -> sepa-terminal (React/TypeScript)
-- Bhavcopy pipeline is retained as an optional validation source only; yfinance is the single source of truth for OHLCV
-- Corporate actions adjustment code has been fully removed — yfinance pre-adjusted data handles splits/bonuses
+- Data pipeline: NSE bhavcopy archive -> `data/nse_raw/ohlcv_raw.parquet` -> corporate-action adjustment -> `data/nse_adjusted/ohlcv_all.parquet` -> `ParquetOhlcvStore` -> Signal Engine -> DuckDB (signals, runs) -> FastAPI -> sepa-terminal (React/TypeScript)
+- The survivorship-free NSE bhavcopy panel is the single source of truth for OHLCV; yfinance is retained only as a legacy comparison/fallback panel
+- Corporate-action adjustment is an active deterministic layer for the raw NSE panel; unresolved discontinuities remain quarantined for review
 - Canonical strategy document: `docs/STRATEGY.md` — must be updated whenever strategy behavior changes
 - UI documentation: `docs/UI_BIBLE.md` — should be updated when UI patterns change
 - Python packages managed with `uv`; tests run via `uv run pytest tests/` (ignore `test_ui_*.py` files — dead Streamlit UI references)
