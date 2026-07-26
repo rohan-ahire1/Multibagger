@@ -6,7 +6,7 @@
 > independent backtest engines/metrics historically disagreed, and tuning done in one
 > tool was lost or contradicted by another. Do not add new backtest scripts.
 
-Last verified: **2026-07-19** (data cutover: survivorship-free NSE bhavcopy panel is now the
+Last verified: **2026-07-26** (data cutover: survivorship-free NSE bhavcopy panel is now the
 default price source, `config.data.source: nse_bhavcopy`)
 
 > **DATA SOURCE CHANGE (2026-07-19).** Production now reads the self-built,
@@ -54,15 +54,14 @@ Key knobs of the committed config (see `config/config.yaml` for the full set):
 
 ## Canonical metrics (honest, equity-curve based)
 
-Window: signal dates **2010-01-04 → 2026-03-17** (later OHLCV is loaded so open
-trades can be managed). Metric source: the real `daily_equity`
+Window: **2010-01-04 → 2026-07-17**. Metric source: the real `daily_equity`
 curve from `simulate_portfolio_python` (friction on: slippage + STT/charges + DP fee).
 **Not** the serial-R-compound number the CLI prints (see "Known traps").
 
 | Config | CAGR | Max DD | Calmar | Trades |
 |---|---|---|---|---|
 | **Committed strategy-only** (`cash_yield_apy: 0`) — NSE panel | **12.48%** | **24.28%** | **0.51** | 281 |
-| Total portfolio: + 6% idle-cash yield sleeve | 16.60% | 16.56% | 1.00 | 281 |
+| Reference only: + 6% idle-cash yield sleeve | 16.41% | 16.56% | 0.99 | 279 |
 | Legacy yfinance panel (pre-cutover, survivor-biased) | 14.03% | 15.01% | 0.93 | 287 |
 
 **Survivorship is the whole difference between the last two rows.** Like-for-like (same
@@ -79,7 +78,7 @@ buffers the equity blow-ups. Per policy the committed *strategy* headline still 
 (`cash_yield_apy: 0`); deploy idle cash in a liquid instrument and track it as a separate
 sleeve. ~+0.8 CAGR pts per +1% APY.
 
-Verified 2026-07-16 with OHLCV through 2026-07-09. The simulator accepts entries
+Verified 2026-07-26 with OHLCV through 2026-07-17. The simulator accepts entries
 only from D+1 and counts `pending_days` as symbol trading bars. **No filled trade enters
 on its EOD signal date.** Small CAGR drift is expected as the data window extends.
 
@@ -128,9 +127,9 @@ Four engine kinds, all summarised by the same equity-curve metrics:
 | `portfolio` | ranked weekly decisions, integer-share sells-before-buys | `stocks_on_the_move` |
 
 `stocks_on_the_move` uses a strictly backward-looking liquidity-proxy universe,
-not historical Nifty 500 membership, so it is not a book replication. Its Nifty
-500 price index is not presently stored locally; until it is fetched, the market
-regime cannot be reconstructed and all benchmark-relative metrics are suppressed.
+not historical Nifty 500 membership, so it is not a book replication. The official
+Nifty 500 price-index history is stored under `data/reference/` from 2010-01-04
+through 2026-07-24 and is now the default market-regime series.
 The survivor-complete panel also lacks delisting reasons and terminal values: a
 retired holding is closed at its last close (or marked to zero after a zero-volume
 final bar) and each such assumed terminal value is reported separately.
@@ -163,7 +162,7 @@ different-but-defensible definition silently moves the committed baseline.
 ```bash
 uv run python optimize_joint_wf.py --parity
 # expect (NSE panel, signals through 2026-03-17): CAGR=12.48%  MaxDD=24.28%  Calmar=0.51  trades=281
-# total portfolio (6% idle-cash sleeve):          CAGR=16.60%  MaxDD=16.56%  Calmar=1.00  trades=281
+# reference only (6% idle-cash sleeve):           CAGR=16.41%  MaxDD=16.56%  Calmar=0.99  trades=279
 # legacy yfinance panel for comparison:           CAGR=14.03%  MaxDD=15.01%  Calmar=0.93  trades=287
 ```
 
@@ -418,10 +417,10 @@ validation in the canonical harness.
 ## Corporate-action rebuild — 2026-07-26
 
 The panel was rebuilt after resolving the adjustment quarantine. **The committed
-SEPA baseline did not move: 12.48% / 24.28% / 0.51 / 281 fills, byte-identical
-before and after.** The signal funnel is unchanged too (354 after quality
-filters). Only the 6% idle-cash reference sleeve shifted, from
-17.20% / 15.08% / 1.14 / 278 to 16.60% / 16.56% / 1.00 / 281.
+SEPA baseline did not move: 12.48% / 24.28% / 0.51 / 281 fills.** The signal
+funnel is unchanged too (354 after quality filters). The final 6% idle-cash
+reference is 16.41% / 16.56% / 0.99 / 279; it remains excluded from the
+strategy headline.
 
 That the strategy-only figure held is the useful result: the 390 corrections were
 overwhelmingly small caps and ETFs, which SEPA's liquidity and quality filters
@@ -437,51 +436,58 @@ metrics. They are research measurements, not evidence for a SEPA config change.
 
 | Sleeve | Pre-rebuild CAGR | Post-rebuild CAGR | Post MaxDD | Post Calmar | Excess vs Nifty 500 TRI |
 |---|---:|---:|---:|---:|---:|
-| 12–1 momentum | 11.28% | 12.17% | 38.48% | 0.32 | +1.59 |
-| Alpha + low volatility | 10.62% | 13.33% | 28.84% | 0.46 | +2.75 |
-| 52-week high + alpha/low-vol | 9.55% | 11.12% | 31.70% | 0.35 | +0.54 |
-| 52-week high | 7.43% | 8.09% | 28.83% | 0.28 | −2.49 |
-| Equal-weight universe | 5.81% | 6.73% | 48.91% | 0.14 | −3.85 |
+| 12–1 momentum | 11.28% | 13.04% | 37.73% | 0.35 | +2.46 |
+| Alpha + low volatility | 10.62% | 13.28% | 28.32% | 0.47 | +2.70 |
+| 52-week high + alpha/low-vol | 9.55% | 12.08% | 30.23% | 0.40 | +1.50 |
+| 52-week high | 7.43% | 7.68% | 27.66% | 0.28 | −2.90 |
+| Equal-weight universe | 5.81% | 6.87% | 48.93% | 0.14 | −3.71 |
 
-The CA corrections therefore matter materially to cross-sectional ranking:
-`alpha_low_vol_top30` gained 2.71 CAGR points while SEPA parity did not move.
+The CA corrections therefore matter materially to cross-sectional ranking,
+while SEPA parity does not move.
 
-`stocks_on_the_move` uses the explicit Nifty 500 TRI regime substitute because
-the required price index is still unavailable. Like-for-like 2015-01-01 →
-2026-03-17 results:
+`stocks_on_the_move` now uses the required Nifty 500 **price** index for its
+market-regime filter. Like-for-like 2015-01-01 → 2026-03-17 results:
 
 | Friction | CAGR | Benchmark | Excess | MaxDD | Calmar |
 |---|---:|---:|---:|---:|---:|
-| 0 bps | 18.02% | 12.13% | +5.89 | 29.14% | 0.62 |
-| 25 bps | 15.47% | 12.13% | +3.33 | 30.60% | 0.51 |
-| 50 bps | 11.86% | 12.13% | −0.27 | 37.48% | 0.32 |
-| 50 bps + 2× costs | 10.84% | 12.13% | −1.29 | 36.41% | 0.30 |
+| 0 bps | 17.96% | 12.13% | +5.83 | 28.39% | 0.63 |
+| 25 bps | 14.52% | 12.13% | +2.39 | 33.02% | 0.44 |
+| 50 bps | 11.99% | 12.13% | −0.14 | 35.32% | 0.34 |
+| 50 bps + 2× costs | 10.58% | 12.13% | −1.55 | 36.48% | 0.29 |
 
-The earlier handoff mislabeled 18.18% as a 25 bps result; it was the zero-bps
-run. The exact zero-bps CA delta is small (18.18% → 18.02%), but the structural
-kill evidence remains: at 25 bps the 2015–2020 development slice trails its
-benchmark by 3.01 points, and restricting the universe to the 200 most liquid
-names trails by 3.56 points. On the honest 2010-01-04 start, even the full
-universe earns only +0.77 points of excess at 25 bps and loses 1.32 points at
-50 bps. **Do not trade or tune SOTM on this burned dataset.**
+The structural kill evidence survives the corrected regime series: at 25 bps
+the 2015–2020 development slice trails its benchmark by 4.27 points, and
+restricting the universe to the 200 most liquid names trails by 3.29 points.
+On the honest 2010-01-04 start, the full universe earns only +0.84 points of
+excess at 25 bps. **Do not trade or tune SOTM on this burned dataset.**
 
 ### What changed
 
-Quarantined discontinuities fell from **538 to 150**, of which 148 are the
-genuine manual-review queue in `reports/data_audit/ca_manual_queue.csv`.
+Quarantined discontinuities fell from **538 to 87**. The final reconciliation
+contains 71 manual rows, 9 reviewed complex actions, and 7 long-hiatus
+listing/resumption boundaries; it has **zero inferable rows**.
 
-| Bucket | Rows | Evidence required |
+| Final bucket | Rows | Treatment |
 |---|---:|---|
-| `purpose_parsed` | 247 | Feed purpose text parses to a factor **and** the observed price move agrees within 10% |
-| `isin_corroborated` | 142 | ISIN reissued within 3 days; NSE reissues on face-value change, a crash never does |
-| `etf_inferred` | 1 | Fund (ISIN prefix `INF`) with a single unambiguous round split ratio |
-| `manual` | 148 | Left untouched |
+| `manual` | 71 | No sufficient machine-verifiable factor; left untouched |
+| `complex_action` | 9 | Demerger, rights issue, or scheme; reviewed but not forced into one-symbol adjustment |
+| `long_hiatus` | 7 | More than 10 calendar days between observations; never treated as a one-session CA |
 
-Two mechanisms did the work. Most of the CA feed is stored as
+The override ledger now contains 454 rows: 268 `purpose_parsed`, 140
+`isin_corroborated`, 43 independently reviewed `manual`, 1 `etf_inferred`, and
+2 corroborated but deliberately inert `seed` rows. Most of the CA feed is stored as
 `action_type="unparsed"` with only free text (`Fv Spl-Rs10tors2/Bon-12:1`), so the
 event was known but carried no usable factor — `src/sepa_scanner/data_sources/ca_purpose.py`
-parses those. And an ISIN change is independent physical evidence of a capital
-action, which is what `scripts/build_security_master.py` exposes.
+parses those. Multiple same-date purpose rows are combined into one full-event
+factor, then reduced by any feed leg already applied. Purpose text is promoted
+only when that residual factor and the price move agree within 25%. An ISIN
+change supplies separate physical evidence of a capital action.
+
+The remaining queue is the diminishing-return tail, not an invitation to guess:
+63 of 71 rows predate 2010. Of the eight later rows, seven are documented
+demerger/scheme or rename boundaries whose value moved into another listed
+security; `VIVIDHA` (2015-05-28) is the sole later jump without corroborating
+evidence. All remain unadjusted.
 
 ### Pipeline bugs fixed along the way
 
@@ -507,7 +513,7 @@ sequence is fixed:
 reset config/corporate_actions.csv to trusted rows
 uv run python scripts/nse_build_adjusted_panel.py --dividends   # must report 538
 uv run python scripts/reconcile_corporate_actions.py --write
-uv run python scripts/nse_build_adjusted_panel.py --dividends   # reports 150
+uv run python scripts/nse_build_adjusted_panel.py --dividends   # reports 87
 uv run python scripts/reconcile_corporate_actions.py            # verify
 ```
 
@@ -516,9 +522,9 @@ in place of the total-return one, changing 4.1M rows across 1,622 symbols.
 
 ### Seed rows
 
-Four of the six legacy `source=seed` rows are wrong and remain inert: IRCTC
-(dated 2022-10-28, actual 2021-10-28), DMART, TCS and BAJFINANCE show no price
-move on their stated ex-dates. RELIANCE and HDFCBANK check out. Validate seed
+Four of the six legacy `source=seed` rows were removed: IRCTC (dated
+2022-10-28, actual 2021-10-28), DMART, TCS and BAJFINANCE show no price move on
+their stated ex-dates. RELIANCE and HDFCBANK check out and remain inert. Validate seed
 rows against **raw** prices and against each row's own stated factor — a
 correctly applied action leaves no trace in the adjusted panel, and a 1:2 split
 sits inside any large-jump threshold.
@@ -548,31 +554,38 @@ trade under more than one ticker**, and every one is cleanly sequential (zero
 overlapping eras). Each rename splits one company into two truncated series, so
 any long-lookback indicator silently sees a short history.
 
-### The merge is available but NOT the default
+### The merge is available but remains off by default
 
 `scripts/nse_build_adjusted_panel.py --canonical-symbols` collapses 499 renamed
 tickers onto each security's latest ticker (chains resolved transitively) and
 remaps the CA feed the same way, so a renamed security keeps its own corporate
-actions.
+actions. Override precedence must be re-applied **after** remapping: otherwise an
+old-ticker override and a new-ticker feed event collapse onto one canonical key
+and double-adjust the history. That bug affected nine symbols and is now covered
+by regression tests.
 
-It changes the committed baseline materially:
+The earlier **13.82% / 22.74% / 0.61 / 263** result is rejected. It combined
+those double-applied actions with stale signals already present in DuckDB; it was
+not a clean representation comparison. Freshly regenerating both sides gives:
 
-| | Ticker-keyed (default) | `--canonical-symbols` |
-|---|---|---|
+| | Ticker-keyed control | `--canonical-symbols` |
+|---|---:|---:|
 | Symbols | 4,453 | 3,954 |
-| Raw breakout signals | 1,862 | 1,839 |
-| After quality filters | 354 | 324 |
-| CAGR | 12.48% | 13.82% |
-| MaxDD | 24.28% | 22.74% |
-| Calmar | 0.51 | 0.61 |
-| Trades | 281 | 263 |
-| Quarantined rows | 150 | 154 |
+| CAGR | 6.43% | 6.21% |
+| MaxDD | 23.73% | 22.80% |
+| Calmar | 0.27 | 0.27 |
+| Trades | 244 | 250 |
+| Final quarantined rows | 87 | 88 |
 
-The merged panel is the more principled representation — a renamed company is one
-company — but "more principled" is not "validated". The improvement could equally
-be longer warmups changing which names clear the trend template. Adopting it is a
-deliberate re-baseline with its own review, not a flag flip. **The default build
-stays ticker-keyed and reproduces 12.48% / 24.28% / 0.51 / 281.**
+The clean A/B effect is therefore neutral-to-negative (−0.22 CAGR points,
+−0.93 drawdown points, unchanged Calmar, +6 trades), not a case for re-baselining.
+The apparent “four extra discontinuities” was also a net-count illusion:
+canonicalisation removes six ticker-boundary jumps and exposes one real
+`KRITIIND → KRITI` seam after a 2,468-day gap. The remaining symbol-name
+differences are the same quarantined events carried onto successor tickers.
 
-The 4 extra quarantined rows appear at rename boundaries, where splicing two eras
-exposes a price step. Those should be reviewed before the flag is ever promoted.
+**Decision:** keep `--canonical-symbols` off and keep the committed
+12.48% / 24.28% / 0.51 / 281 baseline. Separately, a clean ticker regeneration
+does not reproduce every signal already stored in the committed DuckDB; that is
+signal-store provenance debt, not evidence for canonical symbols and must not be
+folded into this data re-baseline.

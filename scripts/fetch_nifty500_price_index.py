@@ -1,12 +1,10 @@
 """Fetch or import the Nifty 500 **price** index history.
 
-The spec's regime filter is the price index versus its SMA200. The repo only
-carries the TRI, and substituting it is a documented deviation: total return
-drifts above price by reinvested dividends, so the filter turns bullish
-marginally early.
+The spec's regime filter is the price index versus its SMA200. Substituting the
+TRI is not equivalent: total return drifts above price by reinvested dividends,
+so the filter can turn bullish marginally early.
 
-niftyindices.com blocks scripted access, so the realistic path is to download
-the CSV by hand and import it here::
+The reliable path is to download the official historical CSV and import it::
 
     # https://www.niftyindices.com/reports/historical-data  -> NIFTY 500, save CSV
     uv run python scripts/fetch_nifty500_price_index.py --from-file ~/Downloads/nifty500.csv

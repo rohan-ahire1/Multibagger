@@ -45,11 +45,11 @@ Reruns on the survivorship-free panel, full history 2010-01-04 → 2026-03-17:
 
 | factor | recorded CAGR (yf) | pre-CA NSE | post-CA NSE | post MaxDD | post Calmar |
 |---|---|---|---|---|---|
-| `momentum_12_1_top20` | 18.79% | 11.28% | **12.17%** | 38.48% | 0.32 |
-| `alpha_low_vol_top30` | 16.96% | 10.62% | **13.33%** | 28.84% | 0.46 |
-| `high_52w_alpha_low_vol_top30` | 16.30% | 9.55% | **11.12%** | 31.70% | 0.35 |
-| `high_52w_top20` | 12.31% | 7.43% | **8.09%** | 28.83% | 0.28 |
-| `equal_weight_universe` | 9.34% | 5.81% | **6.73%** | 48.91% | 0.14 |
+| `momentum_12_1_top20` | 18.79% | 11.28% | **13.04%** | 37.73% | 0.35 |
+| `alpha_low_vol_top30` | 16.96% | 10.62% | **13.28%** | 28.32% | 0.47 |
+| `high_52w_alpha_low_vol_top30` | 16.30% | 9.55% | **12.08%** | 30.23% | 0.40 |
+| `high_52w_top20` | 12.31% | 7.43% | **7.68%** | 27.66% | 0.28 |
+| `equal_weight_universe` | 9.34% | 5.81% | **6.87%** | 48.93% | 0.14 |
 
 Every sleeve still loses 2.6–6.6 CAGR points versus the survivor-biased
 yfinance record. This is larger than SEPA's survivorship cost (~1.5 points) and
@@ -64,9 +64,9 @@ numbers: the NSE panel is total-return, so it includes dividends the yf panel
 did not. Returns still fell.
 
 The corporate-action rebuild also mattered despite leaving SEPA parity
-unchanged: post-rebuild CAGR rose by 0.66–2.71 points across all five sleeves.
-Against the 10.58% Nifty 500 TRI, alpha/low-volatility now leads by 2.75 points,
-momentum by 1.59, and the combined sleeve by 0.54; the other two underperform.
+unchanged. Against the 10.58% Nifty 500 TRI, alpha/low-volatility now leads by
+2.70 points, momentum by 2.46, and the combined sleeve by 1.50; the other two
+underperform.
 These are already-inspected research results and do not justify a config change.
 **The recorded numbers in `output/` should not be quoted.** They are retained as
 the legacy-panel reference that produced this comparison.

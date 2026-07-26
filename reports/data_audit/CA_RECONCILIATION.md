@@ -1,8 +1,42 @@
 # Corporate-Action Adjustment Reconciliation
 
-**Date:** 2026-07-18
+**Last verified:** 2026-07-26
 **Panel:** `data/nse_adjusted/ohlcv_all.parquet` (survivorship-free NSE bhavcopy, back-adjusted)
 **CA source:** `data/reference/nse_corporate_actions.parquet` (NSE corporate-actions API, 39,178 events)
+
+## Current audited state
+
+The evidence-led follow-up reduced the original 538 quarantined discontinuities
+to **87**:
+
+| Final bucket | Rows | Decision |
+|---|---:|---|
+| `manual` | 71 | Insufficient factor evidence; unchanged |
+| `complex_action` | 9 | Demerger, rights issue, or scheme; a one-symbol multiplier would be false precision |
+| `long_hiatus` | 7 | More than 10 calendar days between observations; not treated as a one-session CA |
+
+There are zero inferable rows. The 454-row override ledger contains 268
+purpose-parsed actions, 140 ISIN-corroborated actions, 43 independently reviewed
+manual corrections, one ETF inference, and two corroborated but inert seeds.
+
+Purpose parsing now combines every same-date feed leg, calculates the complete
+replacement factor, subtracts any leg already represented in the feed, and
+requires the remaining factor to agree with the observed move within 25%.
+`--write` upserts newly inferred rows without deleting older evidence.
+
+The 71-row residual is bounded diminishing-return debt: 63 rows predate the
+2010 parity window. Seven of the eight later rows are known
+scheme/demerger/rename boundaries; `VIVIDHA` on 2015-05-28 is the only later
+jump without corroborating evidence. None is adjusted by guesswork.
+
+The final ticker-keyed build has 8,345,112 rows, 4,453 symbols, 15,635 applied
+CA events, and spans 2005-01-03 through 2026-07-17. Canonical-symbol mode yields
+88 quarantined rows versus 87 ticker-keyed; it remains off after the clean A/B
+failed to support a re-baseline.
+
+SEPA parity remains **12.48% CAGR / 24.28% MaxDD / 0.51 Calmar / 281 trades**.
+
+## Initial 2026-07-18 audit
 
 ## Method
 
