@@ -485,3 +485,57 @@ move on their stated ex-dates. RELIANCE and HDFCBANK check out. Validate seed
 rows against **raw** prices and against each row's own stated factor — a
 correctly applied action leaves no trace in the adjusted panel, and a 1:2 split
 sits inside any large-jump threshold.
+
+---
+
+## ISIN security identity — 2026-07-26
+
+`scripts/build_security_master.py` builds `data/reference/security_master.parquet`
+from the raw panel's ISIN column: one row per `(isin, symbol, series)` with the
+window it traded in, plus an `instrument_class` from the ISIN prefix
+(`INE`=equity, `INF`=fund, `IN0`/`IN9`=govt). 4,130 ISINs, 4,053 symbols.
+
+### Ticker reuse is a non-issue; renames are not
+
+537 tickers map to more than one ISIN, which looks alarming and is not. Of 576
+such eras:
+
+- **549** are the same issuer — a face-value change, where NSE reissues the ISIN
+  for the same company. Already correctly one series.
+- **27** differ by issuer and are **all fund units** (ETF fund-house transfers,
+  e.g. Reliance MF to Nippon India MF). Same fund.
+- **0** are equities of genuinely different companies sharing a ticker.
+
+So no series splices two companies. The real defect is the opposite: **432 ISINs
+trade under more than one ticker**, and every one is cleanly sequential (zero
+overlapping eras). Each rename splits one company into two truncated series, so
+any long-lookback indicator silently sees a short history.
+
+### The merge is available but NOT the default
+
+`scripts/nse_build_adjusted_panel.py --canonical-symbols` collapses 499 renamed
+tickers onto each security's latest ticker (chains resolved transitively) and
+remaps the CA feed the same way, so a renamed security keeps its own corporate
+actions.
+
+It changes the committed baseline materially:
+
+| | Ticker-keyed (default) | `--canonical-symbols` |
+|---|---|---|
+| Symbols | 4,453 | 3,954 |
+| Raw breakout signals | 1,862 | 1,839 |
+| After quality filters | 354 | 324 |
+| CAGR | 12.48% | 13.82% |
+| MaxDD | 24.28% | 22.74% |
+| Calmar | 0.51 | 0.61 |
+| Trades | 281 | 263 |
+| Quarantined rows | 150 | 154 |
+
+The merged panel is the more principled representation — a renamed company is one
+company — but "more principled" is not "validated". The improvement could equally
+be longer warmups changing which names clear the trend template. Adopting it is a
+deliberate re-baseline with its own review, not a flag flip. **The default build
+stays ticker-keyed and reproduces 12.48% / 24.28% / 0.51 / 281.**
+
+The 4 extra quarantined rows appear at rename boundaries, where splicing two eras
+exposes a price step. Those should be reviewed before the flag is ever promoted.

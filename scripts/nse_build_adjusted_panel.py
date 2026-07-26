@@ -20,6 +20,10 @@ from pathlib import Path
 import polars as pl
 
 from sepa_scanner.data_sources.adjustment import apply_adjustment
+from sepa_scanner.data_sources.security_identity import (
+    apply_canonical_symbols,
+    build_rename_map,
+)
 from sepa_scanner.storage.bhav_raw_store import BhavRawStore
 from sepa_scanner.utils.io import ensure_directory
 
@@ -199,6 +203,11 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dividends", action="store_true", help="Phase 2 total-return panel")
+    ap.add_argument(
+        "--canonical-symbols",
+        action="store_true",
+        help="collapse ticker renames onto the security's latest ticker, via ISIN",
+    )
     ap.add_argument("--series", default="EQ,BE")
     ap.add_argument("--rebuild-raw", action="store_true",
                     help="rebuild raw panel from zips (else reuse data/nse_raw)")
@@ -213,7 +222,21 @@ def main() -> None:
         raw = raw_store.read_frame()
     LOGGER.info("raw panel: %d rows, %d symbols", raw.height, raw["symbol"].n_unique())
 
+    if args.canonical_symbols:
+        master_path = Path("data/reference/security_master.parquet")
+        if not master_path.exists():
+            raise SystemExit(
+                f"{master_path} missing; run scripts/build_security_master.py first"
+            )
+        mapping = build_rename_map(pl.read_parquet(master_path))
+        raw = apply_canonical_symbols(raw, mapping)
+        LOGGER.info("collapsed %d renamed ticker(s) onto canonical symbols", len(mapping))
+
     ca = _load_ca(args.dividends, raw=raw)
+    if args.canonical_symbols:
+        # The CA feed records the ticker in force at the time, so it has to be
+        # remapped too or a renamed security loses its own corporate actions.
+        ca = apply_canonical_symbols(ca, mapping)
     adjusted = apply_adjustment(raw, ca)
     _quarantine_bad_jumps(adjusted)
 
