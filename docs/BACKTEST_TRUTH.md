@@ -425,8 +425,45 @@ filters). Only the 6% idle-cash reference sleeve shifted, from
 
 That the strategy-only figure held is the useful result: the 390 corrections were
 overwhelmingly small caps and ETFs, which SEPA's liquidity and quality filters
-already exclude. **Strategies that rank the whole cross-section — `daily_factors`,
-`stocks_on_the_move` — are far more exposed and must be re-run.**
+already exclude. Strategies that rank the whole cross-section are far more
+exposed, so `daily_factors` and `stocks_on_the_move` were re-run after the rebuild.
+
+### Cross-sectional reruns
+
+All figures below use the rebuilt ticker-keyed NSE panel and the common lab
+metrics. They are research measurements, not evidence for a SEPA config change.
+
+`daily_factors`, 2010-01-04 → 2026-03-17, 10 bps slippage:
+
+| Sleeve | Pre-rebuild CAGR | Post-rebuild CAGR | Post MaxDD | Post Calmar | Excess vs Nifty 500 TRI |
+|---|---:|---:|---:|---:|---:|
+| 12–1 momentum | 11.28% | 12.17% | 38.48% | 0.32 | +1.59 |
+| Alpha + low volatility | 10.62% | 13.33% | 28.84% | 0.46 | +2.75 |
+| 52-week high + alpha/low-vol | 9.55% | 11.12% | 31.70% | 0.35 | +0.54 |
+| 52-week high | 7.43% | 8.09% | 28.83% | 0.28 | −2.49 |
+| Equal-weight universe | 5.81% | 6.73% | 48.91% | 0.14 | −3.85 |
+
+The CA corrections therefore matter materially to cross-sectional ranking:
+`alpha_low_vol_top30` gained 2.71 CAGR points while SEPA parity did not move.
+
+`stocks_on_the_move` uses the explicit Nifty 500 TRI regime substitute because
+the required price index is still unavailable. Like-for-like 2015-01-01 →
+2026-03-17 results:
+
+| Friction | CAGR | Benchmark | Excess | MaxDD | Calmar |
+|---|---:|---:|---:|---:|---:|
+| 0 bps | 18.02% | 12.13% | +5.89 | 29.14% | 0.62 |
+| 25 bps | 15.47% | 12.13% | +3.33 | 30.60% | 0.51 |
+| 50 bps | 11.86% | 12.13% | −0.27 | 37.48% | 0.32 |
+| 50 bps + 2× costs | 10.84% | 12.13% | −1.29 | 36.41% | 0.30 |
+
+The earlier handoff mislabeled 18.18% as a 25 bps result; it was the zero-bps
+run. The exact zero-bps CA delta is small (18.18% → 18.02%), but the structural
+kill evidence remains: at 25 bps the 2015–2020 development slice trails its
+benchmark by 3.01 points, and restricting the universe to the 200 most liquid
+names trails by 3.56 points. On the honest 2010-01-04 start, even the full
+universe earns only +0.77 points of excess at 25 bps and loses 1.32 points at
+50 bps. **Do not trade or tune SOTM on this burned dataset.**
 
 ### What changed
 
