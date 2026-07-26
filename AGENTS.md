@@ -5,7 +5,9 @@
 Before running, tuning, or "improving" any backtest, read **`docs/BACKTEST_TRUTH.md`**.
 - `config/config.yaml` is the single source of truth for parameters — the primary config everywhere.
 - The only authoritative backtest command is `uv run python optimize_joint_wf.py --parity`
-  (committed config = **21.18% CAGR / 16.63% MaxDD / 1.27 Calmar / 348 trades**, full history).
+  (committed NSE config = **12.48% CAGR / 24.28% MaxDD / 0.51 Calmar / 281 trades**, full history).
+- **21.18% CAGR / 16.63% MaxDD / 1.27 Calmar / 348 trades** is the legacy
+  survivor-biased yfinance result, not the current ground truth.
 - Ignore the CLI `backtest` headline CAGR — it uses a serial-R-compound metric that inflates results.
 - Do NOT create new backtest scripts or fork params into JSON sidecars. Any number not from the
   canonical harness is invalid and must not justify config changes.
