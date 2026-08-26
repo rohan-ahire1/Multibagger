@@ -1,0 +1,67 @@
+{
+  "audit": "Corporate Action / PIT Audit V2",
+  "dataset_dates": {
+    "first": "2005-01-03",
+    "last": "2026-07-17"
+  },
+  "corporate_action_coverage": {
+    "counts_by_type": {
+      "bonus": 656,
+      "bonus_split": 27,
+      "consolidation": 2,
+      "demerger": 108,
+      "dividend": 20334,
+      "merger": 3,
+      "other": 118,
+      "rights": 6,
+      "split": 518,
+      "unparsed": 19609
+    },
+    "coverage_status": "PASS",
+    "source_coverage_issues": 0
+  },
+  "security_lifecycle": {
+    "active_securities": 2681,
+    "historically_ended_securities": 4157,
+    "historically_ended_percentage": 60.79262942380813,
+    "listing_date_status": "UNVERIFIABLE",
+    "delisting_date_status": "UNVERIFIABLE"
+  },
+  "security_identity": {
+    "securities_with_multiple_symbols": 432,
+    "reused_symbols": 1970,
+    "overlapping_security_symbol_conflicts": 0,
+    "overlapping_symbol_security_conflicts": 0,
+    "unverifiable_symbol_identity_overlaps": 738,
+    "unverified_identity_rows": 1835174,
+    "status": "WARNING"
+  },
+  "adjustment_validation": {
+    "pit_methodology": "RAW",
+    "pit_manifest_point_in_time_eligible": true,
+    "retrospective_methodology": "ADJUSTED",
+    "adjusted_manifest_point_in_time_eligible": false,
+    "split_bonus_validation": {
+      "unresolved": 34,
+      "metadata_insufficient": 602,
+      "within_tolerance": 549,
+      "likely_multiple_simultaneous_actions": 18
+    },
+    "extreme_move_classification": {
+      "POSSIBLE_CORPORATE_ACTION": 7,
+      "EXPLAINED_CORPORATE_ACTION": 27,
+      "UNEXPLAINED": 61
+    }
+  },
+  "survivorship": {
+    "status": "PASS",
+    "ended_more_than_365_days_before_end": 4001
+  },
+  "point_in_time_universe": {
+    "status": "PASS"
+  },
+  "look_ahead_leakage": {
+    "status": "PASS"
+  },
+  "final_status": "RESEARCH_READY_WITH_DOCUMENTED_WARNINGS"
+}

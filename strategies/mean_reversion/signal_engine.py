@@ -7,6 +7,7 @@ from typing import Any
 
 import polars as pl
 
+from sepa_scanner.data_sources.pit import assert_pit_signal_inputs
 from strategies.mean_reversion.indicators import (
     adx,
     adv,
@@ -82,6 +83,7 @@ def scan_mean_reversion(
     universe_symbols: set[str] | None = None,
 ) -> pl.DataFrame:
     """Scan all symbols on all dates and return Connors RSI2 MR signals."""
+    assert_pit_signal_inputs(ohlcv)
     if ohlcv.is_empty():
         return pl.DataFrame(schema=MR_SIGNAL_SCHEMA)
 
@@ -98,7 +100,6 @@ def scan_mean_reversion(
     for group in frame.partition_by("symbol", maintain_order=True):
         symbol = str(group["symbol"][0])
         dates = group["date"].to_list()
-        opens = [float(value) for value in group["open"].to_list()]
         highs = [float(value) for value in group["high"].to_list()]
         lows = [float(value) for value in group["low"].to_list()]
         closes = [float(value) for value in group["close"].to_list()]
@@ -111,8 +112,6 @@ def scan_mean_reversion(
         adv_values = adv(volumes, closes, 50)
 
         for idx, signal_date in enumerate(dates):
-            if idx + 1 >= len(dates):
-                continue
             close = closes[idx]
             rsi2 = rsi_values[idx]
             sma200 = sma_trend[idx]
@@ -138,7 +137,9 @@ def scan_mean_reversion(
                     "rsi2": rsi2,
                     "sma200": sma200,
                     "sma5": sma5,
-                    "entry_ref": opens[idx + 1],
+                    # Next-session execution belongs to the simulator.  A
+                    # signal row cannot embed tomorrow's open without leakage.
+                    "entry_ref": close,
                     "stop": close - (atr14 * stop_atr_mult),
                     "atr14": atr14,
                     "adv50": adv50,
@@ -171,6 +172,7 @@ def scan_short_mean_reversion(
     - close < SMA(200)
     - stop is ATR above close
     """
+    assert_pit_signal_inputs(ohlcv)
     if ohlcv.is_empty():
         return pl.DataFrame(schema=MR_SIGNAL_SCHEMA)
 
@@ -187,7 +189,6 @@ def scan_short_mean_reversion(
     for group in frame.partition_by("symbol", maintain_order=True):
         symbol = str(group["symbol"][0])
         dates = group["date"].to_list()
-        opens = [float(value) for value in group["open"].to_list()]
         highs = [float(value) for value in group["high"].to_list()]
         lows = [float(value) for value in group["low"].to_list()]
         closes = [float(value) for value in group["close"].to_list()]
@@ -200,8 +201,6 @@ def scan_short_mean_reversion(
         adv_values = adv(volumes, closes, 50)
 
         for idx, signal_date in enumerate(dates):
-            if idx + 1 >= len(dates):
-                continue
             close = closes[idx]
             rsi2 = rsi_values[idx]
             sma200 = sma_trend[idx]
@@ -227,7 +226,7 @@ def scan_short_mean_reversion(
                     "rsi2": rsi2,
                     "sma200": sma200,
                     "sma5": sma5,
-                    "entry_ref": opens[idx + 1],
+                    "entry_ref": close,
                     "stop": close + (atr14 * stop_atr_mult),
                     "atr14": atr14,
                     "adv50": adv50,
@@ -262,6 +261,7 @@ def scan_mr_v2(
     universe_symbols: set[str] | None = None,
 ) -> pl.DataFrame:
     """Scan all symbols with research-driven MR v2 indicator/filter combinations."""
+    assert_pit_signal_inputs(ohlcv)
     if entry_indicator not in {"rsi2", "crsi", "cum_rsi"}:
         raise ValueError("entry_indicator must be one of: rsi2, crsi, cum_rsi")
     if cooldown_days < 0:
@@ -284,7 +284,6 @@ def scan_mr_v2(
     for group in frame.partition_by("symbol", maintain_order=True):
         symbol = str(group["symbol"][0])
         dates = group["date"].to_list()
-        opens = [float(value) for value in group["open"].to_list()]
         highs = [float(value) for value in group["high"].to_list()]
         lows = [float(value) for value in group["low"].to_list()]
         closes = [float(value) for value in group["close"].to_list()]
@@ -311,9 +310,6 @@ def scan_mr_v2(
         last_signal_date: date | None = None
 
         for idx, signal_date in enumerate(dates):
-            if idx + 1 >= len(dates):
-                continue
-
             close = closes[idx]
             rsi2 = rsi2_values[idx]
             crsi = crsi_values[idx]
@@ -366,7 +362,7 @@ def scan_mr_v2(
                     "sma200": sma200,
                     "sma5": sma5,
                     "sma3": sma3,
-                    "entry_ref": opens[idx + 1],
+                    "entry_ref": close,
                     "stop": close - (atr14 * stop_atr_mult),
                     "atr14": atr14,
                     "adv50": adv50,

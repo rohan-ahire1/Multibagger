@@ -11,6 +11,9 @@ from sepa_scanner.utils.io import ensure_directory
 
 CORE_COLUMNS = [
     "date",
+    "security_id",
+    "isin",
+    "identity_quality",
     "symbol",
     "open",
     "high",
@@ -45,21 +48,26 @@ class ParquetOhlcvStore:
 
         if self.flat_path.exists():
             existing = pl.read_parquet(self.flat_path)
-            incoming_dates = incoming["date"].unique().to_list()
-            incoming_symbols = incoming["symbol"].unique().to_list()
-            existing = existing.filter(
-                ~(
-                    pl.col("date").is_in(incoming_dates)
-                    & pl.col("symbol").is_in(incoming_symbols)
+            if "security_id" in existing.columns and "security_id" not in incoming.columns:
+                raise ValueError(
+                    "refusing symbol-only upsert into an identity-keyed panel; "
+                    "rebuild the PIT layer from raw/reference inputs instead"
                 )
-            )
+            incoming_dates = incoming["date"].unique().to_list()
+            key_column = "security_id" if "security_id" in incoming.columns and "security_id" in existing.columns else "symbol"
+            incoming_keys = incoming[key_column].unique().to_list()
+            existing = existing.filter(~(
+                pl.col("date").is_in(incoming_dates)
+                & pl.col(key_column).is_in(incoming_keys)
+            ))
             combined = pl.concat([existing, incoming], how="diagonal")
         else:
             combined = incoming
 
+        key_column = "security_id" if "security_id" in combined.columns else "symbol"
         combined = (
-            combined.unique(subset=["date", "symbol"], keep="last")
-            .sort(["symbol", "date"])
+            combined.unique(subset=["date", key_column], keep="last")
+            .sort([key_column, "date", "symbol"])
         )
         combined.write_parquet(self.flat_path, compression="zstd")
 

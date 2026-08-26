@@ -195,7 +195,7 @@ def run_backtest(
         raw = run_rebalance_engine(
             intent,
             bundle.ohlcv,
-            config["config"],
+            config,
             name=config.get("name", strategy_id),
         )
         orders = raw["orders"]

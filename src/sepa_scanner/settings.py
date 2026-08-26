@@ -21,12 +21,12 @@ class DataSettings(BaseModel):
     http_timeout_sec: int
     max_retries: int
     # Price panel source. "yfinance" = legacy survivorship-biased panel (default);
-    # "nse_bhavcopy" = self-built survivorship-free adjusted panel (data/nse_adjusted).
+    # "nse_bhavcopy" = survivorship-free point-in-time raw-price panel (data/pit).
     source: str = "yfinance"
 
     @property
     def panel_subdir(self) -> str:
-        return "nse_adjusted" if self.source == "nse_bhavcopy" else "yf_adjusted"
+        return "pit" if self.source == "nse_bhavcopy" else "yf_adjusted"
 
 
 class UniverseSettings(BaseModel):

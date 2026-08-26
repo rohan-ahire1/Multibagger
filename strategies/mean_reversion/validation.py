@@ -22,7 +22,10 @@ from strategies.mean_reversion.diagnostics import compute_metrics, load_mr_confi
 from strategies.mean_reversion.exit_engine import MRExitConfig
 from strategies.mean_reversion.signal_engine import scan_mean_reversion
 from strategies.mean_reversion.simulation import build_benchmark_regime, simulate_mr_portfolio
-from strategies.mean_reversion.universe import load_nifty100_universe
+from strategies.mean_reversion.universe import (
+    filter_signals_to_historical_membership,
+    historical_liquidity_membership,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -247,13 +250,19 @@ def main() -> None:
     start_date = parse_date(args.start)
     requested_end = parse_date(args.end)
     config = load_mr_config(Path(args.config))
-    universe = load_nifty100_universe()
     sector_map = load_sector_map(Path(config["data"]["sector_map_path"]))
-    ohlcv = load_ohlcv(config, start_date, requested_end, universe)
+    ohlcv = load_ohlcv(config, start_date, requested_end)
     actual_end = _cap_end_date(ohlcv, requested_end)
     ohlcv = ohlcv.filter(pl.col("date") <= actual_end)
 
-    base_signals = scan_mean_reversion(
+    membership = historical_liquidity_membership(
+        ohlcv,
+        size=100,
+        lookback_sessions=50,
+        min_history_sessions=200,
+        reconstitute="semiannual",
+    )
+    base_signals = filter_signals_to_historical_membership(scan_mean_reversion(
         ohlcv,
         rsi_period=int(config["entry"]["rsi_period"]),
         rsi_threshold=float(config["entry"]["rsi_threshold"]),
@@ -261,8 +270,7 @@ def main() -> None:
         min_adv_inr=float(config["entry"]["min_adv_inr"]),
         min_price=float(config["entry"]["min_price_inr"]),
         stop_atr_mult=float(config["entry"]["stop_atr_mult"]),
-        universe_symbols=universe,
-    ).filter((pl.col("signal_date") >= start_date) & (pl.col("signal_date") <= actual_end))
+    ), membership).filter((pl.col("signal_date") >= start_date) & (pl.col("signal_date") <= actual_end))
 
     output_dir = Path(args.output_dir) / f"{start_date.isoformat()}_{actual_end.isoformat()}"
     output_dir.mkdir(parents=True, exist_ok=True)

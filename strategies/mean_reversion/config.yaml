@@ -1,6 +1,6 @@
 strategy:
   name: connors_rsi2_mean_reversion
-  universe: nifty100
+  universe: pit_liquidity_100
 
 entry:
   rsi_period: 2
@@ -23,5 +23,5 @@ portfolio:
   risk_per_trade_pct: 0.05
 
 data:
-  ohlcv_path: data/yf_adjusted/ohlcv_all.parquet
+  ohlcv_path: data/pit/ohlcv_all.parquet
   sector_map_path: data/reference/nifty500_constituents.csv

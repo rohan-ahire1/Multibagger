@@ -85,7 +85,7 @@ def event_price_multiplier(row: dict) -> float | None:
     return None
 
 
-def _factor_steps(ca: pl.DataFrame, *, volume: bool) -> pl.DataFrame:
+def _factor_steps(ca: pl.DataFrame, *, volume: bool, key_column: str = "symbol") -> pl.DataFrame:
     """Per-symbol step table: ``factor`` applies to all dates >= ``ex_date``.
 
     Returns columns ``symbol, ex_date, factor``. ``factor`` for a date t equals the
@@ -99,7 +99,7 @@ def _factor_steps(ca: pl.DataFrame, *, volume: bool) -> pl.DataFrame:
         action = (r.get("action_type") or "").lower()
         if volume and action in _PRICE_ONLY:
             continue  # dividends do not move volume
-        rows.append({"symbol": r["symbol"], "ex_date": r["ex_date"], "mult": m})
+        rows.append({"symbol": r[key_column], "ex_date": r["ex_date"], "mult": m})
 
     steps: list[dict] = []
     if rows:
@@ -121,26 +121,57 @@ def _factor_steps(ca: pl.DataFrame, *, volume: bool) -> pl.DataFrame:
     return pl.DataFrame(steps, schema=schema).sort(["symbol", "ex_date"])
 
 
-def apply_adjustment(raw_panel: pl.DataFrame, ca: pl.DataFrame) -> pl.DataFrame:
+def _adjustment_key(frame: pl.DataFrame, *, action_frame: bool) -> pl.Expr:
+    """Use ISIN when supplied; otherwise retain an explicitly-symbol fallback.
+
+    A ticker is time-varying.  Matching on supplied ISIN preserves a rename as
+    one economic security, while a missing historical ISIN is deliberately not
+    linked to a later one merely because its ticker looks familiar.
+    """
+    isin = pl.col("isin").cast(pl.Utf8).str.strip_chars() if "isin" in frame.columns else pl.lit(None, dtype=pl.Utf8)
+    has_isin = isin.is_not_null() & (isin != "")
+    return pl.when(has_isin).then(pl.concat_str([pl.lit("isin:"), isin])).otherwise(
+        pl.concat_str([pl.lit("symbol:"), pl.col("symbol").cast(pl.Utf8)])
+    ).alias("_adjustment_key")
+
+
+def apply_adjustment(
+    raw_panel: pl.DataFrame,
+    ca: pl.DataFrame,
+    *,
+    max_action_date: date | None = None,
+) -> pl.DataFrame:
     """Return a back-adjusted panel with the app's expected OHLCV schema.
 
     ``raw_panel`` columns: date, symbol, [series, isin,] open, high, low, close,
     volume, turnover (raw). ``ca`` columns: symbol, ex_date, action_type,
     ratio_num, ratio_den, old_face_value, new_face_value, [dividend_amount, prev_close].
     """
-    panel = raw_panel.sort(["symbol", "date"])
+    panel = raw_panel.sort(["symbol", "date"]).with_columns(_adjustment_key(raw_panel, action_frame=False))
+    # A retrospective series may only be built from actions whose ex-date is
+    # observable in the supplied price sample.  Without this cap a 2027 action
+    # rewrites an otherwise final 2026 build; that is both non-reproducible and
+    # a direct point-in-time leak if this output is accidentally used as input.
+    dataset_max_date = max_action_date or panel["date"].max()
+    if dataset_max_date is None:
+        return panel
+    if "ex_date" not in ca.columns:
+        raise ValueError("corporate-action frame missing ex_date")
+    effective_ca = ca.filter(pl.col("ex_date") <= pl.lit(dataset_max_date)).with_columns(
+        _adjustment_key(ca, action_frame=True)
+    )
 
-    price_steps = _factor_steps(ca, volume=False)
-    vol_steps = _factor_steps(ca, volume=True)
+    price_steps = _factor_steps(effective_ca, volume=False, key_column="_adjustment_key")
+    vol_steps = _factor_steps(effective_ca, volume=True, key_column="_adjustment_key")
 
     def _join_factor(steps: pl.DataFrame, name: str) -> pl.DataFrame:
         if steps.is_empty():
             return panel.with_columns(pl.lit(1.0).alias(name))
-        right = steps.rename({"ex_date": "date"}).sort(["symbol", "date"])
-        joined = panel.sort(["symbol", "date"]).join_asof(
+        right = steps.rename({"symbol": "_adjustment_key", "ex_date": "date"}).sort(["_adjustment_key", "date"])
+        joined = panel.sort(["_adjustment_key", "date"]).join_asof(
             right,
             on="date",
-            by="symbol",
+            by="_adjustment_key",
             strategy="backward",
             check_sortedness=False,
         )
@@ -157,9 +188,97 @@ def apply_adjustment(raw_panel: pl.DataFrame, ca: pl.DataFrame) -> pl.DataFrame:
         (pl.col("volume") / pl.col("volume_factor")).round(0).cast(pl.Int64).alias("volume"),
         # turnover intentionally left raw (documented inconsistency)
     )
+    adjusted = adjusted.drop("_adjustment_key")
     keep = [
         c
-        for c in ["date", "symbol", "open", "high", "low", "close", "volume", "turnover"]
+        for c in [
+            "date", "security_id", "isin", "identity_quality", "series", "symbol",
+            "open", "high", "low", "close", "volume", "turnover", "raw_price",
+        ]
         if c in adjusted.columns
     ]
-    return adjusted.select(keep).sort(["symbol", "date"])
+    sort_columns = [column for column in ("security_id", "symbol", "date") if column in keep]
+    return adjusted.select(keep).sort(sort_columns)
+
+
+def validate_share_action_ratios(
+    raw_panel: pl.DataFrame,
+    actions: pl.DataFrame,
+    *,
+    tolerance: float = 0.15,
+) -> pl.DataFrame:
+    """Compare split/bonus mechanics with unmodified raw closes.
+
+    This is evidence reporting only: outside-tolerance events are classified
+    for review and never fed back into the adjustment layer automatically.
+    """
+    if tolerance < 0:
+        raise ValueError("tolerance must be non-negative")
+    required_raw = {"date", "symbol", "close"}
+    required_actions = {"symbol", "ex_date", "action_type"}
+    if missing := required_raw - set(raw_panel.columns):
+        raise ValueError(f"raw panel missing validation columns: {sorted(missing)}")
+    if missing := required_actions - set(actions.columns):
+        raise ValueError(f"corporate-action frame missing validation columns: {sorted(missing)}")
+
+    action_types = {"split", "bonus", "bonus_split", "face_value", "consolidation"}
+    raw = raw_panel.select("date", "symbol", "close", *( ["isin"] if "isin" in raw_panel.columns else [] )).with_columns(
+        _adjustment_key(raw_panel, action_frame=False)
+    )
+    candidates = actions.filter(pl.col("action_type").is_in(sorted(action_types))).with_columns(
+        _adjustment_key(actions, action_frame=True)
+    )
+    multiplicities = {
+        (str(row["_adjustment_key"]), row["ex_date"]): int(row["events"])
+        for row in candidates.group_by(["_adjustment_key", "ex_date"]).len().rename({"len": "events"}).iter_rows(named=True)
+    }
+    rows: list[dict[str, object]] = []
+    for event in candidates.iter_rows(named=True):
+        key = str(event["_adjustment_key"])
+        event_date = event["ex_date"]
+        frame = raw.filter(pl.col("_adjustment_key") == key).sort("date")
+        expected = event_price_multiplier(event)
+        security_id = key if key.startswith("isin:") else f"fallback:{event['symbol']}"
+        base = {
+            "security_id": security_id,
+            "symbol": str(event["symbol"]),
+            "event_date": event_date,
+            "action": str(event["action_type"]),
+            "expected_ratio": expected,
+            "observed_raw_ratio": None,
+            "deviation": None,
+            "validation_status": "WARNING",
+            "classification": "metadata_insufficient",
+        }
+        if expected is None or expected <= 0 or frame.is_empty():
+            rows.append(base)
+            continue
+        before = frame.filter(pl.col("date") < pl.lit(event_date)).tail(1)
+        after = frame.filter(pl.col("date") >= pl.lit(event_date)).head(1)
+        if before.is_empty() or after.is_empty() or float(before["close"][0]) <= 0:
+            rows.append(base)
+            continue
+        observed = float(after["close"][0]) / float(before["close"][0])
+        deviation = abs(observed - expected) / abs(expected)
+        if deviation <= tolerance:
+            rows.append({
+                **base, "observed_raw_ratio": observed, "deviation": deviation,
+                "validation_status": "PASS", "classification": "within_tolerance",
+            })
+            continue
+        if multiplicities[(key, event_date)] > 1:
+            classification = "likely_multiple_simultaneous_actions"
+        else:
+            # Raw prices alone cannot prove whether the ratio metadata or the
+            # observed price is wrong; do not guess between the two.
+            classification = "unresolved"
+        rows.append({
+            **base, "observed_raw_ratio": observed, "deviation": deviation,
+            "validation_status": "WARNING", "classification": classification,
+        })
+    schema = {
+        "security_id": pl.Utf8, "symbol": pl.Utf8, "event_date": pl.Date,
+        "action": pl.Utf8, "expected_ratio": pl.Float64, "observed_raw_ratio": pl.Float64,
+        "deviation": pl.Float64, "validation_status": pl.Utf8, "classification": pl.Utf8,
+    }
+    return pl.DataFrame(rows, schema=schema).sort(["event_date", "security_id", "action"])

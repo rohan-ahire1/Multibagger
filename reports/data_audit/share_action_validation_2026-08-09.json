@@ -1,0 +1,11 @@
+{
+  "events": 1203,
+  "pass": 549,
+  "warning": 654,
+  "by_classification": {
+    "unresolved": 34,
+    "metadata_insufficient": 602,
+    "within_tolerance": 549,
+    "likely_multiple_simultaneous_actions": 18
+  }
+}

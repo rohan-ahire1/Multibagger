@@ -6,7 +6,7 @@ import math
 import zipfile
 from collections import defaultdict
 from dataclasses import asdict, dataclass
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +37,7 @@ class ResearchConfig:
     universe_size: int = 200
     alpha_universe_size: int = 150
     momentum_holdings: int = 20
+    momentum_selection_pct: float = 0.20
     high_52w_holdings: int = 20
     alpha_holdings: int = 30
     combined_holdings: int = 30
@@ -226,6 +227,180 @@ def load_and_build_features(
         )
     )
     return feature_rows.sort(["date", "symbol"]), benchmark, source_dates
+
+
+def build_pit_momentum_targets(
+    panel: pl.DataFrame,
+    *,
+    start: date,
+    end: date,
+    universe_size: int = 500,
+    selection_pct: float = 0.20,
+    liquidity_lookback: int = 60,
+    min_history_sessions: int = 200,
+    rebalance_shift: int = 0,
+    min_market_symbols: int = 100,
+    exclude_symbols: set[str] | None = None,
+) -> tuple[dict[date, dict[str, float]], list[date], pl.DataFrame]:
+    """Build monthly 12-1 targets from strictly point-in-time observations.
+
+    The feature row used at signal date ``T`` is the latest observation with
+    ``date < T``.  Liquidity is the trailing median turnover over the previous
+    ``liquidity_lookback`` observations; momentum is the return from the
+    observation approximately 12 months before that row to the observation
+    approximately one month before it.  Thus neither the signal-date close nor
+    any future row can enter eligibility, ranking, or weights.
+
+    ``rebalance_shift`` is expressed in market sessions relative to each
+    calendar month-end (negative/positive values are used only for sensitivity
+    analysis).  The returned audit frame retains the observation date used for
+    every signal.
+    """
+    if universe_size <= 0 or liquidity_lookback <= 0 or min_history_sessions <= 0:
+        raise ValueError("universe_size, liquidity_lookback and min_history_sessions must be positive")
+    if not 0.0 < selection_pct <= 1.0:
+        raise ValueError("selection_pct must be in (0, 1]")
+    if panel.is_empty():
+        empty = pl.DataFrame(
+            schema={
+                "signal_date": pl.Date,
+                "observation_date": pl.Date,
+                "symbol": pl.String,
+                "adv": pl.Float64,
+                "momentum": pl.Float64,
+                "weight": pl.Float64,
+            }
+        )
+        return {}, [], empty
+
+    required = {"date", "symbol", "close", "volume"}
+    missing = required - set(panel.columns)
+    if missing:
+        raise ValueError(f"panel missing momentum columns: {sorted(missing)}")
+    exclusions = exclude_symbols or set()
+    if "turnover" not in panel.columns:
+        panel = panel.with_columns((pl.col("close") * pl.col("volume")).alias("turnover"))
+    clean = (
+        panel.select("date", "symbol", "close", "volume", "turnover")
+        .filter(pl.col("date") <= end)
+        .filter(~pl.col("symbol").is_in(sorted(exclusions)))
+        .sort(["symbol", "date"])
+    )
+    if clean.is_empty():
+        return {}, [], pl.DataFrame()
+
+    market_sessions = (
+        clean.group_by("date")
+        .agg(pl.col("symbol").n_unique().alias("symbol_count"))
+        .filter(pl.col("symbol_count") >= min_market_symbols)
+        .select("date")
+        .sort("date")
+        .to_series()
+        .to_list()
+    )
+    month_ends = _month_end_signal_dates(market_sessions, start, end)
+    if rebalance_shift:
+        session_index = {session: index for index, session in enumerate(market_sessions)}
+        shifted: list[date] = []
+        for month_end in month_ends:
+            index = session_index[month_end] + rebalance_shift
+            if 0 <= index < len(market_sessions):
+                shifted.append(market_sessions[index])
+        signal_dates = sorted(set(shifted))
+    else:
+        signal_dates = month_ends
+    if not signal_dates:
+        return {}, market_sessions, pl.DataFrame()
+
+    # All rolling/lagged columns are calculated in symbol-time order.  The
+    # one-row shift on liquidity/positive-volume deliberately excludes the
+    # current observation, even when a symbol happens to trade on T.
+    feature_panel = clean.with_columns(
+        [
+            (pl.col("date").cum_count().over("symbol") - 1).cast(pl.Int64).alias("history_before"),
+            (
+                ((pl.col("turnover") > 0) & (pl.col("volume") > 0))
+                .cast(pl.Int8)
+                .shift(1)
+                .rolling_sum(liquidity_lookback, min_samples=liquidity_lookback)
+                .over("symbol")
+            ).alias("positive_count"),
+            pl.col("turnover")
+            .shift(1)
+            .rolling_median(liquidity_lookback, min_samples=liquidity_lookback)
+            .over("symbol")
+            .alias("adv"),
+            pl.col("close").shift(21).over("symbol").alias("close_skip_month"),
+            pl.col("close").shift(252).over("symbol").alias("close_skip_year"),
+        ]
+    ).with_columns(
+        (pl.col("close_skip_month") / pl.col("close_skip_year") - 1.0).alias("momentum")
+    )
+
+    # A small signal-date x symbol grid lets join_asof choose the latest row
+    # strictly before T without repeatedly scanning the full panel.
+    signal_frame = pl.DataFrame({"signal_date": signal_dates})
+    symbols = clean.select("symbol").unique()
+    grid = (
+        signal_frame.join(symbols, how="cross")
+        .with_columns((pl.col("signal_date") - timedelta(days=1)).alias("asof_date"))
+        .sort(["symbol", "asof_date"])
+    )
+    right = feature_panel.with_columns(pl.col("date").alias("asof_date")).sort(
+        ["symbol", "asof_date"]
+    )
+    asof = grid.join_asof(
+        right,
+        left_on="asof_date",
+        right_on="asof_date",
+        by="symbol",
+        strategy="backward",
+        check_sortedness=False,
+    )
+    eligible = (
+        asof.filter(pl.col("date").is_not_null())
+        .filter(pl.col("history_before") >= max(min_history_sessions, 252))
+        .filter(pl.col("positive_count") >= math.ceil(0.8 * liquidity_lookback))
+        .filter((pl.col("adv") > 0) & (pl.col("close") > 0))
+        .drop_nulls(["momentum"])
+    )
+    if eligible.is_empty():
+        empty = pl.DataFrame(
+            schema={
+                "signal_date": pl.Date,
+                "observation_date": pl.Date,
+                "symbol": pl.String,
+                "adv": pl.Float64,
+                "momentum": pl.Float64,
+                "weight": pl.Float64,
+            }
+        )
+        return {}, market_sessions, empty
+
+    universe = (
+        eligible.sort(["signal_date", "adv", "symbol"], descending=[False, True, False])
+        .group_by("signal_date", maintain_order=True)
+        .head(universe_size)
+    )
+    selected_rows: list[pl.DataFrame] = []
+    targets: dict[date, dict[str, float]] = {}
+    for key, frame in universe.group_by("signal_date", maintain_order=True):
+        signal_date = key[0] if isinstance(key, tuple) else key
+        holdings = max(1, math.ceil(frame.height * selection_pct))
+        chosen = frame.sort(["momentum", "symbol"], descending=[True, False]).head(holdings)
+        weight = 1.0 / chosen.height
+        audit = chosen.select(
+            pl.col("signal_date"),
+            pl.col("date").alias("observation_date"),
+            pl.col("symbol"),
+            pl.col("adv"),
+            pl.col("momentum"),
+            pl.lit(weight).alias("weight"),
+        )
+        selected_rows.append(audit)
+        targets[signal_date] = {symbol: weight for symbol in chosen["symbol"].to_list()}
+    audit_frame = pl.concat(selected_rows).sort(["signal_date", "symbol"]) if selected_rows else pl.DataFrame()
+    return targets, market_sessions, audit_frame
 
 
 def _percentiles(values: np.ndarray, *, higher_is_better: bool = True) -> np.ndarray:

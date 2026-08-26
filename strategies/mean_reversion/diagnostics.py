@@ -24,7 +24,10 @@ from sepa_scanner.strategy.ranking import load_sector_map
 from strategies.mean_reversion.exit_engine import MRExitConfig
 from strategies.mean_reversion.signal_engine import scan_mean_reversion, scan_mr_v2, scan_short_mean_reversion
 from strategies.mean_reversion.simulation import simulate_mr_long_short_portfolio, simulate_mr_portfolio
-from strategies.mean_reversion.universe import load_nifty100_universe
+from strategies.mean_reversion.universe import (
+    filter_signals_to_historical_membership,
+    historical_liquidity_membership,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -231,7 +234,12 @@ def streak_distribution(trades: pl.DataFrame) -> pl.DataFrame:
     return pl.DataFrame(rows).group_by(["type", "length"]).len().rename({"len": "count"}).sort(["type", "length"])
 
 
-def load_ohlcv(config: dict[str, Any], start_date: date, end_date: date, universe: set[str]) -> pl.DataFrame:
+def load_ohlcv(
+    config: dict[str, Any],
+    start_date: date,
+    end_date: date,
+    universe: set[str] | None = None,
+) -> pl.DataFrame:
     ohlcv_path = Path(config["data"]["ohlcv_path"])
     store = ParquetOhlcvStore(ohlcv_path.parent)
     frame = store.read_frame(start_date=None, end_date=end_date, columns=["date", "symbol", "open", "high", "low", "close", "volume"])
@@ -242,13 +250,28 @@ def load_ohlcv(config: dict[str, Any], start_date: date, end_date: date, univers
         "NIFTY 50",
         "NIFTYBEES",
     }
-    keep_symbols = set(universe) | {symbol for symbol in benchmark_symbols if symbol}
-    frame = frame.filter(pl.col("symbol").is_in(sorted(keep_symbols)))
+    # A static symbol list is suitable only for a live diagnostic.  Historical
+    # callers pass None and apply dated point-in-time membership after loading.
+    if universe is not None:
+        keep_symbols = set(universe) | {symbol for symbol in benchmark_symbols if symbol}
+        frame = frame.filter(pl.col("symbol").is_in(sorted(keep_symbols)))
     if frame.is_empty():
         return frame
     # Keep pre-start history for indicators, but all output signals are filtered later.
     earliest_needed = min(start_date, frame["date"].min())
     return frame.filter(pl.col("date") >= earliest_needed).sort(["symbol", "date"])
+
+
+def _filter_to_pit_liquidity_universe(signals: pl.DataFrame, ohlcv: pl.DataFrame) -> pl.DataFrame:
+    """Apply dated liquidity membership after calculating signal-date features."""
+    membership = historical_liquidity_membership(
+        ohlcv,
+        size=100,
+        lookback_sessions=50,
+        min_history_sessions=200,
+        reconstitute="semiannual",
+    )
+    return filter_signals_to_historical_membership(signals, membership)
 
 
 def run_variant(
@@ -275,8 +298,10 @@ def run_variant(
         min_adv_inr=float(config["entry"]["min_adv_inr"]),
         min_price=float(config["entry"]["min_price_inr"]),
         stop_atr_mult=stop_atr_mult,
-        universe_symbols=universe,
-    ).filter((pl.col("signal_date") >= start_date) & (pl.col("signal_date") <= end_date))
+    )
+    signals = _filter_to_pit_liquidity_universe(signals, ohlcv).filter(
+        (pl.col("signal_date") >= start_date) & (pl.col("signal_date") <= end_date)
+    )
 
     if regime != "all":
         from strategies.mean_reversion.simulation import build_benchmark_regime
@@ -366,8 +391,10 @@ def run_variant_v2(
         stop_atr_mult=stop_atr_mult,
         max_signals_per_day=max_signals_per_day,
         cooldown_days=cooldown_days,
-        universe_symbols=universe,
-    ).filter((pl.col("signal_date") >= start_date) & (pl.col("signal_date") <= end_date))
+    )
+    signals = _filter_to_pit_liquidity_universe(signals, ohlcv).filter(
+        (pl.col("signal_date") >= start_date) & (pl.col("signal_date") <= end_date)
+    )
 
     exit_config = MRExitConfig(
         exit_mode=exit_mode,
@@ -453,7 +480,7 @@ def print_summary(metrics: dict[str, Any]) -> None:
     print(f"- Fill rate not 0/100% target: {fill_rate:.2%}")
     print(f"- Win rate >55% target: {win_rate:.2%}")
     print(f"- Payoff ratio typically <2: {payoff}")
-    print("- Static current Nifty 100 universe: survivorship bias exists and is accepted for this first pass.")
+    print("- Historical liquidity membership is point-in-time and based on prior observations only.")
 
 
 def sweep_row(result: dict[str, Any], label: str) -> dict[str, Any]:
@@ -827,8 +854,13 @@ def run_short_side_study(
         min_adv_inr=float(config["entry"]["min_adv_inr"]),
         min_price=float(config["entry"]["min_price_inr"]),
         stop_atr_mult=locked["stop_atr_mult"],
-        universe_symbols=universe,
-    ).filter((pl.col("signal_date") >= start_date) & (pl.col("signal_date") <= end_date))
+    )
+    membership = historical_liquidity_membership(
+        ohlcv, size=100, lookback_sessions=50, min_history_sessions=200, reconstitute="semiannual"
+    )
+    long_signals = filter_signals_to_historical_membership(long_signals, membership).filter(
+        (pl.col("signal_date") >= start_date) & (pl.col("signal_date") <= end_date)
+    )
     short_signals = scan_short_mean_reversion(
         ohlcv,
         rsi_period=2,
@@ -837,8 +869,10 @@ def run_short_side_study(
         min_adv_inr=float(config["entry"]["min_adv_inr"]),
         min_price=float(config["entry"]["min_price_inr"]),
         stop_atr_mult=locked["stop_atr_mult"],
-        universe_symbols=universe,
-    ).filter((pl.col("signal_date") >= start_date) & (pl.col("signal_date") <= end_date))
+    )
+    short_signals = filter_signals_to_historical_membership(short_signals, membership).filter(
+        (pl.col("signal_date") >= start_date) & (pl.col("signal_date") <= end_date)
+    )
 
     exit_config = MRExitConfig(
         exit_mode=locked["exit_mode"],
@@ -1020,10 +1054,10 @@ def main() -> None:
     start_date = parse_date(args.start)
     end_date = parse_date(args.end)
     config = load_mr_config(Path(args.config))
-    universe = load_nifty100_universe()
+    universe: set[str] | None = None
     sector_map = load_sector_map(Path(config["data"]["sector_map_path"]))
-    ohlcv = load_ohlcv(config, start_date, end_date, universe)
-    print(f"Loaded {ohlcv.height} OHLCV rows for {len(universe)} Nifty 100 symbols.")
+    ohlcv = load_ohlcv(config, start_date, end_date)
+    print(f"Loaded {ohlcv.height} OHLCV rows; historical selection uses PIT liquidity membership.")
 
     output_root = Path(args.output_dir)
     if args.sweep:

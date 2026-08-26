@@ -1,13 +1,12 @@
-"""Build the survivorship-free, corporate-action-adjusted price panel.
+"""Build explicit raw, point-in-time, and retrospective NSE price layers.
 
 Pipeline: raw daily bhavcopy zips -> raw panel -> apply split/bonus (Phase 1) or
-split/bonus/dividend (Phase 2) back-adjustment -> data/nse_adjusted/ohlcv_all.parquet
-(the schema the app expects). The legacy yfinance panel is left untouched; flip
-``config/config.yaml`` -> ``data.source: nse_bhavcopy`` to make the app use this one.
+split/bonus/dividend back-adjustment -> ``data/adjusted/`` (ex-post research
+only).  ``data/pit/ohlcv_all.parquet`` retains economically raw observations
+and is the panel selected by ``data.source: nse_bhavcopy`` for signal generation.
 
 Usage:
-    uv run python scripts/nse_build_adjusted_panel.py                 # Phase 1 (price return)
-    uv run python scripts/nse_build_adjusted_panel.py --dividends     # Phase 2 (total return)
+    uv run python scripts/nse_build_adjusted_panel.py --dividends
 """
 from __future__ import annotations
 
@@ -20,11 +19,7 @@ from pathlib import Path
 import polars as pl
 
 from sepa_scanner.data_sources.adjustment import apply_adjustment
-from sepa_scanner.data_sources.security_identity import (
-    apply_canonical_symbols,
-    build_rename_map,
-    remap_corporate_actions,
-)
+from sepa_scanner.data_sources.pit import build_pit_features, build_processed_panel
 from sepa_scanner.storage.bhav_raw_store import BhavRawStore
 from sepa_scanner.utils.io import ensure_directory
 
@@ -32,7 +27,12 @@ LOGGER = logging.getLogger("nse_build_adjusted")
 
 RAW_ZIP_ROOT = Path("data/nse_bhavcopy_raw")
 RAW_PANEL_ROOT = Path("data/nse_raw")
-OUT_ROOT = Path("data/nse_adjusted")
+PROCESSED_ROOT = Path("data/processed")
+PIT_ROOT = Path("data/pit")
+ADJUSTED_ROOT = Path("data/adjusted")
+# Compatibility copy for historical tools. Its manifest marks it ex-post and
+# settings route normal strategy reads to data/pit instead.
+LEGACY_ADJUSTED_ROOT = Path("data/nse_adjusted")
 CA_PATH = Path("data/reference/nse_corporate_actions.parquet")
 CA_OVERRIDES_PATH = Path("config/corporate_actions.csv")
 
@@ -124,7 +124,12 @@ def _load_ca_overrides() -> pl.DataFrame | None:
     return frame.select(_CA_COLUMNS)
 
 
-def _load_ca(dividends: bool, raw: pl.DataFrame | None = None) -> pl.DataFrame:
+def _load_ca(
+    dividends: bool,
+    raw: pl.DataFrame | None = None,
+    *,
+    dataset_max_date: date | None = None,
+) -> pl.DataFrame:
     ca = pl.read_parquet(CA_PATH)
 
     overrides = _load_ca_overrides()
@@ -155,6 +160,10 @@ def _load_ca(dividends: bool, raw: pl.DataFrame | None = None) -> pl.DataFrame:
         ["dividend"] if dividends else []
     )
     ca = ca.filter(pl.col("action_type").is_in(keep))
+    if dataset_max_date is not None:
+        # Action records after the final observation cannot belong to this
+        # immutable build.  They remain in reference/ for a later rebuild.
+        ca = ca.filter(pl.col("ex_date") <= pl.lit(dataset_max_date))
     if dividends and raw is not None:
         # Dividend multiplier needs the raw close on the last trading bar before ex-date.
         prev = raw.select("symbol", "date", "close").rename({"close": "prev_close"})
@@ -200,15 +209,36 @@ def _quarantine_bad_jumps(panel: pl.DataFrame, max_jump: float = 4.0) -> None:
         LOGGER.warning("%d suspect adjusted rows quarantined -> %s", bad.height, QUARANTINE)
 
 
+def _write_layer(
+    root: Path,
+    panel: pl.DataFrame,
+    *,
+    layer: str,
+    dataset_max_date: date,
+    extra: dict[str, object] | None = None,
+) -> None:
+    """Write a named immutable layer and a manifest describing its eligibility."""
+    ensure_directory(root)
+    panel.write_parquet(root / "ohlcv_all.parquet", compression="zstd")
+    manifest: dict[str, object] = {
+        "dataset_version": datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "layer": layer,
+        "rows": panel.height,
+        "securities": int(panel["security_id"].n_unique()) if "security_id" in panel.columns else int(panel["symbol"].n_unique()),
+        "date_min": str(panel["date"].min()),
+        "date_max": str(dataset_max_date),
+        "columns": panel.columns,
+    }
+    if extra:
+        manifest.update(extra)
+    (root / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--dividends", action="store_true", help="Phase 2 total-return panel")
-    ap.add_argument(
-        "--canonical-symbols",
-        action="store_true",
-        help="collapse ticker renames onto the security's latest ticker, via ISIN",
-    )
+    ap.add_argument("--dividends", action="store_true", help="also build the ex-post total-return layer")
     ap.add_argument("--series", default="EQ,BE")
     ap.add_argument("--rebuild-raw", action="store_true",
                     help="rebuild raw panel from zips (else reuse data/nse_raw)")
@@ -223,48 +253,63 @@ def main() -> None:
         raw = raw_store.read_frame()
     LOGGER.info("raw panel: %d rows, %d symbols", raw.height, raw["symbol"].n_unique())
 
-    if args.canonical_symbols:
-        master_path = Path("data/reference/security_master.parquet")
-        if not master_path.exists():
-            raise SystemExit(
-                f"{master_path} missing; run scripts/build_security_master.py first"
-            )
-        mapping = build_rename_map(pl.read_parquet(master_path))
-        raw = apply_canonical_symbols(raw, mapping)
-        LOGGER.info("collapsed %d renamed ticker(s) onto canonical symbols", len(mapping))
+    # raw/ is never edited here.  Identity and all strategy-safe inputs are
+    # written as separate derived layers instead of renaming ticker history.
+    processed = build_processed_panel(raw)
+    pit = build_pit_features(raw)
+    dataset_max_date = raw["date"].max()
+    _write_layer(
+        PROCESSED_ROOT, processed, layer="processed_economically_raw", dataset_max_date=dataset_max_date,
+        extra={"price_field": "raw_price", "corporate_actions_applied": False, "raw_source": str(RAW_PANEL_ROOT)},
+    )
+    _write_layer(
+        PIT_ROOT, pit, layer="pit_raw_signal_inputs", dataset_max_date=dataset_max_date,
+        extra={"point_in_time_eligible": True, "corporate_actions_applied": False, "ex_post_columns_allowed": False},
+    )
 
-    ca = _load_ca(args.dividends, raw=raw)
-    if args.canonical_symbols:
-        # The CA feed records the ticker in force at the time, so it has to be
-        # remapped too or a renamed security loses its own corporate actions.
-        # Re-apply override precedence after remapping: an inferred action under
-        # the old ticker and a feed action under the new ticker become the same
-        # canonical event and must not be compounded.
-        ca = remap_corporate_actions(
-            ca,
-            mapping,
-            override_sources=APPLIED_CA_SOURCES,
+    split_actions = _load_ca(False, raw=processed, dataset_max_date=dataset_max_date)
+    split_adjusted = apply_adjustment(processed, split_actions, max_action_date=dataset_max_date).with_columns(
+        pl.col("close").alias("split_adjusted_price"),
+        pl.lit("ex_post_split_adjusted").alias("price_basis"),
+        pl.lit(False).alias("point_in_time_eligible"),
+    )
+    _quarantine_bad_jumps(split_adjusted)
+    _write_layer(
+        ADJUSTED_ROOT / "split_adjusted", split_adjusted, layer="ex_post_split_adjusted", dataset_max_date=dataset_max_date,
+        extra={"price_field": "split_adjusted_price", "point_in_time_eligible": False, "ca_events_applied": split_actions.height},
+    )
+
+    adjusted = split_adjusted
+    total_actions = split_actions
+    if args.dividends:
+        total_actions = _load_ca(True, raw=processed, dataset_max_date=dataset_max_date)
+        adjusted = apply_adjustment(processed, total_actions, max_action_date=dataset_max_date).with_columns(
+            pl.col("close").alias("total_return_price"),
+            pl.lit("ex_post_total_return").alias("price_basis"),
+            pl.lit(False).alias("point_in_time_eligible"),
         )
-    adjusted = apply_adjustment(raw, ca)
-    _quarantine_bad_jumps(adjusted)
+        _quarantine_bad_jumps(adjusted)
+        _write_layer(
+            ADJUSTED_ROOT / "total_return", adjusted, layer="ex_post_total_return", dataset_max_date=dataset_max_date,
+            extra={"price_field": "total_return_price", "point_in_time_eligible": False, "ca_events_applied": total_actions.height},
+        )
 
-    ensure_directory(OUT_ROOT)
-    out = OUT_ROOT / "ohlcv_all.parquet"
-    adjusted.write_parquet(out, compression="zstd")
-
-    manifest = {
-        "dataset_version": datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "mode": "total_return" if args.dividends else "price_return",
-        "rows": adjusted.height,
-        "symbols": int(adjusted["symbol"].n_unique()),
-        "date_min": str(adjusted["date"].min()),
-        "date_max": str(adjusted["date"].max()),
-        "ca_events_applied": ca.height,
-        "series": args.series,
-    }
-    (OUT_ROOT / "manifest.json").write_text(json.dumps(manifest, indent=2))
-    LOGGER.info("Wrote %s\n%s", out, json.dumps(manifest, indent=2))
+    _write_layer(
+        LEGACY_ADJUSTED_ROOT, adjusted,
+        layer="ex_post_total_return" if args.dividends else "ex_post_split_adjusted",
+        dataset_max_date=dataset_max_date,
+        extra={
+            "mode": "total_return" if args.dividends else "price_return",
+            "point_in_time_eligible": False,
+            "ca_events_applied": total_actions.height,
+            "series": args.series,
+            "replacement_layer": "data/pit/ohlcv_all.parquet",
+        },
+    )
+    LOGGER.info(
+        "Wrote PIT layer to %s and ex-post adjusted layer to %s (%d actions; max date %s)",
+        PIT_ROOT, LEGACY_ADJUSTED_ROOT, total_actions.height, dataset_max_date,
+    )
 
 
 if __name__ == "__main__":

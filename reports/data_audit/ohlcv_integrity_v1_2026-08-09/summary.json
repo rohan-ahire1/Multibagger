@@ -1,0 +1,72 @@
+{
+  "audit": "OHLCV Integrity Audit V1",
+  "panel": "data/pit/ohlcv_all.parquet",
+  "dataset_statistics": {
+    "rows": 8345112,
+    "securities": 6838,
+    "first_date": "2005-01-03",
+    "last_date": "2026-07-17"
+  },
+  "hard_failures": {
+    "duplicates": 0,
+    "null_ohlc": 0,
+    "invalid_prices": 0,
+    "invalid_ohlc_relationships": 0,
+    "negative_volume": 0
+  },
+  "null_values": {
+    "open": {
+      "count": 0,
+      "percentage": 0.0
+    },
+    "high": {
+      "count": 0,
+      "percentage": 0.0
+    },
+    "low": {
+      "count": 0,
+      "percentage": 0.0
+    },
+    "close": {
+      "count": 0,
+      "percentage": 0.0
+    },
+    "volume": {
+      "count": 0,
+      "percentage": 0.0
+    }
+  },
+  "suspicious_observations": {
+    "zero_volume": 0,
+    "large_returns": {
+      "0.2": 11379,
+      "0.4": 3357,
+      "0.8": 941
+    },
+    "observation_gaps": {
+      "7": 10977,
+      "30": 3878,
+      "90": 1782
+    },
+    "abnormal_market_day_coverage": 1,
+    "extreme_price_volume_changes": {
+      "close_gt_10x_previous": 4,
+      "close_lt_0_1x_previous": 91,
+      "volume_gt_100x_previous_20_observation_median": 9548
+    }
+  },
+  "per_test_status": {
+    "duplicates": "PASS",
+    "null_values": "PASS",
+    "price_validity": "PASS",
+    "ohlc_consistency": "PASS",
+    "volume": "PASS",
+    "date_order": "PASS",
+    "large_price_moves": "WARNING",
+    "missing_day_gap": "WARNING",
+    "security_coverage": "PASS",
+    "market_day_coverage": "WARNING",
+    "extreme_values": "WARNING"
+  },
+  "final_status": "PASS"
+}

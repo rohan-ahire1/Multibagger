@@ -107,10 +107,6 @@ def run_portfolio_order_engine(
         row["date"]: bool(row["allows_new_buys"])
         for row in config.market_regime.iter_rows(named=True)
     } if not config.market_regime.is_empty() else {}
-    future_dates: dict[str, list[date]] = {}
-    for symbol, group in clean.group_by("symbol", maintain_order=True):
-        future_dates[str(symbol[0])] = group["date"].to_list()
-
     cash = float(config.initial_capital)
     positions: dict[str, dict[str, Any]] = {}
     pending: list[dict[str, Any]] = []
@@ -132,23 +128,11 @@ def run_portfolio_order_engine(
         rejections.append(record)
 
     for session_index, today in enumerate(sessions):
-        # A retired holding has no later bar. The data cannot tell us why it stopped,
-        # so a zero-volume final bar is conservatively marked to zero as specified.
-        for symbol in list(positions):
-            if (today, symbol) in bars or any(d >= today for d in future_dates[symbol]):
-                continue
-            position = positions.pop(symbol)
-            terminal = 0.0 if position["last_volume"] == 0 else position["last_close"]
-            proceeds = terminal * position["shares"]
-            cost = _cost(config.cost_model, "sell", proceeds)
-            cash += max(0.0, proceeds - cost)
-            delisted_pnl_impact += proceeds - cost - position["last_close"] * position["shares"]
-            record = {"date": today, "decision_date": None, "symbol": symbol, "side": "sell",
-                      "shares": int(position["shares"]), "raw_price": position["last_close"],
-                      "fill_price": terminal, "notional": proceeds, "cost": cost,
-                      "slippage_cost": 0.0, "status": "filled", "reason": "delisted_assumed_terminal"}
-            orders.append(record)
-            rejections.append({**record, "status": "rejected", "reason": "delisted_assumed_terminal"})
+        # A missing current bar has no causal explanation in this panel.  In
+        # particular, deciding it is terminal by looking for a later bar reads
+        # future listing/delisting information.  Carry the last observed value
+        # until a dated reference status is supplied; no terminal sale is
+        # inferred from a future absence.
 
         # Pending sells are intentionally processed before buys on every session.
         next_pending: list[dict[str, Any]] = []

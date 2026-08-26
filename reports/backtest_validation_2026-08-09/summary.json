@@ -1,0 +1,3460 @@
+{
+  "experiment": "baseline_12_1_momentum_engine_validation",
+  "dataset": {
+    "pit": "data/pit/ohlcv_all.parquet",
+    "execution_measurement": "data/adjusted/total_return/ohlcv_all.parquet",
+    "first_date": "2005-01-01",
+    "last_date": "2026-07-17"
+  },
+  "rules": {
+    "universe": "top N by trailing 60-observation median turnover; prior observations only; >=200 history and >=80% positive turnover/volume",
+    "signal": "close at latest observation < T divided by close 252 observations before that, using the latest observation 21 observations before the as-of row; no current month",
+    "selection": "top percentage by momentum; equal weight",
+    "rebalance": "actual month-end session, shifted -3/0/+3 sessions only in robustness; execute next available open",
+    "costs": "round-trip scenarios translated to half per side slippage; canonical NSE multipliers retained",
+    "accounting": "integer shares, explicit cash, ex-post total-return marking for measurement only"
+  },
+  "baseline": {
+    "universe_size": 500,
+    "selection_pct": 20.0,
+    "round_trip_slippage_equivalent_pct": 0.2,
+    "metrics": {
+      "research_2005_2016": {
+        "start": "2005-01-03",
+        "end": "2016-12-30",
+        "cagr_pct": 4.8153555265085135,
+        "total_return_pct": 75.74187669256045,
+        "annualised_volatility_pct": 20.278899371436836,
+        "sharpe": 0.3387177909444098,
+        "max_drawdown_pct": 67.37536184759205,
+        "calmar": 0.07147057016778917,
+        "turnover_pct_of_initial": 7002.848132370928,
+        "transaction_costs": 217823.52534759472,
+        "number_of_trades": 9056,
+        "max_concurrent_positions": 106,
+        "average_concurrent_positions": 74.09047940580689,
+        "unique_symbols_traded": 866,
+        "average_holding_period_days": 102.43711076822568,
+        "best_calendar_year": {
+          "year": 2007,
+          "return_pct": 86.28431623768098
+        },
+        "worst_calendar_year": {
+          "year": 2008,
+          "return_pct": -65.25773744092002
+        },
+        "terminal_equity": 1757418.7669256045
+      },
+      "validation_2017_2021": {
+        "start": "2017-01-02",
+        "end": "2021-12-31",
+        "cagr_pct": 21.360095274110403,
+        "total_return_pct": 162.94300519303792,
+        "annualised_volatility_pct": 17.61432177027285,
+        "sharpe": 1.2090689697559058,
+        "max_drawdown_pct": 42.1053984671146,
+        "calmar": 0.5073006325018676,
+        "turnover_pct_of_initial": 7854.479909883462,
+        "transaction_costs": 197364.4936853306,
+        "number_of_trades": 4023,
+        "max_concurrent_positions": 127,
+        "average_concurrent_positions": 94.25809061488673,
+        "unique_symbols_traded": 523,
+        "average_holding_period_days": 103.10930375655015,
+        "best_calendar_year": {
+          "year": 2017,
+          "return_pct": 65.91636209906271
+        },
+        "worst_calendar_year": {
+          "year": 2018,
+          "return_pct": -20.239620980437834
+        },
+        "terminal_equity": 4697484.325120194
+      },
+      "holdout_2022_2026": {
+        "start": "2022-01-03",
+        "end": "2026-07-17",
+        "cagr_pct": 13.650763375223441,
+        "total_return_pct": 78.63166609261008,
+        "annualised_volatility_pct": 20.770608609802743,
+        "sharpe": 0.7346362636763173,
+        "max_drawdown_pct": 28.73993416341627,
+        "calmar": 0.4749754574107485,
+        "turnover_pct_of_initial": 18915.98722923366,
+        "transaction_costs": 432863.44567750057,
+        "number_of_trades": 4316,
+        "max_concurrent_positions": 132,
+        "average_concurrent_positions": 112.38069705093834,
+        "unique_symbols_traded": 555,
+        "average_holding_period_days": 107.18001913239418,
+        "best_calendar_year": {
+          "year": 2023,
+          "return_pct": 56.20582668504748
+        },
+        "worst_calendar_year": {
+          "year": 2025,
+          "return_pct": -3.836790126012246
+        },
+        "terminal_equity": 8493898.262181332
+      },
+      "full_2005_2026": {
+        "start": "2005-01-03",
+        "end": "2026-07-17",
+        "cagr_pct": 10.44540720391074,
+        "total_return_pct": 749.3898262181333,
+        "annualised_volatility_pct": 19.80047098092616,
+        "sharpe": 0.6120614263624193,
+        "max_drawdown_pct": 67.37536184759205,
+        "calmar": 0.15503304052806435,
+        "turnover_pct_of_initial": 33773.31527148805,
+        "transaction_costs": 848051.4647104259,
+        "number_of_trades": 17395,
+        "max_concurrent_positions": 132,
+        "average_concurrent_positions": 86.8371261989844,
+        "unique_symbols_traded": 1278,
+        "average_holding_period_days": 107.18001913239418,
+        "best_calendar_year": {
+          "year": 2007,
+          "return_pct": 86.28431623768098
+        },
+        "worst_calendar_year": {
+          "year": 2008,
+          "return_pct": -65.25773744092002
+        },
+        "terminal_equity": 8493898.262181332
+      }
+    },
+    "orders": 17395
+  },
+  "robustness_matrix": [
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 300,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 15.097354249361095,
+      "total_return_pct": 1965.0566718548944,
+      "annualised_volatility_pct": 29.681358946417998,
+      "sharpe": 0.6165953115205287,
+      "max_drawdown_pct": 71.18210506993412,
+      "calmar": 0.21209479874932655,
+      "turnover_pct_of_initial": 92242.2355177089,
+      "transaction_costs": 1066733.236424893,
+      "number_of_trades": 5331,
+      "max_concurrent_positions": 44,
+      "average_concurrent_positions": 26.475079932292648,
+      "unique_symbols_traded": 662,
+      "average_holding_period_days": 84.29773622913683,
+      "best_calendar_year": {
+        "year": 2012,
+        "return_pct": 116.48072474750451
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -69.28230693417663
+      },
+      "terminal_equity": 20650566.718548946
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 300,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 14.735835171536271,
+      "total_return_pct": 1829.7988532286488,
+      "annualised_volatility_pct": 25.956774770049346,
+      "sharpe": 0.662132647072726,
+      "max_drawdown_pct": 74.1357064765233,
+      "calmar": 0.19876839207302485,
+      "turnover_pct_of_initial": 68179.07460205405,
+      "transaction_costs": 795736.2767047253,
+      "number_of_trades": 4914,
+      "max_concurrent_positions": 45,
+      "average_concurrent_positions": 26.144818506676696,
+      "unique_symbols_traded": 636,
+      "average_holding_period_days": 90.83749402021701,
+      "best_calendar_year": {
+        "year": 2012,
+        "return_pct": 100.13362619126936
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -68.56510047608297
+      },
+      "terminal_equity": 19297988.532286488
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 300,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 13.833318341780965,
+      "total_return_pct": 1528.0208398681925,
+      "annualised_volatility_pct": 27.067920314380554,
+      "sharpe": 0.6143060401655549,
+      "max_drawdown_pct": 72.37467492941367,
+      "calmar": 0.1911347906608557,
+      "turnover_pct_of_initial": 62774.77131356959,
+      "transaction_costs": 737459.493454005,
+      "number_of_trades": 5112,
+      "max_concurrent_positions": 44,
+      "average_concurrent_positions": 25.888470942260675,
+      "unique_symbols_traded": 668,
+      "average_holding_period_days": 89.87459961442963,
+      "best_calendar_year": {
+        "year": 2012,
+        "return_pct": 115.69746525530516
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -70.38618167126616
+      },
+      "terminal_equity": 16280208.398681926
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 300,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 12.338441667115752,
+      "total_return_pct": 1124.722956920204,
+      "annualised_volatility_pct": 23.761388404133108,
+      "sharpe": 0.6169444564315429,
+      "max_drawdown_pct": 69.55163050931415,
+      "calmar": 0.17739974716284218,
+      "turnover_pct_of_initial": 44925.48549041673,
+      "transaction_costs": 588197.5957993855,
+      "number_of_trades": 11569,
+      "max_concurrent_positions": 80,
+      "average_concurrent_positions": 52.43633627985706,
+      "unique_symbols_traded": 873,
+      "average_holding_period_days": 100.15392172341807,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 91.95064930752544
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -66.83103125847948
+      },
+      "terminal_equity": 12247229.569202041
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 300,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 13.77511134634084,
+      "total_return_pct": 1510.189008399142,
+      "annualised_volatility_pct": 23.4236311888932,
+      "sharpe": 0.6775912796839538,
+      "max_drawdown_pct": 68.7823329192259,
+      "calmar": 0.2002710690624227,
+      "turnover_pct_of_initial": 56912.74258617242,
+      "transaction_costs": 721563.5458066207,
+      "number_of_trades": 11465,
+      "max_concurrent_positions": 83,
+      "average_concurrent_positions": 53.16719954861764,
+      "unique_symbols_traded": 882,
+      "average_holding_period_days": 99.4793584448388,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 100.24019224082946
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -67.16431034470682
+      },
+      "terminal_equity": 16101890.083991421
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 300,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 14.431116248704367,
+      "total_return_pct": 1722.3942922273586,
+      "annualised_volatility_pct": 29.431231696806005,
+      "sharpe": 0.5966491652220663,
+      "max_drawdown_pct": 69.39948006282944,
+      "calmar": 0.20794271420534338,
+      "turnover_pct_of_initial": 64112.674694879046,
+      "transaction_costs": 803334.4190411206,
+      "number_of_trades": 11739,
+      "max_concurrent_positions": 80,
+      "average_concurrent_positions": 53.01523415459846,
+      "unique_symbols_traded": 882,
+      "average_holding_period_days": 100.62889603113008,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 92.1437932993821
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -65.55617857049813
+      },
+      "terminal_equity": 18223942.922273587
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 300,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 12.640753172737185,
+      "total_return_pct": 1197.6881567084006,
+      "annualised_volatility_pct": 22.359542781767054,
+      "sharpe": 0.653602747492982,
+      "max_drawdown_pct": 67.80925887225719,
+      "calmar": 0.18641632990784535,
+      "turnover_pct_of_initial": 44647.61085243977,
+      "transaction_costs": 633057.4333416566,
+      "number_of_trades": 17631,
+      "max_concurrent_positions": 118,
+      "average_concurrent_positions": 82.63644912544667,
+      "unique_symbols_traded": 945,
+      "average_holding_period_days": 113.43202081682708,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 87.87146190493314
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -62.97904774886667
+      },
+      "terminal_equity": 12976881.567084007
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 300,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 12.209292210166423,
+      "total_return_pct": 1094.7594444915314,
+      "annualised_volatility_pct": 21.53463098815298,
+      "sharpe": 0.6533722152516347,
+      "max_drawdown_pct": 66.84895938280542,
+      "calmar": 0.1826399740981883,
+      "turnover_pct_of_initial": 41659.46143090874,
+      "transaction_costs": 598404.3600431483,
+      "number_of_trades": 17359,
+      "max_concurrent_positions": 118,
+      "average_concurrent_positions": 82.50705284935114,
+      "unique_symbols_traded": 939,
+      "average_holding_period_days": 111.86085671871366,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 90.22364222241082
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -63.42543271391674
+      },
+      "terminal_equity": 11947594.444915313
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 300,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 12.372847099034455,
+      "total_return_pct": 1132.8253090169865,
+      "annualised_volatility_pct": 24.439951936339725,
+      "sharpe": 0.6035611009311604,
+      "max_drawdown_pct": 68.32186686326015,
+      "calmar": 0.18109644345341963,
+      "turnover_pct_of_initial": 43658.563887190925,
+      "transaction_costs": 622784.1551522238,
+      "number_of_trades": 17681,
+      "max_concurrent_positions": 118,
+      "average_concurrent_positions": 83.03611058867783,
+      "unique_symbols_traded": 947,
+      "average_holding_period_days": 112.993991771551,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 84.0133093676843
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -63.631138456288895
+      },
+      "terminal_equity": 12328253.090169864
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 500,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 6.916417462661095,
+      "total_return_pct": 322.10328201123764,
+      "annualised_volatility_pct": 18.62380379657574,
+      "sharpe": 0.45993686450367766,
+      "max_drawdown_pct": 79.0508161737534,
+      "calmar": 0.08749330870232681,
+      "turnover_pct_of_initial": 18712.675057147855,
+      "transaction_costs": 257982.0034624857,
+      "number_of_trades": 6489,
+      "max_concurrent_positions": 65,
+      "average_concurrent_positions": 36.779763024261804,
+      "unique_symbols_traded": 827,
+      "average_holding_period_days": 94.57054509682946,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 102.445501800783
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -67.11148674442819
+      },
+      "terminal_equity": 4221032.8201123765
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 500,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 8.058568183318936,
+      "total_return_pct": 430.62823154202664,
+      "annualised_volatility_pct": 18.545873976950837,
+      "sharpe": 0.5198050933867084,
+      "max_drawdown_pct": 77.78582490376903,
+      "calmar": 0.10359944364269984,
+      "turnover_pct_of_initial": 22117.84731418689,
+      "transaction_costs": 296918.2971242543,
+      "number_of_trades": 6631,
+      "max_concurrent_positions": 68,
+      "average_concurrent_positions": 38.86345683656197,
+      "unique_symbols_traded": 836,
+      "average_holding_period_days": 113.68993892199181,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 92.07656576411478
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -66.38033912868568
+      },
+      "terminal_equity": 5306282.315420266
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 500,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 9.748891392778148,
+      "total_return_pct": 641.2149901555257,
+      "annualised_volatility_pct": 19.425920953074836,
+      "sharpe": 0.5865374923793256,
+      "max_drawdown_pct": 74.5727848593133,
+      "calmar": 0.1307298823715663,
+      "turnover_pct_of_initial": 30032.904629485485,
+      "transaction_costs": 388685.60967009846,
+      "number_of_trades": 7080,
+      "max_concurrent_positions": 73,
+      "average_concurrent_positions": 40.22738386308068,
+      "unique_symbols_traded": 883,
+      "average_holding_period_days": 109.89067579776795,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 94.31883993734927
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -66.76372596873182
+      },
+      "terminal_equity": 7412149.901555257
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 500,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.74271838322587,
+      "total_return_pct": 992.230252572396,
+      "annualised_volatility_pct": 21.545459363758198,
+      "sharpe": 0.632854758626381,
+      "max_drawdown_pct": 67.3077187691793,
+      "calmar": 0.17446317596196628,
+      "turnover_pct_of_initial": 41651.47474221444,
+      "transaction_costs": 601851.3232868602,
+      "number_of_trades": 17944,
+      "max_concurrent_positions": 133,
+      "average_concurrent_positions": 87.87812676321234,
+      "unique_symbols_traded": 1302,
+      "average_holding_period_days": 98.86722378202751,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 92.3982654840037
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -64.70575743905016
+      },
+      "terminal_equity": 10922302.52572396
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 500,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.035001003643764,
+      "total_return_pct": 852.570164269033,
+      "annualised_volatility_pct": 19.86637340506317,
+      "sharpe": 0.6380683548526033,
+      "max_drawdown_pct": 67.18360304969814,
+      "calmar": 0.16425140216848408,
+      "turnover_pct_of_initial": 36902.75121292846,
+      "transaction_costs": 545117.7179780488,
+      "number_of_trades": 17421,
+      "max_concurrent_positions": 131,
+      "average_concurrent_positions": 86.13691931540342,
+      "unique_symbols_traded": 1275,
+      "average_holding_period_days": 106.62937690737598,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 87.25149832928622
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -65.04145314508085
+      },
+      "terminal_equity": 9525701.642690329
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 500,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 12.933766167993198,
+      "total_return_pct": 1272.3519648000424,
+      "annualised_volatility_pct": 22.784248213821,
+      "sharpe": 0.6551492078509272,
+      "max_drawdown_pct": 66.92758670299995,
+      "calmar": 0.1932501499775945,
+      "turnover_pct_of_initial": 51345.57343469645,
+      "transaction_costs": 709136.939530577,
+      "number_of_trades": 17999,
+      "max_concurrent_positions": 134,
+      "average_concurrent_positions": 88.38141809290954,
+      "unique_symbols_traded": 1298,
+      "average_holding_period_days": 109.1606459244708,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 88.43654981511406
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -64.0756872749936
+      },
+      "terminal_equity": 13723519.648000425
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 500,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.217095025806522,
+      "total_return_pct": 886.7814922794007,
+      "annualised_volatility_pct": 19.491512495071,
+      "sharpe": 0.6547723147986786,
+      "max_drawdown_pct": 65.60941746871521,
+      "calmar": 0.17096775826664234,
+      "turnover_pct_of_initial": 34942.58708447811,
+      "transaction_costs": 596221.092070502,
+      "number_of_trades": 26874,
+      "max_concurrent_positions": 196,
+      "average_concurrent_positions": 136.70772992288886,
+      "unique_symbols_traded": 1392,
+      "average_holding_period_days": 115.60335863171454,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 85.48738508171603
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -62.298423598815056
+      },
+      "terminal_equity": 9867814.922794007
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 500,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.02049802902576,
+      "total_return_pct": 849.8945692067281,
+      "annualised_volatility_pct": 19.17483713735906,
+      "sharpe": 0.6533548752293492,
+      "max_drawdown_pct": 66.29095756470322,
+      "calmar": 0.16624436324168668,
+      "turnover_pct_of_initial": 35302.592203501415,
+      "transaction_costs": 601022.4772031214,
+      "number_of_trades": 26852,
+      "max_concurrent_positions": 193,
+      "average_concurrent_positions": 136.0447620838819,
+      "unique_symbols_traded": 1398,
+      "average_holding_period_days": 118.92027591347015,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 83.64874125488933
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -62.75448094056926
+      },
+      "terminal_equity": 9498945.69206728
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 500,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.540705024096475,
+      "total_return_pct": 950.4911604316567,
+      "annualised_volatility_pct": 19.050896754533408,
+      "sharpe": 0.6814895833337606,
+      "max_drawdown_pct": 65.54572828501331,
+      "calmar": 0.1760710472834154,
+      "turnover_pct_of_initial": 37113.52711166158,
+      "transaction_costs": 618591.1492832369,
+      "number_of_trades": 26729,
+      "max_concurrent_positions": 198,
+      "average_concurrent_positions": 138.64999059620087,
+      "unique_symbols_traded": 1409,
+      "average_holding_period_days": 120.14777279175597,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 82.94788263807166
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -62.05572652205847
+      },
+      "terminal_equity": 10504911.604316566
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 750,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 12.488992623811935,
+      "total_return_pct": 1160.556346263237,
+      "annualised_volatility_pct": 19.454073487453332,
+      "sharpe": 0.7155616993921355,
+      "max_drawdown_pct": 71.08705879229326,
+      "calmar": 0.17568588201550264,
+      "turnover_pct_of_initial": 53512.34575438739,
+      "transaction_costs": 679064.6019301072,
+      "number_of_trades": 11000,
+      "max_concurrent_positions": 104,
+      "average_concurrent_positions": 61.619710362986645,
+      "unique_symbols_traded": 1215,
+      "average_holding_period_days": 88.51698160650521,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 108.50946205095156
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -64.56840260382033
+      },
+      "terminal_equity": 12605563.46263237
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 750,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 12.987842316859744,
+      "total_return_pct": 1286.5717271143194,
+      "annualised_volatility_pct": 19.474927527243036,
+      "sharpe": 0.7382448046159082,
+      "max_drawdown_pct": 72.15331324240772,
+      "calmar": 0.18000340848140303,
+      "turnover_pct_of_initial": 54296.33488791139,
+      "transaction_costs": 688530.5594969143,
+      "number_of_trades": 11014,
+      "max_concurrent_positions": 105,
+      "average_concurrent_positions": 61.91047583223622,
+      "unique_symbols_traded": 1210,
+      "average_holding_period_days": 91.15716596421532,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 109.10813205099478
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -65.99115170132337
+      },
+      "terminal_equity": 13865717.271143194
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 750,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 13.536840440010444,
+      "total_return_pct": 1439.1170101101202,
+      "annualised_volatility_pct": 19.403378279886116,
+      "sharpe": 0.7658092794596493,
+      "max_drawdown_pct": 69.91378243231061,
+      "calmar": 0.19362191500819734,
+      "turnover_pct_of_initial": 61048.70685196323,
+      "transaction_costs": 763998.9149011774,
+      "number_of_trades": 11113,
+      "max_concurrent_positions": 109,
+      "average_concurrent_positions": 64.2646229076547,
+      "unique_symbols_traded": 1226,
+      "average_holding_period_days": 98.46462295363945,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 105.46674661612884
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -64.86867738572172
+      },
+      "terminal_equity": 15391170.101101201
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 750,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 12.56579985319406,
+      "total_return_pct": 1179.2205775604345,
+      "annualised_volatility_pct": 18.554463394338775,
+      "sharpe": 0.7449359398137242,
+      "max_drawdown_pct": 63.91862228905685,
+      "calmar": 0.19659059290058228,
+      "turnover_pct_of_initial": 44675.213795456744,
+      "transaction_costs": 689056.0620675264,
+      "number_of_trades": 24867,
+      "max_concurrent_positions": 204,
+      "average_concurrent_positions": 134.91009968027083,
+      "unique_symbols_traded": 1639,
+      "average_holding_period_days": 112.78186743296203,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 94.56081784703957
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -61.32277946912797
+      },
+      "terminal_equity": 12792205.775604347
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 750,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 12.381128831019318,
+      "total_return_pct": 1134.7832449052391,
+      "annualised_volatility_pct": 18.598832480046532,
+      "sharpe": 0.7346102160961774,
+      "max_drawdown_pct": 65.76342306171996,
+      "calmar": 0.188267706493919,
+      "turnover_pct_of_initial": 42964.29483748065,
+      "transaction_costs": 666791.4985602174,
+      "number_of_trades": 24646,
+      "max_concurrent_positions": 204,
+      "average_concurrent_positions": 132.75869851419975,
+      "unique_symbols_traded": 1626,
+      "average_holding_period_days": 117.15295923814152,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 95.89623896192221
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -63.07371997011254
+      },
+      "terminal_equity": 12347832.449052392
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 750,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 13.59683450644862,
+      "total_return_pct": 1456.7249841164896,
+      "annualised_volatility_pct": 18.901261771231255,
+      "sharpe": 0.7839946880035052,
+      "max_drawdown_pct": 65.63729767739423,
+      "calmar": 0.20715104045380933,
+      "turnover_pct_of_initial": 53956.48885735035,
+      "transaction_costs": 792969.0655183622,
+      "number_of_trades": 25287,
+      "max_concurrent_positions": 206,
+      "average_concurrent_positions": 134.7613315779575,
+      "unique_symbols_traded": 1644,
+      "average_holding_period_days": 108.30040481633301,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 96.0976284086618
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -62.808296708724875
+      },
+      "terminal_equity": 15567249.841164896
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 750,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.594044076731835,
+      "total_return_pct": 961.3615822281174,
+      "annualised_volatility_pct": 18.097784450545362,
+      "sharpe": 0.7101617190938455,
+      "max_drawdown_pct": 64.34692021782537,
+      "calmar": 0.18018024852602121,
+      "turnover_pct_of_initial": 34558.98585406624,
+      "transaction_costs": 676383.0459764656,
+      "number_of_trades": 38085,
+      "max_concurrent_positions": 294,
+      "average_concurrent_positions": 206.54824148956178,
+      "unique_symbols_traded": 1808,
+      "average_holding_period_days": 125.62649949536596,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 86.88862961661887
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -60.79350637458399
+      },
+      "terminal_equity": 10613615.822281174
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 750,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.93940932893569,
+      "total_return_pct": 1034.3858397736726,
+      "annualised_volatility_pct": 18.237626848823435,
+      "sharpe": 0.7233822806687411,
+      "max_drawdown_pct": 65.52828009230976,
+      "calmar": 0.18220239127467763,
+      "turnover_pct_of_initial": 37440.61198123287,
+      "transaction_costs": 708812.192769809,
+      "number_of_trades": 37964,
+      "max_concurrent_positions": 298,
+      "average_concurrent_positions": 208.00808726725597,
+      "unique_symbols_traded": 1826,
+      "average_holding_period_days": 127.77999223315,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 85.80300499406918
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -61.69204819455242
+      },
+      "terminal_equity": 11343858.397736726
+    },
+    {
+      "round_trip_cost_pct": 0.0,
+      "universe_size": 750,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 18.921106115883113,
+      "total_return_pct": 4074.125857876073,
+      "annualised_volatility_pct": 45.27952589549067,
+      "sharpe": 0.5180302318907898,
+      "max_drawdown_pct": 65.63083315707799,
+      "calmar": 0.2882959914678846,
+      "turnover_pct_of_initial": 128437.90763745364,
+      "transaction_costs": 1745922.1488752947,
+      "number_of_trades": 41584,
+      "max_concurrent_positions": 302,
+      "average_concurrent_positions": 215.5980816249765,
+      "unique_symbols_traded": 1865,
+      "average_holding_period_days": 118.00911901399027,
+      "best_calendar_year": {
+        "year": 2011,
+        "return_pct": 127.37760588000629
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -61.592793936202895
+      },
+      "terminal_equity": 41741258.57876073
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 300,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 14.67786349513287,
+      "total_return_pct": 1808.9113722441803,
+      "annualised_volatility_pct": 29.6494958394372,
+      "sharpe": 0.6043422832822947,
+      "max_drawdown_pct": 71.23875988267221,
+      "calmar": 0.20603760536127816,
+      "turnover_pct_of_initial": 86654.12161901052,
+      "transaction_costs": 1437747.912651847,
+      "number_of_trades": 5306,
+      "max_concurrent_positions": 44,
+      "average_concurrent_positions": 26.497084822268196,
+      "unique_symbols_traded": 655,
+      "average_holding_period_days": 84.66438725098423,
+      "best_calendar_year": {
+        "year": 2012,
+        "return_pct": 115.24594504087288
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -69.35729026806166
+      },
+      "terminal_equity": 19089113.7224418
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 300,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 14.282522870991453,
+      "total_return_pct": 1672.1106523132548,
+      "annualised_volatility_pct": 25.894694197148887,
+      "sharpe": 0.6474735491332,
+      "max_drawdown_pct": 74.18014766000825,
+      "calmar": 0.19253834511698337,
+      "turnover_pct_of_initial": 63627.94334920218,
+      "transaction_costs": 1063002.3088385484,
+      "number_of_trades": 4885,
+      "max_concurrent_positions": 45,
+      "average_concurrent_positions": 26.081248824525108,
+      "unique_symbols_traded": 632,
+      "average_holding_period_days": 91.63698050433646,
+      "best_calendar_year": {
+        "year": 2012,
+        "return_pct": 99.16376931373063
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -68.5738339345326
+      },
+      "terminal_equity": 17721106.523132548
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 300,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 13.458730312216826,
+      "total_return_pct": 1416.4765047569033,
+      "annualised_volatility_pct": 27.010481574464904,
+      "sharpe": 0.6025720468841145,
+      "max_drawdown_pct": 72.41337121153597,
+      "calmar": 0.18585973953485477,
+      "turnover_pct_of_initial": 59305.50686829336,
+      "transaction_costs": 995442.270586827,
+      "number_of_trades": 5116,
+      "max_concurrent_positions": 43,
+      "average_concurrent_positions": 25.585104382170396,
+      "unique_symbols_traded": 667,
+      "average_holding_period_days": 90.536089533597,
+      "best_calendar_year": {
+        "year": 2012,
+        "return_pct": 114.55877592902466
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -70.43678775673658
+      },
+      "terminal_equity": 15164765.047569033
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 300,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.999736005904138,
+      "total_return_pct": 1047.6231693926666,
+      "annualised_volatility_pct": 23.21771020052545,
+      "sharpe": 0.6134201657488073,
+      "max_drawdown_pct": 69.62555522593158,
+      "calmar": 0.17234671905977011,
+      "turnover_pct_of_initial": 42660.23409979844,
+      "transaction_costs": 775888.7309900356,
+      "number_of_trades": 11509,
+      "max_concurrent_positions": 80,
+      "average_concurrent_positions": 53.17171337220237,
+      "unique_symbols_traded": 865,
+      "average_holding_period_days": 100.36030903699078,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 91.3004738629678
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -66.96496106327399
+      },
+      "terminal_equity": 11476231.693926666
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 300,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 13.3753646920151,
+      "total_return_pct": 1392.6631570737045,
+      "annualised_volatility_pct": 23.302464763332583,
+      "sharpe": 0.6646981031044517,
+      "max_drawdown_pct": 68.86663449077895,
+      "calmar": 0.194221262457744,
+      "turnover_pct_of_initial": 53682.977516773986,
+      "transaction_costs": 953903.7424454009,
+      "number_of_trades": 11426,
+      "max_concurrent_positions": 80,
+      "average_concurrent_positions": 52.31577957494828,
+      "unique_symbols_traded": 879,
+      "average_holding_period_days": 99.6750529512954,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 99.7611038775224
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -67.26770560284132
+      },
+      "terminal_equity": 14926631.570737045
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 300,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 14.029593134862473,
+      "total_return_pct": 1589.5483997273225,
+      "annualised_volatility_pct": 29.36418929860191,
+      "sharpe": 0.5852262026690457,
+      "max_drawdown_pct": 69.42139427344618,
+      "calmar": 0.20209322042137115,
+      "turnover_pct_of_initial": 60549.758055558814,
+      "transaction_costs": 1066705.4567994075,
+      "number_of_trades": 11736,
+      "max_concurrent_positions": 80,
+      "average_concurrent_positions": 52.935489937934925,
+      "unique_symbols_traded": 883,
+      "average_holding_period_days": 100.8702012930503,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 91.15185739474553
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -65.62294142185483
+      },
+      "terminal_equity": 16895483.997273225
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 300,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 12.29189769336443,
+      "total_return_pct": 1113.8428003878957,
+      "annualised_volatility_pct": 22.355897760616,
+      "sharpe": 0.6394448136402985,
+      "max_drawdown_pct": 67.86079501266546,
+      "calmar": 0.18113400662444762,
+      "turnover_pct_of_initial": 42464.96904743581,
+      "transaction_costs": 821170.3838568485,
+      "number_of_trades": 17585,
+      "max_concurrent_positions": 119,
+      "average_concurrent_positions": 82.42937746849728,
+      "unique_symbols_traded": 944,
+      "average_holding_period_days": 113.64501831195449,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 87.58752317990594
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -63.04935372458915
+      },
+      "terminal_equity": 12138428.003878957
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 300,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.797917991450158,
+      "total_return_pct": 1003.9075817940347,
+      "annualised_volatility_pct": 21.408290562712576,
+      "sharpe": 0.6386288791748049,
+      "max_drawdown_pct": 66.94816027223793,
+      "calmar": 0.1762246780714379,
+      "turnover_pct_of_initial": 39168.66722339915,
+      "transaction_costs": 766402.7441424008,
+      "number_of_trades": 17320,
+      "max_concurrent_positions": 119,
+      "average_concurrent_positions": 82.60955425992101,
+      "unique_symbols_traded": 941,
+      "average_holding_period_days": 112.60612763324718,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 89.80744383231078
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -63.52610332327142
+      },
+      "terminal_equity": 11039075.817940347
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 300,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.95336636863269,
+      "total_return_pct": 1037.435388863062,
+      "annualised_volatility_pct": 24.187691324975308,
+      "sharpe": 0.592278974016068,
+      "max_drawdown_pct": 68.38540693893488,
+      "calmar": 0.17479411037659706,
+      "turnover_pct_of_initial": 40986.425427164926,
+      "transaction_costs": 798031.6642484185,
+      "number_of_trades": 17649,
+      "max_concurrent_positions": 117,
+      "average_concurrent_positions": 82.73594132029339,
+      "unique_symbols_traded": 945,
+      "average_holding_period_days": 113.4331881783417,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 83.19999794361392
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -63.74245595693502
+      },
+      "terminal_equity": 11374353.88863062
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 500,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 6.751847677366207,
+      "total_return_pct": 308.33167965027934,
+      "annualised_volatility_pct": 18.541667997914065,
+      "sharpe": 0.4526580583389291,
+      "max_drawdown_pct": 79.07229846561358,
+      "calmar": 0.08538828146373416,
+      "turnover_pct_of_initial": 18121.753622427703,
+      "transaction_costs": 341783.0833123959,
+      "number_of_trades": 6459,
+      "max_concurrent_positions": 65,
+      "average_concurrent_positions": 36.75757005830356,
+      "unique_symbols_traded": 821,
+      "average_holding_period_days": 95.06316557098104,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 101.81432016414114
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -67.18023622942007
+      },
+      "terminal_equity": 4083316.796502793
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 500,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 7.607297023115778,
+      "total_return_pct": 384.9021015302058,
+      "annualised_volatility_pct": 18.442800780641488,
+      "sharpe": 0.49849916156104623,
+      "max_drawdown_pct": 77.9139803998643,
+      "calmar": 0.0976371247377451,
+      "turnover_pct_of_initial": 20776.818082202673,
+      "transaction_costs": 385305.27874368645,
+      "number_of_trades": 6514,
+      "max_concurrent_positions": 68,
+      "average_concurrent_positions": 38.54504419785594,
+      "unique_symbols_traded": 827,
+      "average_holding_period_days": 114.60237631605004,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 91.15797573346633
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -66.57110110049788
+      },
+      "terminal_equity": 4849021.015302058
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 500,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 9.489637109169191,
+      "total_return_pct": 604.4122429573498,
+      "annualised_volatility_pct": 19.379362241473196,
+      "sharpe": 0.5750137823596972,
+      "max_drawdown_pct": 74.60046275031198,
+      "calmar": 0.12720614268749297,
+      "turnover_pct_of_initial": 28892.339827712072,
+      "transaction_costs": 520182.25687782513,
+      "number_of_trades": 7054,
+      "max_concurrent_positions": 71,
+      "average_concurrent_positions": 39.499529810043256,
+      "unique_symbols_traded": 881,
+      "average_holding_period_days": 110.73355178493914,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 93.64211808289171
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -66.7850294212772
+      },
+      "terminal_equity": 7044122.429573499
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 500,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.384808523997659,
+      "total_return_pct": 919.3249428207661,
+      "annualised_volatility_pct": 22.351925168499314,
+      "sharpe": 0.6018308991867442,
+      "max_drawdown_pct": 67.44284537148732,
+      "calmar": 0.16880676462103703,
+      "turnover_pct_of_initial": 39614.066101621676,
+      "transaction_costs": 777180.0569341221,
+      "number_of_trades": 17921,
+      "max_concurrent_positions": 132,
+      "average_concurrent_positions": 87.28004513823585,
+      "unique_symbols_traded": 1301,
+      "average_holding_period_days": 99.11092365560701,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 91.70670238617922
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -64.84730980056368
+      },
+      "terminal_equity": 10193249.428207662
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 500,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 10.714823307278,
+      "total_return_pct": 795.1412211890508,
+      "annualised_volatility_pct": 19.800593659912618,
+      "sharpe": 0.6246285958195582,
+      "max_drawdown_pct": 67.30616641597639,
+      "calmar": 0.15919526958431301,
+      "turnover_pct_of_initial": 35101.40648379127,
+      "transaction_costs": 700699.0232989495,
+      "number_of_trades": 17383,
+      "max_concurrent_positions": 134,
+      "average_concurrent_positions": 87.76057927402671,
+      "unique_symbols_traded": 1275,
+      "average_holding_period_days": 107.11730225251536,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 86.80531554676412
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -65.18126208961958
+      },
+      "terminal_equity": 8951412.211890507
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 500,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 12.552349120596329,
+      "total_return_pct": 1175.933115713624,
+      "annualised_volatility_pct": 21.47923481625671,
+      "sharpe": 0.6681020823522651,
+      "max_drawdown_pct": 66.92879599586485,
+      "calmar": 0.18754781008419558,
+      "turnover_pct_of_initial": 48401.544017529304,
+      "transaction_costs": 918053.9448988566,
+      "number_of_trades": 17946,
+      "max_concurrent_positions": 134,
+      "average_concurrent_positions": 88.06112469437653,
+      "unique_symbols_traded": 1290,
+      "average_holding_period_days": 109.37544400557351,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 87.68700704588058
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -64.09041073370368
+      },
+      "terminal_equity": 12759331.15713624
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 500,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 10.941038599722708,
+      "total_return_pct": 835.3621427732409,
+      "annualised_volatility_pct": 19.518313840424987,
+      "sharpe": 0.6410463787967087,
+      "max_drawdown_pct": 65.71938388018228,
+      "calmar": 0.16648114990959287,
+      "turnover_pct_of_initial": 33679.9594976178,
+      "transaction_costs": 750410.9789668407,
+      "number_of_trades": 26786,
+      "max_concurrent_positions": 195,
+      "average_concurrent_positions": 136.4461162309573,
+      "unique_symbols_traded": 1394,
+      "average_holding_period_days": 115.98995781749392,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 84.58863497476665
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -62.40173028579069
+      },
+      "terminal_equity": 9353621.427732408
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 500,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 10.701391344719745,
+      "total_return_pct": 792.8056510368474,
+      "annualised_volatility_pct": 19.136818032173725,
+      "sharpe": 0.6388865131533069,
+      "max_drawdown_pct": 66.41558750103324,
+      "calmar": 0.161127707325532,
+      "turnover_pct_of_initial": 33646.54445012066,
+      "transaction_costs": 749744.5063264018,
+      "number_of_trades": 26713,
+      "max_concurrent_positions": 193,
+      "average_concurrent_positions": 135.20387436524356,
+      "unique_symbols_traded": 1398,
+      "average_holding_period_days": 119.66107889996911,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 83.12843195226871
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -62.85933715686236
+      },
+      "terminal_equity": 8928056.510368474
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 500,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.231413465498719,
+      "total_return_pct": 889.5207177268785,
+      "annualised_volatility_pct": 18.97693053713293,
+      "sharpe": 0.6684594495450458,
+      "max_drawdown_pct": 65.63675922539672,
+      "calmar": 0.1711146863136559,
+      "turnover_pct_of_initial": 35246.71613411266,
+      "transaction_costs": 773675.3453212498,
+      "number_of_trades": 26603,
+      "max_concurrent_positions": 197,
+      "average_concurrent_positions": 137.54974609742337,
+      "unique_symbols_traded": 1398,
+      "average_holding_period_days": 120.54169490147183,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 82.137841249902
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -62.09993980572918
+      },
+      "terminal_equity": 9895207.177268786
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 750,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 12.15835096868705,
+      "total_return_pct": 1083.1340753529819,
+      "annualised_volatility_pct": 19.425023551148303,
+      "sharpe": 0.7008621140241165,
+      "max_drawdown_pct": 71.19083200669414,
+      "calmar": 0.17078534729786257,
+      "turnover_pct_of_initial": 50950.07496983726,
+      "transaction_costs": 905399.4716588435,
+      "number_of_trades": 11006,
+      "max_concurrent_positions": 103,
+      "average_concurrent_positions": 61.78371261989844,
+      "unique_symbols_traded": 1214,
+      "average_holding_period_days": 88.606063778505,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 107.72464402402568
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -64.67058216034883
+      },
+      "terminal_equity": 11831340.753529819
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 750,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 12.625631063830633,
+      "total_return_pct": 1193.9419030304705,
+      "annualised_volatility_pct": 19.391547671474346,
+      "sharpe": 0.7236648667470614,
+      "max_drawdown_pct": 72.26209698960544,
+      "calmar": 0.17471996509659513,
+      "turnover_pct_of_initial": 51267.719122125694,
+      "transaction_costs": 910758.2745296223,
+      "number_of_trades": 10951,
+      "max_concurrent_positions": 105,
+      "average_concurrent_positions": 62.179424487492945,
+      "unique_symbols_traded": 1206,
+      "average_holding_period_days": 91.17718724341631,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 108.5640329948192
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -66.0815348471789
+      },
+      "terminal_equity": 12939419.030304706
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 750,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 13.159014436854788,
+      "total_return_pct": 1332.5149045121366,
+      "annualised_volatility_pct": 19.295607404807775,
+      "sharpe": 0.7513488763631336,
+      "max_drawdown_pct": 70.07940412664122,
+      "calmar": 0.18777292131472745,
+      "turnover_pct_of_initial": 57335.32960324236,
+      "transaction_costs": 1008969.5272070458,
+      "number_of_trades": 11053,
+      "max_concurrent_positions": 108,
+      "average_concurrent_positions": 63.21760391198044,
+      "unique_symbols_traded": 1212,
+      "average_holding_period_days": 99.05710471029921,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 104.73311864844499
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -64.95971403013856
+      },
+      "terminal_equity": 14325149.045121366
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 750,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 12.317996683271826,
+      "total_return_pct": 1119.932317574852,
+      "annualised_volatility_pct": 18.525580248152355,
+      "sharpe": 0.7336563338049509,
+      "max_drawdown_pct": 64.04074454297198,
+      "calmar": 0.1923462441166081,
+      "turnover_pct_of_initial": 43210.83232035505,
+      "transaction_costs": 888801.7363111468,
+      "number_of_trades": 24859,
+      "max_concurrent_positions": 205,
+      "average_concurrent_positions": 134.6473575324431,
+      "unique_symbols_traded": 1629,
+      "average_holding_period_days": 113.0988688028716,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 93.91688192887364
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -61.43823679348061
+      },
+      "terminal_equity": 12199323.17574852
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 750,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 12.159494579760999,
+      "total_return_pct": 1083.3938726721574,
+      "annualised_volatility_pct": 18.556177636351524,
+      "sharpe": 0.725001255009604,
+      "max_drawdown_pct": 65.84831222956848,
+      "calmar": 0.1846591684441216,
+      "turnover_pct_of_initial": 41596.239842487645,
+      "transaction_costs": 859070.9284046221,
+      "number_of_trades": 24575,
+      "max_concurrent_positions": 203,
+      "average_concurrent_positions": 132.80609366183938,
+      "unique_symbols_traded": 1623,
+      "average_holding_period_days": 117.54233059232028,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 95.36880234050325
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -63.12950863291612
+      },
+      "terminal_equity": 11833938.726721574
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 750,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 13.164548486347982,
+      "total_return_pct": 1334.0242185217949,
+      "annualised_volatility_pct": 18.82481470039622,
+      "sharpe": 0.7657164917129348,
+      "max_drawdown_pct": 65.70558653078041,
+      "calmar": 0.2003566086451557,
+      "turnover_pct_of_initial": 50463.0477758688,
+      "transaction_costs": 1005446.8964184205,
+      "number_of_trades": 25096,
+      "max_concurrent_positions": 199,
+      "average_concurrent_positions": 134.09892796689863,
+      "unique_symbols_traded": 1637,
+      "average_holding_period_days": 109.09761973460348,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 95.23079871851965
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -62.90795402497776
+      },
+      "terminal_equity": 14340242.185217947
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 750,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.307282125683681,
+      "total_return_pct": 904.1563811768337,
+      "annualised_volatility_pct": 18.04626749877622,
+      "sharpe": 0.6971071648331281,
+      "max_drawdown_pct": 64.28008540461603,
+      "calmar": 0.1759064577234008,
+      "turnover_pct_of_initial": 33146.38043999377,
+      "transaction_costs": 825518.0507169866,
+      "number_of_trades": 37884,
+      "max_concurrent_positions": 296,
+      "average_concurrent_positions": 206.5595260485236,
+      "unique_symbols_traded": 1804,
+      "average_holding_period_days": 126.00576201453971,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 86.04416150880287
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -60.74675981388009
+      },
+      "terminal_equity": 10041563.811768338
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 750,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.68468623843204,
+      "total_return_pct": 980.0807591960013,
+      "annualised_volatility_pct": 18.201090446016497,
+      "sharpe": 0.7116762259659503,
+      "max_drawdown_pct": 65.5058262158142,
+      "calmar": 0.17837628976598058,
+      "turnover_pct_of_initial": 36120.29948781545,
+      "transaction_costs": 874722.5328458067,
+      "number_of_trades": 37889,
+      "max_concurrent_positions": 296,
+      "average_concurrent_positions": 206.9067143125823,
+      "unique_symbols_traded": 1816,
+      "average_holding_period_days": 128.36029536022266,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 85.12453962855464
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -61.66078100650254
+      },
+      "terminal_equity": 10800807.591960013
+    },
+    {
+      "round_trip_cost_pct": 0.1,
+      "universe_size": 750,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 18.5528715568394,
+      "total_return_pct": 3804.4807933832985,
+      "annualised_volatility_pct": 45.263914085753505,
+      "sharpe": 0.5110649638813759,
+      "max_drawdown_pct": 65.73005588744441,
+      "calmar": 0.2822585696353154,
+      "turnover_pct_of_initial": 121607.276769729,
+      "transaction_costs": 2277587.6243755203,
+      "number_of_trades": 41475,
+      "max_concurrent_positions": 306,
+      "average_concurrent_positions": 216.81079556140682,
+      "unique_symbols_traded": 1869,
+      "average_holding_period_days": 118.30061556045453,
+      "best_calendar_year": {
+        "year": 2011,
+        "return_pct": 126.94955257311551
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -61.7016488195605
+      },
+      "terminal_equity": 39044807.93383299
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 300,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 14.071986427359494,
+      "total_return_pct": 1603.1258181512349,
+      "annualised_volatility_pct": 29.562949519426322,
+      "sharpe": 0.586984925842972,
+      "max_drawdown_pct": 71.32979376477516,
+      "calmar": 0.19728062685509506,
+      "turnover_pct_of_initial": 79228.32267457094,
+      "transaction_costs": 1912196.8167975014,
+      "number_of_trades": 5275,
+      "max_concurrent_positions": 44,
+      "average_concurrent_positions": 26.409065262365996,
+      "unique_symbols_traded": 658,
+      "average_holding_period_days": 85.28566811408375,
+      "best_calendar_year": {
+        "year": 2012,
+        "return_pct": 113.73262552511325
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -69.47325281526471
+      },
+      "terminal_equity": 17031258.18151235
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 300,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 13.55249410454682,
+      "total_return_pct": 1443.6928857537414,
+      "annualised_volatility_pct": 25.771892902492983,
+      "sharpe": 0.6239288561850065,
+      "max_drawdown_pct": 74.36784947869478,
+      "calmar": 0.18223592855713,
+      "turnover_pct_of_initial": 56753.29866267152,
+      "transaction_costs": 1377802.8964786592,
+      "number_of_trades": 4866,
+      "max_concurrent_positions": 44,
+      "average_concurrent_positions": 25.70490878314839,
+      "unique_symbols_traded": 630,
+      "average_holding_period_days": 92.60083341660578,
+      "best_calendar_year": {
+        "year": 2012,
+        "return_pct": 97.64066734426552
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -68.7068004891203
+      },
+      "terminal_equity": 15436928.857537413
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 300,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 12.768519180086034,
+      "total_return_pct": 1229.755571815795,
+      "annualised_volatility_pct": 26.871757345367314,
+      "sharpe": 0.5810930417023088,
+      "max_drawdown_pct": 72.46146963504293,
+      "calmar": 0.1762111539331943,
+      "turnover_pct_of_initial": 53082.09370814022,
+      "transaction_costs": 1292723.5114299627,
+      "number_of_trades": 5069,
+      "max_concurrent_positions": 44,
+      "average_concurrent_positions": 25.806469813804778,
+      "unique_symbols_traded": 663,
+      "average_holding_period_days": 91.68855185362278,
+      "best_calendar_year": {
+        "year": 2012,
+        "return_pct": 112.93546141681206
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -70.48630903912492
+      },
+      "terminal_equity": 13297555.718157953
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 300,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.419460854830055,
+      "total_return_pct": 926.1753339444926,
+      "annualised_volatility_pct": 22.54933490882704,
+      "sharpe": 0.602104743248081,
+      "max_drawdown_pct": 69.70361961335274,
+      "calmar": 0.16382880714335946,
+      "turnover_pct_of_initial": 38955.70521652065,
+      "transaction_costs": 1008006.0526078928,
+      "number_of_trades": 11421,
+      "max_concurrent_positions": 80,
+      "average_concurrent_positions": 53.02444987775061,
+      "unique_symbols_traded": 864,
+      "average_holding_period_days": 100.75905084430131,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 90.19234463314967
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -67.09153497082904
+      },
+      "terminal_equity": 10261753.339444926
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 300,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 12.64429191206624,
+      "total_return_pct": 1198.5663132737996,
+      "annualised_volatility_pct": 22.97796878603939,
+      "sharpe": 0.6425980542649906,
+      "max_drawdown_pct": 68.92662169130655,
+      "calmar": 0.18344569343170083,
+      "turnover_pct_of_initial": 47853.63296949161,
+      "transaction_costs": 1218386.0057348702,
+      "number_of_trades": 11356,
+      "max_concurrent_positions": 82,
+      "average_concurrent_positions": 52.98438969343615,
+      "unique_symbols_traded": 879,
+      "average_holding_period_days": 100.4923601109748,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 98.23658313495267
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -67.343052643732
+      },
+      "terminal_equity": 12985663.132737996
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 300,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 13.316955919720819,
+      "total_return_pct": 1376.1916142807577,
+      "annualised_volatility_pct": 29.405538783983072,
+      "sharpe": 0.5627044492538943,
+      "max_drawdown_pct": 69.60169212042115,
+      "calmar": 0.1913309219074808,
+      "turnover_pct_of_initial": 54718.750277145606,
+      "transaction_costs": 1382633.1315341638,
+      "number_of_trades": 11670,
+      "max_concurrent_positions": 80,
+      "average_concurrent_positions": 52.87906714312582,
+      "unique_symbols_traded": 883,
+      "average_holding_period_days": 101.27647305336177,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 90.10921235112433
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -65.8216720447662
+      },
+      "terminal_equity": 14761916.142807577
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 300,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.394192648944257,
+      "total_return_pct": 921.1757648602619,
+      "annualised_volatility_pct": 23.356324387987478,
+      "sharpe": 0.5844180804696438,
+      "max_drawdown_pct": 67.89435725259952,
+      "calmar": 0.16782238038652322,
+      "turnover_pct_of_initial": 36626.94221265827,
+      "transaction_costs": 1000384.8502325017,
+      "number_of_trades": 17402,
+      "max_concurrent_positions": 118,
+      "average_concurrent_positions": 82.2770359225127,
+      "unique_symbols_traded": 942,
+      "average_holding_period_days": 114.64065259192402,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 87.20623481174177
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -63.13711978619134
+      },
+      "terminal_equity": 10211757.64860262
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 300,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.167697134426668,
+      "total_return_pct": 877.3866996689226,
+      "annualised_volatility_pct": 21.260497088730563,
+      "sharpe": 0.6146059532689039,
+      "max_drawdown_pct": 67.13168140031958,
+      "calmar": 0.16635509347414476,
+      "turnover_pct_of_initial": 35507.78386666247,
+      "transaction_costs": 972884.0811760396,
+      "number_of_trades": 17183,
+      "max_concurrent_positions": 118,
+      "average_concurrent_positions": 82.19240173029904,
+      "unique_symbols_traded": 939,
+      "average_holding_period_days": 113.27223849870667,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 88.88299540055249
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -63.703151890949236
+      },
+      "terminal_equity": 9773866.996689225
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 300,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.471892961381247,
+      "total_return_pct": 936.6241212435408,
+      "annualised_volatility_pct": 24.17061561518849,
+      "sharpe": 0.5743008543987655,
+      "max_drawdown_pct": 68.48476241047223,
+      "calmar": 0.16751015200466027,
+      "turnover_pct_of_initial": 38222.58265768736,
+      "transaction_costs": 1039809.6599983065,
+      "number_of_trades": 17550,
+      "max_concurrent_positions": 117,
+      "average_concurrent_positions": 82.54429189392515,
+      "unique_symbols_traded": 943,
+      "average_holding_period_days": 114.0142368219415,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 82.5842741756003
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -63.91631962745683
+      },
+      "terminal_equity": 10366241.212435408
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 500,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 6.332113524654637,
+      "total_return_pct": 275.1204663483312,
+      "annualised_volatility_pct": 18.364978487783997,
+      "sharpe": 0.43332023417943194,
+      "max_drawdown_pct": 79.10414814953785,
+      "calmar": 0.08004780625011547,
+      "turnover_pct_of_initial": 16850.2431592933,
+      "transaction_costs": 447173.99919503136,
+      "number_of_trades": 6381,
+      "max_concurrent_positions": 65,
+      "average_concurrent_positions": 36.55294338912921,
+      "unique_symbols_traded": 819,
+      "average_holding_period_days": 96.36602554626474,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 100.21909496616139
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -67.2455670115095
+      },
+      "terminal_equity": 3751204.6634833124
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 500,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 7.042539466780862,
+      "total_return_pct": 332.9560842532197,
+      "annualised_volatility_pct": 18.309631603153775,
+      "sharpe": 0.4714337199310283,
+      "max_drawdown_pct": 77.91597901327809,
+      "calmar": 0.09038633096788405,
+      "turnover_pct_of_initial": 19363.99163997566,
+      "transaction_costs": 507703.91373073426,
+      "number_of_trades": 6461,
+      "max_concurrent_positions": 67,
+      "average_concurrent_positions": 37.892796689862706,
+      "unique_symbols_traded": 826,
+      "average_holding_period_days": 115.56220722976755,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 90.37461787887808
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -66.59687173962108
+      },
+      "terminal_equity": 4329560.842532197
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 500,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 9.0170406695097,
+      "total_return_pct": 541.7620572352489,
+      "annualised_volatility_pct": 19.249792289979204,
+      "sharpe": 0.5546226868162194,
+      "max_drawdown_pct": 74.69882531322645,
+      "calmar": 0.1207119473659663,
+      "turnover_pct_of_initial": 26737.519377817593,
+      "transaction_costs": 685461.0037808735,
+      "number_of_trades": 6979,
+      "max_concurrent_positions": 72,
+      "average_concurrent_positions": 39.46285499341734,
+      "unique_symbols_traded": 868,
+      "average_holding_period_days": 111.9840049295264,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 92.53452766569114
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -66.85650688746637
+      },
+      "terminal_equity": 6417620.572352489
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 500,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 10.85036403127788,
+      "total_return_pct": 819.0375839924119,
+      "annualised_volatility_pct": 21.299776316329027,
+      "sharpe": 0.5993901401130426,
+      "max_drawdown_pct": 67.7055920017346,
+      "calmar": 0.1602580187320406,
+      "turnover_pct_of_initial": 36501.385274281674,
+      "transaction_costs": 1000587.5886910211,
+      "number_of_trades": 17867,
+      "max_concurrent_positions": 133,
+      "average_concurrent_positions": 87.19616324995297,
+      "unique_symbols_traded": 1293,
+      "average_holding_period_days": 99.64197378906027,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 90.90448831861875
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -65.08635016062117
+      },
+      "terminal_equity": 9190375.83992412
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 500,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 10.29286866147352,
+      "total_return_pct": 724.4839869908961,
+      "annualised_volatility_pct": 19.76886052322739,
+      "sharpe": 0.6055843825252717,
+      "max_drawdown_pct": 67.41974219324413,
+      "calmar": 0.15266846663357497,
+      "turnover_pct_of_initial": 33057.267855995626,
+      "transaction_costs": 914967.312693631,
+      "number_of_trades": 17269,
+      "max_concurrent_positions": 131,
+      "average_concurrent_positions": 86.25032913296972,
+      "unique_symbols_traded": 1272,
+      "average_holding_period_days": 107.38190975567481,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 86.01256893747097
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -65.31059568012148
+      },
+      "terminal_equity": 8244839.869908962
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 500,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 12.065541541680002,
+      "total_return_pct": 1062.2306422615204,
+      "annualised_volatility_pct": 21.1055969132625,
+      "sharpe": 0.6558138872121138,
+      "max_drawdown_pct": 67.04735901142408,
+      "calmar": 0.1799555078616024,
+      "turnover_pct_of_initial": 45137.593956777535,
+      "transaction_costs": 1203859.1343756334,
+      "number_of_trades": 17913,
+      "max_concurrent_positions": 135,
+      "average_concurrent_positions": 89.10137295467369,
+      "unique_symbols_traded": 1299,
+      "average_holding_period_days": 109.51917789104758,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 86.2306742931556
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -64.25702015246588
+      },
+      "terminal_equity": 11622306.422615204
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 500,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 10.251964425890826,
+      "total_return_pct": 717.9246670252038,
+      "annualised_volatility_pct": 19.26342285557483,
+      "sharpe": 0.6141900237181309,
+      "max_drawdown_pct": 65.97070784805027,
+      "calmar": 0.15540176481816873,
+      "turnover_pct_of_initial": 30198.710436483732,
+      "transaction_costs": 919441.1704421265,
+      "number_of_trades": 26581,
+      "max_concurrent_positions": 194,
+      "average_concurrent_positions": 136.73387248448373,
+      "unique_symbols_traded": 1394,
+      "average_holding_period_days": 116.76043856849707,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 84.07815727679515
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -62.67235175748892
+      },
+      "terminal_equity": 8179246.670252037
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 500,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 10.200268143825353,
+      "total_return_pct": 709.7059226791137,
+      "annualised_volatility_pct": 19.018709609294167,
+      "sharpe": 0.6173127162589667,
+      "max_drawdown_pct": 66.56267052004262,
+      "calmar": 0.15324307249292168,
+      "turnover_pct_of_initial": 31091.18576025114,
+      "transaction_costs": 940596.9103153195,
+      "number_of_trades": 26439,
+      "max_concurrent_positions": 191,
+      "average_concurrent_positions": 133.93849915365809,
+      "unique_symbols_traded": 1390,
+      "average_holding_period_days": 120.4731912848947,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 82.56574510992152
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -62.99388266821676
+      },
+      "terminal_equity": 8097059.226791137
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 500,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 10.734023008096138,
+      "total_return_pct": 798.489812512889,
+      "annualised_volatility_pct": 18.903209659672626,
+      "sharpe": 0.6461077011549254,
+      "max_drawdown_pct": 65.74534092991871,
+      "calmar": 0.16326667192338506,
+      "turnover_pct_of_initial": 32736.12660502261,
+      "transaction_costs": 977458.2302733631,
+      "number_of_trades": 26419,
+      "max_concurrent_positions": 195,
+      "average_concurrent_positions": 137.39157419597518,
+      "unique_symbols_traded": 1393,
+      "average_holding_period_days": 121.16250603000563,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 81.5281039282478
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -62.22767032592087
+      },
+      "terminal_equity": 8984898.12512889
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 750,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.598967266850435,
+      "total_return_pct": 962.3703104562237,
+      "annualised_volatility_pct": 19.30299369672569,
+      "sharpe": 0.6775982646734271,
+      "max_drawdown_pct": 71.24843261554463,
+      "calmar": 0.1627961042938063,
+      "turnover_pct_of_initial": 46722.43272062553,
+      "transaction_costs": 1186649.169378002,
+      "number_of_trades": 10850,
+      "max_concurrent_positions": 104,
+      "average_concurrent_positions": 60.79951100244499,
+      "unique_symbols_traded": 1196,
+      "average_holding_period_days": 89.02880114631428,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 106.65979099582815
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -64.73409653647154
+      },
+      "terminal_equity": 10623703.104562238
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 750,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 12.15570642129904,
+      "total_return_pct": 1082.5335144225835,
+      "annualised_volatility_pct": 19.287510831591405,
+      "sharpe": 0.7043753191695211,
+      "max_drawdown_pct": 72.45350440773679,
+      "calmar": 0.1677725117737855,
+      "turnover_pct_of_initial": 47653.26579022132,
+      "transaction_costs": 1209206.6876186575,
+      "number_of_trades": 10866,
+      "max_concurrent_positions": 105,
+      "average_concurrent_positions": 62.007334963325185,
+      "unique_symbols_traded": 1201,
+      "average_holding_period_days": 91.26163925859426,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 107.28569980644367
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -66.27345192807317
+      },
+      "terminal_equity": 11825335.144225836
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 750,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 12.481929207797315,
+      "total_return_pct": 1158.8530288933055,
+      "annualised_volatility_pct": 19.15856181623532,
+      "sharpe": 0.7233399673545519,
+      "max_drawdown_pct": 70.31661505516733,
+      "calmar": 0.17751038211956793,
+      "turnover_pct_of_initial": 51672.73119119574,
+      "transaction_costs": 1304222.0887184285,
+      "number_of_trades": 10903,
+      "max_concurrent_positions": 106,
+      "average_concurrent_positions": 61.8803836750047,
+      "unique_symbols_traded": 1200,
+      "average_holding_period_days": 99.99648250268821,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 103.58454170192708
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -65.11119321546883
+      },
+      "terminal_equity": 12588530.288933054
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 750,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.78389218027025,
+      "total_return_pct": 1000.9292285207554,
+      "annualised_volatility_pct": 18.420619265860047,
+      "sharpe": 0.7103426578119073,
+      "max_drawdown_pct": 64.17183791081882,
+      "calmar": 0.1836302740252915,
+      "turnover_pct_of_initial": 40023.28540212889,
+      "transaction_costs": 1136504.9975004524,
+      "number_of_trades": 24669,
+      "max_concurrent_positions": 201,
+      "average_concurrent_positions": 133.54391574195975,
+      "unique_symbols_traded": 1629,
+      "average_holding_period_days": 113.7846607535656,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 93.02373331372375
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -61.55973992875872
+      },
+      "terminal_equity": 11009292.285207555
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 750,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.62546814245269,
+      "total_return_pct": 967.8158838326503,
+      "annualised_volatility_pct": 18.448658812808045,
+      "sharpe": 0.7017179586806298,
+      "max_drawdown_pct": 65.99395350184447,
+      "calmar": 0.17615959532001318,
+      "turnover_pct_of_initial": 38314.597815480156,
+      "transaction_costs": 1093162.682018151,
+      "number_of_trades": 24483,
+      "max_concurrent_positions": 201,
+      "average_concurrent_positions": 132.3144630430694,
+      "unique_symbols_traded": 1624,
+      "average_holding_period_days": 118.00845772329164,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 94.40952799271989
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -63.260367003047904
+      },
+      "terminal_equity": 10678158.838326503
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 750,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 12.661662479599144,
+      "total_return_pct": 1202.8851339068942,
+      "annualised_volatility_pct": 18.751046228403624,
+      "sharpe": 0.743717373851434,
+      "max_drawdown_pct": 65.8641262469343,
+      "calmar": 0.19223913230289746,
+      "turnover_pct_of_initial": 46734.356930804315,
+      "transaction_costs": 1294538.5397450705,
+      "number_of_trades": 24896,
+      "max_concurrent_positions": 200,
+      "average_concurrent_positions": 134.12281361670114,
+      "unique_symbols_traded": 1629,
+      "average_holding_period_days": 109.79998547338603,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 94.48842576696586
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -63.10105590423045
+      },
+      "terminal_equity": 13028851.339068944
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 750,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 10.736998802840958,
+      "total_return_pct": 799.0098844010831,
+      "annualised_volatility_pct": 17.929228110068127,
+      "sharpe": 0.6712117087774341,
+      "max_drawdown_pct": 64.40922824218376,
+      "calmar": 0.16669969654765926,
+      "turnover_pct_of_initial": 30414.593422374226,
+      "transaction_costs": 1007860.8680715598,
+      "number_of_trades": 37605,
+      "max_concurrent_positions": 292,
+      "average_concurrent_positions": 205.40680835057364,
+      "unique_symbols_traded": 1803,
+      "average_holding_period_days": 127.12723699042564,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 85.14375073192244
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -60.876838412299165
+      },
+      "terminal_equity": 8990098.84401083
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 750,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.173988052657545,
+      "total_return_pct": 878.5783880219159,
+      "annualised_volatility_pct": 18.129790504350115,
+      "sharpe": 0.6879392056470369,
+      "max_drawdown_pct": 65.557920816524,
+      "calmar": 0.17044451552894765,
+      "turnover_pct_of_initial": 33581.11957169882,
+      "transaction_costs": 1083534.1044479506,
+      "number_of_trades": 37558,
+      "max_concurrent_positions": 293,
+      "average_concurrent_positions": 206.3592251269513,
+      "unique_symbols_traded": 1813,
+      "average_holding_period_days": 128.9312815475341,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 84.5726719569321
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -61.73700868302803
+      },
+      "terminal_equity": 9785783.880219158
+    },
+    {
+      "round_trip_cost_pct": 0.25,
+      "universe_size": 750,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 18.077344477122594,
+      "total_return_pct": 3480.7754596922528,
+      "annualised_volatility_pct": 45.18973299046007,
+      "sharpe": 0.502460425217657,
+      "max_drawdown_pct": 65.8246578450139,
+      "calmar": 0.2746287647964116,
+      "turnover_pct_of_initial": 113734.07610613438,
+      "transaction_costs": 3003394.78149248,
+      "number_of_trades": 41370,
+      "max_concurrent_positions": 304,
+      "average_concurrent_positions": 215.99078427684785,
+      "unique_symbols_traded": 1863,
+      "average_holding_period_days": 118.62273656402628,
+      "best_calendar_year": {
+        "year": 2011,
+        "return_pct": 126.0022646967919
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -61.78853599075944
+      },
+      "terminal_equity": 35807754.59692253
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 300,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 13.056295529729711,
+      "total_return_pct": 1304.7736185088893,
+      "annualised_volatility_pct": 29.438925735729455,
+      "sharpe": 0.5571888585671421,
+      "max_drawdown_pct": 71.44363717344562,
+      "calmar": 0.1827495917940543,
+      "turnover_pct_of_initial": 67960.8802360279,
+      "transaction_costs": 2495352.677286023,
+      "number_of_trades": 5246,
+      "max_concurrent_positions": 44,
+      "average_concurrent_positions": 26.303930788038368,
+      "unique_symbols_traded": 653,
+      "average_holding_period_days": 86.4765855238882,
+      "best_calendar_year": {
+        "year": 2012,
+        "return_pct": 111.01436769433515
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -69.65239980659582
+      },
+      "terminal_equity": 14047736.185088893
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 300,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 12.251908764855557,
+      "total_return_pct": 1104.5686261447456,
+      "annualised_volatility_pct": 25.579902799656757,
+      "sharpe": 0.5806629756069713,
+      "max_drawdown_pct": 74.54951614644601,
+      "calmar": 0.16434591930533463,
+      "turnover_pct_of_initial": 46716.903035615454,
+      "transaction_costs": 1724369.5793584175,
+      "number_of_trades": 4807,
+      "max_concurrent_positions": 45,
+      "average_concurrent_positions": 25.87116795185255,
+      "unique_symbols_traded": 624,
+      "average_holding_period_days": 94.38075976966728,
+      "best_calendar_year": {
+        "year": 2012,
+        "return_pct": 94.75981775406778
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -68.79548960710922
+      },
+      "terminal_equity": 12045686.261447456
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 300,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.608549704918758,
+      "total_return_pct": 964.336308885497,
+      "annualised_volatility_pct": 26.67745174114821,
+      "sharpe": 0.5437808215977592,
+      "max_drawdown_pct": 72.515715057695,
+      "calmar": 0.16008322741743297,
+      "turnover_pct_of_initial": 44421.511296640354,
+      "transaction_costs": 1642991.6961011158,
+      "number_of_trades": 4989,
+      "max_concurrent_positions": 44,
+      "average_concurrent_positions": 25.607485424111342,
+      "unique_symbols_traded": 659,
+      "average_holding_period_days": 93.94518436520781,
+      "best_calendar_year": {
+        "year": 2012,
+        "return_pct": 110.50669801635355
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -70.56338469189821
+      },
+      "terminal_equity": 10643363.08885497
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 300,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 10.586182123393728,
+      "total_return_pct": 773.0101742243786,
+      "annualised_volatility_pct": 22.458226813987228,
+      "sharpe": 0.569445644060415,
+      "max_drawdown_pct": 69.85017164996249,
+      "calmar": 0.15155556347726473,
+      "turnover_pct_of_initial": 34500.83913813845,
+      "transaction_costs": 1333472.157853008,
+      "number_of_trades": 11342,
+      "max_concurrent_positions": 79,
+      "average_concurrent_positions": 52.03441790483355,
+      "unique_symbols_traded": 865,
+      "average_holding_period_days": 101.54480123242261,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 88.81816369232025
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -67.34273646869605
+      },
+      "terminal_equity": 8730101.742243785
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 300,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.593446506254557,
+      "total_return_pct": 961.2392062694287,
+      "annualised_volatility_pct": 22.669658488697415,
+      "sharpe": 0.6064585443664907,
+      "max_drawdown_pct": 69.13987663447165,
+      "calmar": 0.16768104125419156,
+      "turnover_pct_of_initial": 40657.22810539847,
+      "transaction_costs": 1555777.3233258026,
+      "number_of_trades": 11233,
+      "max_concurrent_positions": 81,
+      "average_concurrent_positions": 52.56441602407373,
+      "unique_symbols_traded": 867,
+      "average_holding_period_days": 101.57063176296948,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 96.43276965234715
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -67.57199877710671
+      },
+      "terminal_equity": 10612392.062694287
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 300,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 12.163300382600628,
+      "total_return_pct": 1084.2588393197345,
+      "annualised_volatility_pct": 29.381395266102427,
+      "sharpe": 0.5270737845658326,
+      "max_drawdown_pct": 69.67257805254296,
+      "calmar": 0.17457801508977866,
+      "turnover_pct_of_initial": 46251.97163728795,
+      "transaction_costs": 1760070.5620997623,
+      "number_of_trades": 11522,
+      "max_concurrent_positions": 79,
+      "average_concurrent_positions": 52.59074666165131,
+      "unique_symbols_traded": 876,
+      "average_holding_period_days": 102.21293089658482,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 88.67549021239054
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -66.03895929111654
+      },
+      "terminal_equity": 11842588.393197346
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 300,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 10.64214617755097,
+      "total_return_pct": 782.5731729812127,
+      "annualised_volatility_pct": 21.73876831458764,
+      "sharpe": 0.5828114701305506,
+      "max_drawdown_pct": 67.92196605376837,
+      "calmar": 0.15668195130168108,
+      "turnover_pct_of_initial": 33010.61782338941,
+      "transaction_costs": 1326945.3359034166,
+      "number_of_trades": 17242,
+      "max_concurrent_positions": 116,
+      "average_concurrent_positions": 82.5659206319353,
+      "unique_symbols_traded": 939,
+      "average_holding_period_days": 115.08750523980778,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 85.40991966480169
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -63.23662394528373
+      },
+      "terminal_equity": 8825731.729812127
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 300,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 10.353502198988696,
+      "total_return_pct": 734.2994150367133,
+      "annualised_volatility_pct": 21.139434948302018,
+      "sharpe": 0.5814934864969704,
+      "max_drawdown_pct": 67.4252793947153,
+      "calmar": 0.1535551990578802,
+      "turnover_pct_of_initial": 31459.629010049208,
+      "transaction_costs": 1269875.6645130126,
+      "number_of_trades": 17069,
+      "max_concurrent_positions": 117,
+      "average_concurrent_positions": 81.96614632311454,
+      "unique_symbols_traded": 934,
+      "average_holding_period_days": 114.19670903544655,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 87.38909589513861
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -63.97510135456776
+      },
+      "terminal_equity": 8342994.150367133
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 300,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 10.567445025789235,
+      "total_return_pct": 769.8305633274348,
+      "annualised_volatility_pct": 22.173474995093336,
+      "sharpe": 0.5720359942022303,
+      "max_drawdown_pct": 68.4191388678147,
+      "calmar": 0.15445159352568683,
+      "turnover_pct_of_initial": 33404.477730128536,
+      "transaction_costs": 1342305.4454719578,
+      "number_of_trades": 17340,
+      "max_concurrent_positions": 117,
+      "average_concurrent_positions": 82.02727101749106,
+      "unique_symbols_traded": 939,
+      "average_holding_period_days": 115.29344199739306,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 80.9050996197987
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -63.909617496328316
+      },
+      "terminal_equity": 8698305.633274348
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 500,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 5.676490033415882,
+      "total_return_pct": 228.34557550756216,
+      "annualised_volatility_pct": 18.165287967216056,
+      "sharpe": 0.40129661124466726,
+      "max_drawdown_pct": 79.15695659152323,
+      "calmar": 0.07171182771349457,
+      "turnover_pct_of_initial": 15399.338523918712,
+      "transaction_costs": 604763.0436966711,
+      "number_of_trades": 6328,
+      "max_concurrent_positions": 64,
+      "average_concurrent_positions": 35.795185254842956,
+      "unique_symbols_traded": 810,
+      "average_holding_period_days": 98.48625169845063,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 98.6084529059083
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -67.37694418910552
+      },
+      "terminal_equity": 3283455.7550756214
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 500,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 6.382629240889814,
+      "total_return_pct": 278.97667873784917,
+      "annualised_volatility_pct": 18.047443198990454,
+      "sharpe": 0.44063617722660403,
+      "max_drawdown_pct": 77.93001760454182,
+      "calmar": 0.08190206337792269,
+      "turnover_pct_of_initial": 17401.832715683002,
+      "transaction_costs": 677882.7907011575,
+      "number_of_trades": 6325,
+      "max_concurrent_positions": 66,
+      "average_concurrent_positions": 37.023509497837125,
+      "unique_symbols_traded": 814,
+      "average_holding_period_days": 118.10520442246846,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 88.43436734807564
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -66.71861708804214
+      },
+      "terminal_equity": 3789766.787378492
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 500,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 7.97070564279061,
+      "total_return_pct": 421.41478602346945,
+      "annualised_volatility_pct": 18.877122208016704,
+      "sharpe": 0.5096086842472123,
+      "max_drawdown_pct": 74.87360433917509,
+      "calmar": 0.10645548205057101,
+      "turnover_pct_of_initial": 22307.809633694997,
+      "transaction_costs": 858869.1941653087,
+      "number_of_trades": 6830,
+      "max_concurrent_positions": 67,
+      "average_concurrent_positions": 39.157795749482794,
+      "unique_symbols_traded": 857,
+      "average_holding_period_days": 115.76654620446082,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 90.48811840390162
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -67.04286911587334
+      },
+      "terminal_equity": 5214147.860234695
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 500,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 9.952016470143121,
+      "total_return_pct": 671.3235084433662,
+      "annualised_volatility_pct": 20.204704504244727,
+      "sharpe": 0.5809639939622361,
+      "max_drawdown_pct": 67.84719688825321,
+      "calmar": 0.1466827949654936,
+      "turnover_pct_of_initial": 32101.845980649512,
+      "transaction_costs": 1296940.9442569872,
+      "number_of_trades": 17679,
+      "max_concurrent_positions": 131,
+      "average_concurrent_positions": 86.02877562535264,
+      "unique_symbols_traded": 1287,
+      "average_holding_period_days": 100.3415758541592,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 89.1425212209156
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -65.23753120619833
+      },
+      "terminal_equity": 7713235.084433662
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 500,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 9.466642377364899,
+      "total_return_pct": 601.2335060029377,
+      "annualised_volatility_pct": 19.639536971072864,
+      "sharpe": 0.5691637032164374,
+      "max_drawdown_pct": 67.63202649309679,
+      "calmar": 0.13997277426444052,
+      "turnover_pct_of_initial": 29045.567281084543,
+      "transaction_costs": 1182580.158123733,
+      "number_of_trades": 17153,
+      "max_concurrent_positions": 131,
+      "average_concurrent_positions": 85.70754184690615,
+      "unique_symbols_traded": 1261,
+      "average_holding_period_days": 108.32832736266735,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 84.82405319388135
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -65.51739446724172
+      },
+      "terminal_equity": 7012335.060029377
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 500,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.156713384367013,
+      "total_return_pct": 875.3093649378568,
+      "annualised_volatility_pct": 20.415531890011874,
+      "sharpe": 0.6312783373480321,
+      "max_drawdown_pct": 67.17182926146367,
+      "calmar": 0.1660921476611862,
+      "turnover_pct_of_initial": 39449.13651299703,
+      "transaction_costs": 1561759.3983069228,
+      "number_of_trades": 17725,
+      "max_concurrent_positions": 134,
+      "average_concurrent_positions": 88.54560842580402,
+      "unique_symbols_traded": 1282,
+      "average_holding_period_days": 110.49177388568097,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 84.80625388400608
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -64.47268299034918
+      },
+      "terminal_equity": 9753093.649378568
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 500,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 9.482324942094023,
+      "total_return_pct": 603.3999394468882,
+      "annualised_volatility_pct": 19.054672676885463,
+      "sharpe": 0.5813609761203773,
+      "max_drawdown_pct": 65.93821466486659,
+      "calmar": 0.14380621298723797,
+      "turnover_pct_of_initial": 27011.523555433763,
+      "transaction_costs": 1180043.4244806624,
+      "number_of_trades": 26291,
+      "max_concurrent_positions": 193,
+      "average_concurrent_positions": 135.2206131277036,
+      "unique_symbols_traded": 1391,
+      "average_holding_period_days": 117.58005263750361,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 82.70692201582088
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -62.620085782084836
+      },
+      "terminal_equity": 7033999.394468882
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 500,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 9.2190084148418,
+      "total_return_pct": 567.8567122222954,
+      "annualised_volatility_pct": 18.788892582663184,
+      "sharpe": 0.5739651876099419,
+      "max_drawdown_pct": 66.73396306151916,
+      "calmar": 0.13814567563360794,
+      "turnover_pct_of_initial": 26683.28364740752,
+      "transaction_costs": 1167709.1215890814,
+      "number_of_trades": 26026,
+      "max_concurrent_positions": 194,
+      "average_concurrent_positions": 134.76340041376716,
+      "unique_symbols_traded": 1386,
+      "average_holding_period_days": 122.09229796030844,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 81.29038794583762
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -63.134444680212
+      },
+      "terminal_equity": 6678567.1222229535
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 500,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 9.89808718186369,
+      "total_return_pct": 663.2179839595157,
+      "annualised_volatility_pct": 18.781765453325985,
+      "sharpe": 0.6078469131873719,
+      "max_drawdown_pct": 65.82290303497635,
+      "calmar": 0.15037451594324452,
+      "turnover_pct_of_initial": 29020.417986215863,
+      "transaction_costs": 1251186.4872764894,
+      "number_of_trades": 26182,
+      "max_concurrent_positions": 196,
+      "average_concurrent_positions": 136.684032349069,
+      "unique_symbols_traded": 1395,
+      "average_holding_period_days": 122.21805223182704,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 80.16759578142964
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -62.323163156837545
+      },
+      "terminal_equity": 7632179.839595157
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 750,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 10.512200995584543,
+      "total_return_pct": 760.5200201749009,
+      "annualised_volatility_pct": 19.082741577346543,
+      "sharpe": 0.6308089547799518,
+      "max_drawdown_pct": 71.53145489495527,
+      "calmar": 0.14695913861981172,
+      "turnover_pct_of_initial": 39902.26784106701,
+      "transaction_costs": 1523760.4024890247,
+      "number_of_trades": 10758,
+      "max_concurrent_positions": 102,
+      "average_concurrent_positions": 60.23189768666541,
+      "unique_symbols_traded": 1192,
+      "average_holding_period_days": 89.86945836001355,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 105.46739938526599
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -65.00603318628802
+      },
+      "terminal_equity": 8605200.201749008
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 750,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.296161212931398,
+      "total_return_pct": 901.9982328405339,
+      "annualised_volatility_pct": 19.105789384539907,
+      "sharpe": 0.6681118827919257,
+      "max_drawdown_pct": 72.68310103468296,
+      "calmar": 0.15541661063059337,
+      "turnover_pct_of_initial": 41686.98747510959,
+      "transaction_costs": 1588823.267296129,
+      "number_of_trades": 10778,
+      "max_concurrent_positions": 103,
+      "average_concurrent_positions": 60.81023133345872,
+      "unique_symbols_traded": 1199,
+      "average_holding_period_days": 91.57122447214823,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 105.46609835787409
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -66.41799956698418
+      },
+      "terminal_equity": 10019982.32840534
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 750,
+      "selection_pct": 10.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.249131509665556,
+      "total_return_pct": 892.9203512567266,
+      "annualised_volatility_pct": 18.876308014036017,
+      "sharpe": 0.671653419016212,
+      "max_drawdown_pct": 70.63044420001366,
+      "calmar": 0.15926746089561447,
+      "turnover_pct_of_initial": 43054.98861379051,
+      "transaction_costs": 1637364.5123133627,
+      "number_of_trades": 10705,
+      "max_concurrent_positions": 104,
+      "average_concurrent_positions": 61.82847470378033,
+      "unique_symbols_traded": 1187,
+      "average_holding_period_days": 102.83532485984573,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 101.4063446247354
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -65.33522935597728
+      },
+      "terminal_equity": 9929203.512567267
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 750,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 10.83068560400584,
+      "total_return_pct": 815.5308428679477,
+      "annualised_volatility_pct": 18.251477872425596,
+      "sharpe": 0.6672901186216841,
+      "max_drawdown_pct": 64.49868959601261,
+      "calmar": 0.16792101780429672,
+      "turnover_pct_of_initial": 34549.48434528191,
+      "transaction_costs": 1436901.0649846103,
+      "number_of_trades": 24284,
+      "max_concurrent_positions": 198,
+      "average_concurrent_positions": 132.55425992100808,
+      "unique_symbols_traded": 1616,
+      "average_holding_period_days": 115.31383995386898,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 91.6896381539675
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -61.87019577331937
+      },
+      "terminal_equity": 9155308.428679477
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 750,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 10.932156335182919,
+      "total_return_pct": 833.7508931535423,
+      "annualised_volatility_pct": 18.310310950850283,
+      "sharpe": 0.670865152393707,
+      "max_drawdown_pct": 66.13491086724599,
+      "calmar": 0.1653008402344001,
+      "turnover_pct_of_initial": 34686.76871611796,
+      "transaction_costs": 1439267.2732458445,
+      "number_of_trades": 24194,
+      "max_concurrent_positions": 199,
+      "average_concurrent_positions": 131.37709234530752,
+      "unique_symbols_traded": 1614,
+      "average_holding_period_days": 119.20714900666145,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 92.99703467096813
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -63.36680107395447
+      },
+      "terminal_equity": 9337508.931535423
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 750,
+      "selection_pct": 20.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 11.836832776794504,
+      "total_return_pct": 1012.2113436636489,
+      "annualised_volatility_pct": 18.604393862124294,
+      "sharpe": 0.7077519001939833,
+      "max_drawdown_pct": 65.96671524545997,
+      "calmar": 0.17943644355717941,
+      "turnover_pct_of_initial": 41181.71613227901,
+      "transaction_costs": 1677527.1416268924,
+      "number_of_trades": 24683,
+      "max_concurrent_positions": 198,
+      "average_concurrent_positions": 133.19146135038557,
+      "unique_symbols_traded": 1622,
+      "average_holding_period_days": 111.13764062687184,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 92.4005117778648
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -63.24573290429889
+      },
+      "terminal_equity": 11122113.436636489
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 750,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": -3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 9.95737098166478,
+      "total_return_pct": 672.1327513059324,
+      "annualised_volatility_pct": 17.80894799382889,
+      "sharpe": 0.634008151675014,
+      "max_drawdown_pct": 64.62906091581443,
+      "calmar": 0.15406956004877145,
+      "turnover_pct_of_initial": 27167.13112744099,
+      "transaction_costs": 1268040.7646289624,
+      "number_of_trades": 37064,
+      "max_concurrent_positions": 290,
+      "average_concurrent_positions": 203.6909911604288,
+      "unique_symbols_traded": 1799,
+      "average_holding_period_days": 128.47628343644084,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 83.99925239259606
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -61.10033192457068
+      },
+      "terminal_equity": 7721327.513059325
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 750,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 0,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 10.413411979365339,
+      "total_return_pct": 744.1070536494404,
+      "annualised_volatility_pct": 18.008181341488953,
+      "sharpe": 0.6524244259071414,
+      "max_drawdown_pct": 65.71837831831344,
+      "calmar": 0.15845509651694312,
+      "turnover_pct_of_initial": 30076.830856913348,
+      "transaction_costs": 1374484.0742703485,
+      "number_of_trades": 37202,
+      "max_concurrent_positions": 292,
+      "average_concurrent_positions": 204.42655632875682,
+      "unique_symbols_traded": 1806,
+      "average_holding_period_days": 129.99829686300478,
+      "best_calendar_year": {
+        "year": 2007,
+        "return_pct": 83.34388720501038
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -61.89922821764229
+      },
+      "terminal_equity": 8441070.536494404
+    },
+    {
+      "round_trip_cost_pct": 0.5,
+      "universe_size": 750,
+      "selection_pct": 30.0,
+      "rebalance_shift_sessions": 3,
+      "start": "2005-01-03",
+      "end": "2026-07-17",
+      "cagr_pct": 17.25575593876838,
+      "total_return_pct": 2980.914757305919,
+      "annualised_volatility_pct": 45.146276170784134,
+      "sharpe": 0.4868374077354444,
+      "max_drawdown_pct": 66.04476864125223,
+      "calmar": 0.2612736223288132,
+      "turnover_pct_of_initial": 101159.89093022393,
+      "transaction_costs": 3970133.0497270804,
+      "number_of_trades": 41118,
+      "max_concurrent_positions": 305,
+      "average_concurrent_positions": 216.18431446304308,
+      "unique_symbols_traded": 1867,
+      "average_holding_period_days": 118.94345002067995,
+      "best_calendar_year": {
+        "year": 2011,
+        "return_pct": 124.24894013544142
+      },
+      "worst_calendar_year": {
+        "year": 2008,
+        "return_pct": -62.021908170711335
+      },
+      "terminal_equity": 30809147.57305919
+    }
+  ],
+  "anti_leakage": {
+    "future_prices_do_not_change_past_targets": "PASS",
+    "future_corporate_actions_do_not_enter_PIT_features": "PASS by separated PIT/ex-post layers and regression suite",
+    "future_IPO_before_listing": "PASS",
+    "dead_security_historical_selectability": "PASS",
+    "execution_after_signal": "PASS",
+    "transaction_cost_reconciliation": "PASS in sanity tests",
+    "forward_labels_in_signal_generation": "PASS by layer contract/regression suite"
+  },
+  "engine_sanity": {
+    "single_stock": {
+      "status": "PASS",
+      "rules": "first observed date target, next available open, terminal adjusted close, integer shares, configured 10 bps/side plus canonical charges",
+      "stocks": [
+        {
+          "symbol": "RELIANCE",
+          "independent_final_equity": 2407658.0652831346,
+          "engine_final_equity": 2407658.0652831346,
+          "absolute_difference": 0.0,
+          "shares": 1814
+        },
+        {
+          "symbol": "ITC",
+          "independent_final_equity": 3209302.3285895716,
+          "engine_final_equity": 3209302.3285895716,
+          "absolute_difference": 0.0,
+          "shares": 11433
+        },
+        {
+          "symbol": "SBIN",
+          "independent_final_equity": 15814933.888678988,
+          "engine_final_equity": 15814933.888678988,
+          "absolute_difference": 0.0,
+          "shares": 15144
+        }
+      ]
+    },
+    "equal_weight_universe": {
+      "status": "PASS",
+      "universe_size": 100,
+      "rebalance_dates": 250,
+      "symbols_ever_selected": 487,
+      "orders": 17611,
+      "final_equity": 4450070.880998577,
+      "final_cash": 96.08000104581151,
+      "turnover_pct_of_initial": 8987.42939879969,
+      "transaction_costs": 329146.55467408925,
+      "independent_daily_equity_max_abs_difference": 9.313225746154785e-10,
+      "independent_cash_max_abs_difference": 5.825313564855605e-10,
+      "position_count_mismatches": 0,
+      "sampled_rebalance_dates": 10,
+      "sample_membership_weight_checks": "PASS",
+      "sample_execution_date_checks": "PASS",
+      "ended_symbols_selected": 163,
+      "ended_symbols_with_outstanding_terminal_holdings": 37,
+      "terminal_policy": "carry last observed close because no authoritative terminal price/liquidation metadata is available; not silently liquidated"
+    }
+  },
+  "tests": {
+    "command": "uv run pytest tests/ -q --ignore=tests/test_ui_app.py --ignore=tests/test_ui_streamlit.py",
+    "passed": 413,
+    "deselected": 18
+  },
+  "suspicious_behavior": [
+    {
+      "observation": "Terminal holdings",
+      "evidence": "37 ended-security holdings remain marked at their last observed close; no terminal liquidation price/metadata is available",
+      "classification": "WARNING",
+      "impact": "terminal valuation is policy-dependent for those names"
+    },
+    {
+      "observation": "Turnover",
+      "evidence": "baseline full-period turnover is 33,773.32% of initial capital and 17,395 orders",
+      "classification": "WARNING",
+      "impact": "cost drag is economically material; this is reported, not optimised"
+    },
+    {
+      "observation": "Drawdown",
+      "evidence": "research-period worst year 2008 return -65.26%; full-period max drawdown 67.38%",
+      "classification": "WARNING",
+      "impact": "poor but internally plausible; no data correction inferred"
+    },
+    {
+      "observation": "Ex-post measurement layer",
+      "evidence": "execution/marking uses data/adjusted/total_return; PIT target generation uses data/pit",
+      "classification": "WARNING",
+      "impact": "appropriate for retrospective performance measurement, not live-equivalent signal inputs"
+    }
+  ]
+}

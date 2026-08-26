@@ -54,12 +54,18 @@ def run_rebalance_engine(
 ) -> dict[str, Any]:
     """Execute target weights and return daily equity plus orders."""
     engine = _factors_engine()
+    wrapper = config if isinstance(config, dict) else {}
+    engine_config = wrapper.get("config", config)
+    execution_panel = wrapper.get("execution_panel")
+    execution_panel = execution_panel if execution_panel is not None else panel
+    calendar = wrapper.get("calendar")
+    calendar = calendar if calendar is not None else trading_calendar(execution_panel)
     result = engine.simulate_rebalanced_portfolio(
         name,
         weights_to_targets(weights),
-        panel,
-        trading_calendar(panel),
-        config,
+        execution_panel,
+        calendar,
+        engine_config,
     )
     return {
         "daily_equity": result.daily_equity,
